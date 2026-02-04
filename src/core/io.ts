@@ -1,67 +1,63 @@
 import fs from "fs/promises";
+import matter from "gray-matter";
 import path from "path";
-import { AnatomySchema, HubAnatomy } from "../types/index.js";
+import { ContentFrontmatter, FrontmatterSchema } from "../types/index.js";
 
 /**
- * Recursively searches up the directory tree to find the nearest 'anatomy.json'.
- * Used to establish the Hub Context even if the user is deep in a subdirectory.
+ * recursively searches up the directory tree to find the Hub Root
  */
-export async function findHubRoot(
-  startDir: string = process.cwd(),
-): Promise<string> {
-  const anatomyPath = path.join(startDir, "anatomy.json");
-
-  try {
-    await fs.access(anatomyPath);
-    return startDir;
-  } catch {
-    const parent = path.dirname(startDir);
-    if (parent === startDir) {
-      throw new Error(
-        "No anatomy.json found in this directory or any parent directories.",
-      );
+export async function findHubRoot(startDir: string): Promise<string> {
+  let current = startDir;
+  while (current !== path.parse(current).root) {
+    try {
+      await fs.access(path.join(current, "hub.md"));
+      return current;
+    } catch {
+      current = path.dirname(current);
     }
-    return findHubRoot(parent);
   }
+  throw new Error("No hub.md found. Are you inside a Hub directory?");
 }
 
 /**
- * Reads and validates the anatomy.json file.
+ * Reads the raw string content of hub.md
  */
-export async function readAnatomy(hubDir: string): Promise<HubAnatomy> {
-  const filePath = path.join(hubDir, "anatomy.json");
-  try {
-    const content = await fs.readFile(filePath, "utf-8");
-    const json = JSON.parse(content);
-    return AnatomySchema.parse(json);
-  } catch (error) {
-    throw new Error(
-      `Failed to read or parse anatomy.json: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+export async function readHubFile(rootDir: string): Promise<string> {
+  const filePath = path.join(rootDir, "hub.md");
+  return fs.readFile(filePath, "utf-8");
 }
 
 /**
- * Reads the main hub.md file.
+ * Reads JUST the frontmatter metadata from hub.md
+ * This replaces "readAnatomy"
  */
-export async function readHubFile(hubDir: string): Promise<string> {
-  const filePath = path.join(hubDir, "hub.md");
-  try {
-    return await fs.readFile(filePath, "utf-8");
-  } catch (error) {
-    throw new Error(
-      `Failed to read hub.md: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+export async function readHubMetadata(
+  rootDir: string,
+): Promise<ContentFrontmatter> {
+  const content = await readHubFile(rootDir);
+  const { data } = matter(content);
+  return FrontmatterSchema.parse(data);
 }
 
 /**
- * specific helper to write files safely (ensuring directories exist).
+ * Scaffolds the directory structure
+ */
+export async function createHubDirectory(hubId: string): Promise<string> {
+  const dirPath = path.join(process.cwd(), hubId);
+  const spokesPath = path.join(dirPath, "spokes");
+
+  await fs.mkdir(dirPath, { recursive: true });
+  await fs.mkdir(spokesPath, { recursive: true });
+
+  return dirPath;
+}
+
+/**
+ * Helper to write file content safely
  */
 export async function safeWriteFile(
   filePath: string,
   content: string,
 ): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, content, "utf-8");
 }

@@ -1,131 +1,161 @@
 import chalk from "chalk";
 import { Command } from "commander";
+import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
-import { generateContent } from "../../core/ai.js";
-import {
-  findHubRoot,
-  readAnatomy,
-  readHubFile,
-  safeWriteFile,
-} from "../../core/io.js";
+import { generateBatchContent, generateContent } from "../../core/ai.js"; // Import new function
+import { findHubRoot, readHubMetadata, safeWriteFile } from "../../core/io.js";
 import { parseMarkdown, reconstructMarkdown } from "../../core/parser.js";
-// Explicit .js extension for NodeNext compatibility
-import { HubComponent } from "../../types/index.js";
 
-export const fillCommand = new Command("fill")
-  .description("Generate AI content for hub sections")
-  .option("-c, --component <id>", "Specific component ID to fill")
-  .option("-a, --all", "Fill all empty sections")
-  .action(async (options) => {
+const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
+
+export async function runFillLogic(
+  filePath: string,
+  hubGoal: string,
+  language: string,
+) {
+  const content = await fs.readFile(filePath, "utf-8");
+  const parsed = parseMarkdown(content);
+
+  // 1. Identify Sections
+  const fillableSections = Object.entries(parsed.sections).filter(
+    ([header, body]) => {
+      return TODO_REGEX.test(body);
+    },
+  );
+
+  if (fillableSections.length === 0) {
+    console.log(chalk.yellow('No sections with "> **TODO:** ..." found.'));
+    return;
+  }
+
+  // 2. Selection
+  const { selectedHeaders } = await inquirer.prompt([
+    {
+      type: "checkbox",
+      name: "selectedHeaders",
+      message: `Found ${fillableSections.length} pending sections. Fill which ones?`,
+      choices: fillableSections.map(([header]) => ({
+        name: header,
+        value: header,
+        checked: true,
+      })),
+    },
+  ]);
+
+  if (selectedHeaders.length === 0) return;
+
+  const updatedSections = { ...parsed.sections };
+  const sectionOrder = Object.keys(parsed.sections);
+
+  // --- NEW: Batching Strategy ---
+
+  if (selectedHeaders.length > 1) {
+    console.log(
+      chalk.blue(
+        `\n⚡ Batching ${selectedHeaders.length} sections into 1 API Request...`,
+      ),
+    );
+
+    // Prepare the payload
+    const batchPayload = selectedHeaders.map((header: string) => {
+      const currentBody = updatedSections[header];
+      const match = currentBody.match(TODO_REGEX);
+      return {
+        header,
+        intent: match ? match[1].trim() : "Expand on this topic.",
+      };
+    });
+
     try {
-      // 1. Setup Context
-      const rootDir = await findHubRoot(process.cwd());
-      const anatomy = await readAnatomy(rootDir);
-      const rawHubContent = await readHubFile(rootDir);
-      const parsedHub = parseMarkdown(rawHubContent);
+      process.stdout.write(chalk.white(`   > Generating all... `));
 
-      // 2. Identify Targets
-      let targets: HubComponent[] = [];
+      // ONE Call to Rule Them All
+      const batchResults = await generateBatchContent(
+        hubGoal,
+        batchPayload,
+        language,
+      );
 
-      if (options.component) {
-        const comp = anatomy.components.find((c) => c.id === options.component);
-        if (!comp) {
-          console.error(
-            chalk.red(
-              `Component ID '${options.component}' not found in anatomy.json`,
-            ),
-          );
-          return;
+      // Map results back
+      Object.entries(batchResults).forEach(([header, content]) => {
+        if (updatedSections[header] !== undefined) {
+          updatedSections[header] = content;
         }
-        targets = [comp];
-      } else if (options.all) {
-        targets = anatomy.components;
-      } else {
-        // Interactive Selection
-        const { selected } = await inquirer.prompt([
-          {
-            type: "checkbox",
-            name: "selected",
-            message: "Which sections would you like to fill?",
-            choices: anatomy.components.map((c) => ({
-              name: `${c.header} (${c.id})`,
-              value: c,
-            })),
-          },
-        ]);
-        targets = selected;
-      }
+      });
 
-      if (targets.length === 0) {
-        console.log(chalk.yellow("No sections selected."));
-        return;
-      }
-
-      console.log(
-        chalk.blue(
-          `\n🤖 Generating content for ${targets.length} section(s)...\n`,
+      process.stdout.write(chalk.green("Done ✅\n"));
+    } catch (err) {
+      console.error(
+        chalk.red(
+          `\n❌ Batch failed: ${err instanceof Error ? err.message : String(err)}`,
         ),
       );
+      console.log(
+        chalk.yellow(
+          "   Tip: Try selecting fewer sections if tokens exceeded.",
+        ),
+      );
+      return; // Don't save partial corruption
+    }
+  } else {
+    // SINGLE MODE (Legacy loop for 1 item)
+    // Keep this for granular errors if user only selects 1
+    const header = selectedHeaders[0];
+    const currentBody = updatedSections[header];
+    const match = currentBody.match(TODO_REGEX);
+    const intent = match ? match[1].trim() : "Expand on this topic.";
 
-      // 3. Generate & Inject Content (SRS 4.3.1)
-      // We process sequentially to avoid rate limits and overlapping file writes logic
-      const updatedSections = { ...parsedHub.sections };
+    process.stdout.write(chalk.white(`   > Writing "${header}"... `));
+    try {
+      const newContent = await generateContent(
+        hubGoal,
+        header,
+        intent,
+        language,
+      );
+      updatedSections[header] = newContent;
+      process.stdout.write(chalk.green("Done ✅\n"));
+    } catch (err) {
+      process.stdout.write(chalk.red("Failed ❌\n"));
+    }
+  }
 
-      // We need to know the order of headers to reconstruct the file correctly
-      // We use the anatomy order as the master order, but respect existing MD structure if possible
-      const anatomyOrder = anatomy.components.map((c) => c.header);
+  // 3. Save
+  const newFileContent = [
+    "---",
+    Object.entries(parsed.frontmatter)
+      .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+      .join("\n"),
+    "---",
+    "",
+    reconstructMarkdown(updatedSections, sectionOrder),
+  ].join("\n");
 
-      for (const target of targets) {
-        process.stdout.write(
-          chalk.white(`   > Writing "${target.header}"... `),
-        );
+  await safeWriteFile(filePath, newFileContent);
+  console.log(chalk.green(`\n✨ Successfully updated file.`));
+}
 
-        try {
-          // Get surrounding context (previous section) for flow
-          // Simple implementation: Just pass the goal. Advanced: Pass prev section text.
-          const newContent = await generateContent(
-            anatomy.goal,
-            target.header,
-            target.intent,
-          );
+// ... rest of the file (fillCommand definition) remains the same ...
+export const fillCommand = new Command("fill")
+  .description("Generate AI content for sections with TODO blockquotes")
+  .option("-f, --file <path>", "Specific file to fill (defaults to hub.md)")
+  .action(async (options) => {
+    try {
+      const rootDir = await findHubRoot(process.cwd());
+      const metadata = await readHubMetadata(rootDir);
+      const hubGoal = metadata.goal || metadata.title;
+      const language = metadata.language || "English";
 
-          updatedSections[target.header] = newContent;
-          process.stdout.write(chalk.green("Done ✅\n"));
-        } catch (err) {
-          process.stdout.write(chalk.red("Failed ❌\n"));
-          console.error(
-            chalk.red(
-              `     Error: ${err instanceof Error ? err.message : String(err)}`,
-            ),
-          );
-        }
-      }
+      const targetFile = options.file
+        ? path.resolve(process.cwd(), options.file)
+        : path.join(rootDir, "hub.md");
 
-      // 4. Save Changes
-      // We merge the new sections into the file
-      // Note: reconstructMarkdown uses an array of headers to determine order.
-      // We should use the union of anatomy headers and existing headers to preserve everything.
-      const existingHeaders = Object.keys(parsedHub.sections);
-      const uniqueHeaders = Array.from(
-        new Set([...anatomyOrder, ...existingHeaders]),
+      console.log(
+        chalk.blue(`Targeting file: ${path.relative(rootDir, targetFile)}`),
       );
 
-      const newFileContent = [
-        "---",
-        // We reconstruct frontmatter roughly or just use the raw original if not modifying it
-        // Better approach: Use the parsed frontmatter object
-        Object.entries(parsedHub.frontmatter)
-          .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
-          .join("\n"),
-        "---",
-        "",
-        reconstructMarkdown(updatedSections, uniqueHeaders),
-      ].join("\n");
-
-      await safeWriteFile(path.join(rootDir, "hub.md"), newFileContent);
-
-      console.log(chalk.green(`\n✨ Successfully updated hub.md`));
+      await runFillLogic(targetFile, hubGoal, language);
     } catch (error) {
       console.error(
         chalk.red("Fill failed:"),

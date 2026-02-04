@@ -1,115 +1,116 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import fs from "fs/promises";
+import matter from "gray-matter";
 import path from "path";
-import { findHubRoot, readAnatomy } from "../../core/io.js";
+import { findHubRoot, readHubFile, readHubMetadata } from "../../core/io.js";
 import { parseMarkdown } from "../../core/parser.js";
 
 export const mapCommand = new Command("map")
-  .description("Visualize the content relationship graph")
+  .description("Visualize the Hub & Spoke content structure")
   .action(async () => {
     try {
-      // 1. Setup Context
+      // 1. Load Context
       const rootDir = await findHubRoot(process.cwd());
-      const anatomy = await readAnatomy(rootDir);
+      const metadata = await readHubMetadata(rootDir);
+      const rawHubContent = await readHubFile(rootDir);
+      const parsedHub = parseMarkdown(rawHubContent);
 
-      console.log(chalk.blue(`\n🗺️  Content Map: ${anatomy.goal}`));
-      console.log(chalk.gray(`   Hub ID: ${anatomy.hubId}\n`));
+      console.log(
+        chalk.blue(`\n🗺️  Content Map: ${chalk.bold(metadata.title)}`),
+      );
+      console.log(chalk.gray(`   Goal: ${metadata.goal || "N/A"}`));
+      console.log(chalk.gray(`   Lang: ${metadata.language}\n`));
 
       // 2. Scan Spokes
       const spokesDir = path.join(rootDir, "spokes");
       let spokeFiles: string[] = [];
-
       try {
-        const files = await fs.readdir(spokesDir);
-        spokeFiles = files.filter((f) => f.endsWith(".md"));
-      } catch {
-        // Directory might not exist yet
-        spokeFiles = [];
+        spokeFiles = (await fs.readdir(spokesDir)).filter((f) =>
+          f.endsWith(".md"),
+        );
+      } catch (e) {
+        // Spokes dir might not exist yet
       }
 
-      // 3. Categorize Spokes
-      const spokesMap: Record<string, string[]> = {}; // componentId -> [filenames]
-      const globalSpokes: string[] = [];
+      // 3. Map Spokes to Sections
+      // Data Structure: { "Section Name": ["spoke1.md", "spoke2.md"] }
+      const tree: Record<string, string[]> = {};
       const orphans: string[] = [];
 
-      // Initialize map with anatomy components
-      anatomy.components.forEach((c) => {
-        spokesMap[c.id] = [];
+      // Initialize tree with Hub Sections
+      Object.keys(parsedHub.sections).forEach((header) => {
+        tree[header] = [];
       });
 
+      // Process each spoke
       for (const file of spokeFiles) {
-        const content = await fs.readFile(path.join(spokesDir, file), "utf-8");
-        const { frontmatter } = parseMarkdown(content);
+        const filePath = path.join(spokesDir, file);
+        const content = await fs.readFile(filePath, "utf-8");
+        const { data: spokeFm } = matter(content);
+        const spokeTitle = spokeFm.title || file;
 
-        // Validation: Is it part of this hub?
-        if (frontmatter.hubId !== anatomy.hubId) {
-          orphans.push(`${file} (Wrong HubID: ${frontmatter.hubId})`);
-          continue;
+        let isLinked = false;
+
+        // Strategy A: Check if Spoke Frontmatter explicitly links to a component
+        // (We used componentId in spawn.ts, though often it's just the slug now)
+        // This is less reliable in the No-JSON version, so we rely on Strategy B mostly.
+
+        // Strategy B: Check if Hub Section *content* links to this file
+        // Link format: ./spokes/filename.md
+        for (const [header, body] of Object.entries(parsedHub.sections)) {
+          if (body.includes(file)) {
+            tree[header].push(spokeTitle);
+            isLinked = true;
+            break; // Assuming a spoke belongs to one primary section
+          }
         }
 
-        if (frontmatter.componentId) {
-          if (spokesMap[frontmatter.componentId]) {
-            spokesMap[frontmatter.componentId].push(file);
-          } else {
-            orphans.push(
-              `${file} (Unknown Component: ${frontmatter.componentId})`,
-            );
-          }
-        } else {
-          // No component ID = Global Spoke
-          globalSpokes.push(file);
+        if (!isLinked) {
+          orphans.push(spokeTitle);
         }
       }
 
-      // 4. Render Tree
+      // 4. Render the Tree
+      // Root
+      console.log(chalk.yellow(`📦 ${metadata.title} (Hub)`));
 
-      // A. The Hub Root
-      console.log(chalk.bold.white("📂 Hub Root"));
+      // Sections
+      const headers = Object.keys(tree);
+      headers.forEach((header, index) => {
+        const isLastSection =
+          index === headers.length - 1 && orphans.length === 0;
+        const prefix = isLastSection ? "└──" : "├──";
 
-      // B. Components & their Spokes
-      anatomy.components.forEach((comp, index) => {
-        const isLast =
-          index === anatomy.components.length - 1 &&
-          globalSpokes.length === 0 &&
-          orphans.length === 0;
-        const prefix = isLast ? "└── " : "├── ";
+        // Status indicator (check for TODOs)
+        const sectionBody = parsedHub.sections[header];
+        const hasTodo = />\s*\*\*?TODO:?\*?/i.test(sectionBody);
+        const statusIcon = hasTodo ? chalk.red("○") : chalk.green("●");
 
-        console.log(
-          `${prefix}${chalk.cyan(comp.header)} ${chalk.gray(`(${comp.id})`)}`,
-        );
+        console.log(`${prefix} ${statusIcon} ${chalk.bold(header)}`);
 
-        const attachedSpokes = spokesMap[comp.id];
-        attachedSpokes.forEach((spoke, sIndex) => {
-          const spokePrefix = isLast ? "    " : "│   ";
-          const isLastSpoke = sIndex === attachedSpokes.length - 1;
-          const treeChar = isLastSpoke ? "└── " : "├── ";
-          console.log(`${spokePrefix}${treeChar}📄 ${spoke}`);
+        // Spokes inside this section
+        const spokes = tree[header];
+        spokes.forEach((spoke, sIndex) => {
+          const isLastSpoke = sIndex === spokes.length - 1;
+          const sectionIndent = isLastSection ? "    " : "│   ";
+          const spokePrefix = isLastSpoke ? "└──" : "├──";
+
+          console.log(`${sectionIndent}${spokePrefix} 📄 ${spoke}`);
         });
       });
 
-      // C. Global Spokes
-      if (globalSpokes.length > 0) {
-        console.log("├── " + chalk.yellow("🌍 Global Context"));
-        globalSpokes.forEach((spoke, index) => {
-          const isLast =
-            index === globalSpokes.length - 1 && orphans.length === 0;
-          const treeChar = isLast ? "└── " : "├── ";
-          console.log(`│   ${treeChar}📄 ${spoke}`);
-        });
-      }
-
-      // D. Orphans (Warnings)
+      // Global/Orphaned Spokes
       if (orphans.length > 0) {
-        console.log("└── " + chalk.red("⚠️  Orphans / Errors"));
+        console.log(`└── 🌍 Global / Unlinked`);
         orphans.forEach((spoke, index) => {
           const isLast = index === orphans.length - 1;
-          const treeChar = isLast ? "└── " : "├── ";
-          console.log(`    ${treeChar}${chalk.red(spoke)}`);
+          const prefix = isLast ? "    └──" : "    ├──";
+          console.log(`${prefix} 📄 ${spoke}`);
         });
       }
 
-      console.log(""); // Newline at end
+      console.log(chalk.gray("\nLegend: ● Done  ○ Pending\n"));
     } catch (error) {
       console.error(
         chalk.red("Map failed:"),

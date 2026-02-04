@@ -2,138 +2,180 @@ import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
-import { generateContent } from "../../core/ai.js";
+import { generateContent, generateSpokeStructure } from "../../core/ai.js";
 import {
   findHubRoot,
-  readAnatomy,
   readHubFile,
+  readHubMetadata,
   safeWriteFile,
 } from "../../core/io.js";
 import { parseMarkdown, reconstructMarkdown } from "../../core/parser.js";
-// Explicit .js extension for NodeNext compatibility
-import { HubComponent } from "../../types/index.js";
+import { runFillLogic } from "./fill.js";
 
 export const spawnCommand = new Command("spawn")
-  .description("Create a new Spoke article linked to a Hub Component")
-  .argument(
-    "[slug]",
-    'The filename slug for the new spoke (e.g., "advanced-configuration")',
+  .description("Interactively architect a new Spoke article")
+  .argument("[slug]", "The filename slug for the new spoke")
+  .option(
+    "-c, --component <header>",
+    "Link to a specific Hub Header (fuzzy match)",
   )
-  .option("-c, --component <id>", "The Hub Component ID to link this spoke to")
   .action(async (slugArg, options) => {
     try {
-      // 1. Setup Context
       const rootDir = await findHubRoot(process.cwd());
-      const anatomy = await readAnatomy(rootDir);
+
+      // 1. Load Context from Hub.md (No JSON)
+      const metadata = await readHubMetadata(rootDir);
+      const hubGoal = metadata.goal || metadata.title;
+      const language = metadata.language || "English";
+
       const rawHubContent = await readHubFile(rootDir);
       const parsedHub = parseMarkdown(rawHubContent);
 
-      // 2. Determine Slug & Target Component
-      let slug = slugArg;
-      if (!slug) {
-        const answer = await inquirer.prompt([
-          {
-            type: "input",
-            name: "slug",
-            message: "Enter a filename slug for the spoke (no extension):",
-            validate: (input) =>
-              /^[a-z0-9-]+$/.test(input)
-                ? true
-                : "Use only lowercase letters, numbers, and dashes.",
-          },
-        ]);
-        slug = answer.slug;
-      }
-
-      let targetComponent: HubComponent | undefined;
+      // 2. Identify Target Section
+      // We link based on existing headers in hub.md
+      let selectedHeader: string | undefined;
 
       if (options.component) {
-        targetComponent = anatomy.components.find(
-          (c) => c.id === options.component,
+        // Try to find exact or fuzzy match
+        const headers = Object.keys(parsedHub.sections);
+        selectedHeader = headers.find((h) =>
+          h.toLowerCase().includes(options.component.toLowerCase()),
         );
-        if (!targetComponent) {
-          console.error(
-            chalk.red(`Component ID '${options.component}' not found.`),
+        if (!selectedHeader) {
+          console.log(
+            chalk.yellow(
+              `Warning: Could not find header matching "${options.component}". Spoke will be global.`,
+            ),
           );
-          return;
         }
       } else {
-        // Interactive Selection
-        const { selected } = await inquirer.prompt([
+        const { selection } = await inquirer.prompt([
           {
             type: "list",
-            name: "selected",
-            message: "Which Hub section does this spoke elaborate on?",
+            name: "selection",
+            message: "Link this spoke to which Hub section?",
             choices: [
-              { name: "None (Global Spoke)", value: undefined },
-              ...anatomy.components.map((c) => ({
-                name: `${c.header} (${c.id})`,
-                value: c,
+              { name: "None (Global/General)", value: undefined },
+              ...Object.keys(parsedHub.sections).map((h) => ({
+                name: h,
+                value: h,
               })),
             ],
           },
         ]);
-        targetComponent = selected;
+        selectedHeader = selection;
       }
 
-      console.log(chalk.blue(`\n🌱 Spawning Spoke: ${slug}.md`));
+      // 3. Determine Slug
+      let slug = slugArg;
+      if (!slug) {
+        const { inputSlug } = await inquirer.prompt([
+          {
+            type: "input",
+            name: "inputSlug",
+            message: 'Filename slug (e.g. "advanced-patterns"):',
+            validate: (val) =>
+              /^[a-z0-9-]+$/.test(val) ||
+              "Lowercase letters, numbers, and dashes only.",
+          },
+        ]);
+        slug = inputSlug;
+      }
 
-      // 3. Generate Content (SRS 4.3.2)
-      // We need a title and an intro.
-      const title = slug
-        .replace(/-/g, " ")
-        .replace(/\b\w/g, (c: string) => c.toUpperCase()); // naive title case
-      const hubContext = targetComponent
-        ? `This article elaborates on the "${targetComponent.header}" section of the "${anatomy.goal}" guide.`
-        : `This is a deep dive related to the "${anatomy.goal}" project.`;
+      // 4. The Conversation (Architecting)
+      const { spokeGoal } = await inquirer.prompt([
+        {
+          type: "input",
+          name: "spokeGoal",
+          message: `What is the specific goal of this article?`,
+          default: selectedHeader
+            ? `Deep dive into ${selectedHeader}`
+            : `Expand on ${hubGoal}`,
+        },
+      ]);
 
-      const intro = await generateContent(
-        anatomy.goal,
-        title,
-        `Write a compelling introduction for this specific article. ${hubContext}`,
-        targetComponent ? parsedHub.sections[targetComponent.header] : "", // Pass parent content as context
+      console.log(
+        chalk.yellow(`\n🧠 Drafting structure for "${slug}" in ${language}...`),
       );
 
-      // 4. Create Spoke File
+      const title = slug
+        .replace(/-/g, " ")
+        .replace(/\b\w/g, (c: string) => c.toUpperCase());
+      const context = selectedHeader
+        ? `Parent Section Content: "${parsedHub.sections[selectedHeader] || ""}"`
+        : "";
+
+      // 5. Generate Structure
+      const structure = await generateSpokeStructure(
+        title,
+        hubGoal,
+        `${spokeGoal}. ${context}`,
+        language,
+      );
+
+      console.log(chalk.cyan("\nProposed Structure:"));
+      structure.forEach((s) =>
+        console.log(`  - ${chalk.bold(s.header)}: ${chalk.gray(s.intent)}`),
+      );
+
+      const { confirm } = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "confirm",
+          message: "Create this file?",
+          default: true,
+        },
+      ]);
+      if (!confirm) return;
+
+      // 6. Create Spoke File
+      console.log(chalk.white("   Writing skeleton..."));
+      const intro = await generateContent(
+        hubGoal,
+        title,
+        `Write a compelling intro for a spoke article about: ${spokeGoal}.`,
+        language,
+      );
+
       const spokeContent = [
         "---",
         `title: "${title}"`,
         'type: "spoke"',
-        `hubId: "${anatomy.hubId}"`,
-        targetComponent ? `componentId: "${targetComponent.id}"` : "",
+        `hubId: "${metadata.hubId}"`,
+        // We use the slug as the component ID for linking context
+        selectedHeader ? `componentId: "${slug}"` : "",
         `date: "${new Date().toISOString().split("T")[0]}"`,
         "---",
         "",
         `# ${title}`,
         "",
-        `> Part of the [${anatomy.goal}](../hub.md) series.`,
+        `> ⬅️ [${metadata.title}](../hub.md)`,
         "",
         intro,
         "",
-        "## Next Steps",
-        "Content pending...",
+        // The Blockquote TODO Pattern
+        ...structure.map(
+          (s) =>
+            `## ${s.header}\n\n> **TODO:** ${s.intent}\n\n*Pending generation...*\n`,
+        ),
       ]
-        .filter((line) => line !== "")
-        .join("\n"); // Filter removes empty componentId line if undefined
+        .filter((l) => l !== "")
+        .join("\n");
 
       const spokePath = path.join(rootDir, "spokes", `${slug}.md`);
       await safeWriteFile(spokePath, spokeContent);
-      console.log(chalk.green(`   Created: ./spokes/${slug}.md`));
+      console.log(chalk.green(`\n✅ Created: ./spokes/${slug}.md`));
 
-      // 5. Update Hub (Backlinking) - SRS 4.3.2
-      if (targetComponent) {
-        const header = targetComponent.header;
-        let sectionContent = parsedHub.sections[header] || "";
+      // 7. Link Back to Hub
+      if (selectedHeader) {
+        let sectionContent = parsedHub.sections[selectedHeader] || "";
 
-        // Avoid duplicate links
-        const linkMarkdown = `\n\n👉 **Read more:** [${title}](./spokes/${slug}.md)`;
+        // Check if link already exists to avoid duplication
         if (!sectionContent.includes(slug)) {
-          sectionContent += linkMarkdown;
+          sectionContent += `\n\n👉 [${title}](./spokes/${slug}.md)`;
+          parsedHub.sections[selectedHeader] = sectionContent;
 
-          // Update the ParsedHub object
-          parsedHub.sections[header] = sectionContent;
-
-          // Reconstruct and Save Hub
+          // Reconstruct Hub
           const newHubContent = [
             "---",
             Object.entries(parsedHub.frontmatter)
@@ -150,14 +192,28 @@ export const spawnCommand = new Command("spawn")
           await safeWriteFile(path.join(rootDir, "hub.md"), newHubContent);
           console.log(
             chalk.green(
-              `   Linked: Added reference to hub.md under "${header}"`,
+              `   Linked: Added reference to hub.md under "${selectedHeader}"`,
             ),
           );
         } else {
           console.log(
-            chalk.yellow(`   Skipped Link: Reference already exists in hub.md`),
+            chalk.yellow(`   Skipped Link: Reference already exists.`),
           );
         }
+      }
+
+      // 8. Auto-Fill Prompt
+      const { doFill } = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "doFill",
+          message: "Do you want to generate the content now?",
+          default: true,
+        },
+      ]);
+
+      if (doFill) {
+        await runFillLogic(spokePath, hubGoal, language);
       }
     } catch (error) {
       console.error(

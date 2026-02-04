@@ -1,69 +1,60 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import { findHubRoot, readAnatomy, readHubFile } from "../../core/io.js";
+import { findHubRoot, readHubFile, readHubMetadata } from "../../core/io.js";
 import { parseMarkdown } from "../../core/parser.js";
 
 export const checkCommand = new Command("check")
-  .description("Verify consistency between anatomy.json and hub.md")
+  .description("Check hub progress (Done vs Pending)")
   .action(async () => {
     try {
-      // 1. Establish Context (SRS 2.1)
-      // Locate the hub root from the current directory
+      // 1. Establish Context
       const rootDir = await findHubRoot(process.cwd());
 
-      // 2. Load Data
-      const anatomy = await readAnatomy(rootDir);
-      const rawHubContent = await readHubFile(rootDir);
-      const parsedHub = parseMarkdown(rawHubContent);
+      // 2. Load Data (From Markdown Frontmatter)
+      const metadata = await readHubMetadata(rootDir);
+      const rawContent = await readHubFile(rootDir);
+      const parsed = parseMarkdown(rawContent);
 
-      console.log(chalk.blue(`\n🔍 Checking Hub: ${anatomy.hubId}`));
-      console.log(chalk.gray(`   Goal: ${anatomy.goal}\n`));
+      console.log(chalk.blue(`\n🔍 Checking Hub: ${metadata.title}`));
+      if (metadata.goal) console.log(chalk.gray(`   Goal: ${metadata.goal}`));
+      console.log(chalk.gray(`   Lang: ${metadata.language}\n`));
 
-      // 3. Reconcile (SRS 4.2)
-      // We compare the headers defined in Anatomy vs. headers found in Markdown
+      // 3. Scan Status
+      // We look for Blockquotes: "> **TODO:** ..." or "> TODO: ..."
+      const todoRegex = />\s*\*\*?TODO:?\*?/i;
 
-      const anatomyHeaders = new Set(anatomy.components.map((c) => c.header));
-      const markdownHeaders = new Set(Object.keys(parsedHub.sections));
+      let pendingCount = 0;
+      let doneCount = 0;
 
-      let allSynced = true;
+      const headers = Object.keys(parsed.sections);
 
-      // A. Check for Missing Sections (Defined in Anatomy, missing in MD)
-      anatomy.components.forEach((comp) => {
-        if (markdownHeaders.has(comp.header)) {
-          console.log(chalk.green(`  ✅ ${comp.header}`));
+      if (headers.length === 0) {
+        console.log(chalk.yellow("   No sections found."));
+      }
+
+      headers.forEach((header) => {
+        const body = parsed.sections[header];
+
+        if (todoRegex.test(body) || body.includes("*Pending generation...*")) {
+          console.log(chalk.yellow(`  ⏳ ${header} (Pending)`));
+          pendingCount++;
+        } else if (body.trim().length < 50) {
+          // Heuristic: If it's very short and no TODO, it might be empty
+          console.log(chalk.red(`  ⚠️  ${header} (Empty/Too Short)`));
+          pendingCount++;
         } else {
-          console.log(chalk.red(`  ❌ ${comp.header} (Missing in hub.md)`));
-          allSynced = false;
-        }
-      });
-
-      // B. Check for Unmapped Sections (Found in MD, not in Anatomy)
-      markdownHeaders.forEach((header) => {
-        if (!anatomyHeaders.has(header)) {
-          console.log(
-            chalk.yellow(`  ⚠️  ${header} (Found in MD but not in Anatomy)`),
-          );
-          allSynced = false;
+          console.log(chalk.green(`  ✅ ${header}`));
+          doneCount++;
         }
       });
 
       console.log("\n---");
-      if (allSynced) {
-        console.log(chalk.green("✨ Hub is perfectly synced!"));
-      } else {
-        console.log(
-          chalk.white("Run ") +
-            chalk.yellow("hub map") +
-            chalk.white(" to see spoke connections (Coming soon)."),
-        );
-        console.log(
-          chalk.white("Edit ") +
-            chalk.bold("anatomy.json") +
-            chalk.white(" or ") +
-            chalk.bold("hub.md") +
-            chalk.white(" to resolve mismatches."),
-        );
-      }
+      const total = pendingCount + doneCount;
+      const percent = total === 0 ? 0 : Math.round((doneCount / total) * 100);
+
+      console.log(
+        chalk.white(`Progress: ${percent}% Complete (${doneCount}/${total})`),
+      );
     } catch (error) {
       console.error(
         chalk.red("Check failed:"),

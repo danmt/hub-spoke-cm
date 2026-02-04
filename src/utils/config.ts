@@ -7,29 +7,42 @@ const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
 export interface GlobalConfig {
   apiKey?: string;
+  architectModel?: string; // Model for high-level planning (new/spawn)
+  writerModel?: string; // Model for prose generation (fill)
 }
 
-export function getGlobalConfig(): GlobalConfig {
-  try {
-    if (!fs.existsSync(CONFIG_FILE)) {
-      return {};
-    }
-    const content = fs.readFileSync(CONFIG_FILE, "utf-8");
-    return JSON.parse(content);
-  } catch (error) {
-    // If config is corrupt, return empty
-    return {};
-  }
-}
+// Defaults requested
+const DEFAULTS: Partial<GlobalConfig> = {
+  architectModel: "gemini-3-flash-preview",
+  writerModel: "gemini-3-flash-preview",
+};
 
-export function setGlobalConfig(key: string, value: string): void {
-  // Ensure directory exists
+function ensureConfigDir() {
   if (!fs.existsSync(CONFIG_DIR)) {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
   }
+}
 
+export function getGlobalConfig(): GlobalConfig {
+  ensureConfigDir();
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) {
+      return DEFAULTS;
+    }
+    const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
+    const userConfig = JSON.parse(raw);
+
+    // Merge user config with defaults (in case new fields are missing)
+    return { ...DEFAULTS, ...userConfig };
+  } catch (error) {
+    return DEFAULTS;
+  }
+}
+
+export function setGlobalConfig(newConfig: Partial<GlobalConfig>) {
+  ensureConfigDir();
   const current = getGlobalConfig();
-  const updated = { ...current, [key]: value };
-
+  const updated = { ...current, ...newConfig };
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(updated, null, 2), "utf-8");
+  return updated;
 }

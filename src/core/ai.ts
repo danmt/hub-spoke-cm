@@ -1,15 +1,15 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GenerationConfig, GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from "dotenv";
-// Explicit .js extension for NodeNext compatibility
-import { HubAnatomy } from "../types/index.js";
+import { HubBlueprint, SectionBlueprint } from "../types/index.js";
 import { getGlobalConfig } from "../utils/config.js";
 
+// Load environment variables (local .env)
 dotenv.config();
 
+// 1. Resolve API Key
 const API_KEY = process.env.GEMINI_API_KEY || getGlobalConfig().apiKey;
 
 if (!API_KEY) {
-  // We throw a helpful error telling them how to fix it
   throw new Error(
     "Gemini API Key not found.\n" +
       "Please run: hub config set-key <your-api-key>\n" +
@@ -19,54 +19,68 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// We use a model that supports JSON mode well
-const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+/**
+ * Helper to get the correct model instance based on the task type.
+ * - Architect: High reasoning (Structure, JSON, Logic)
+ * - Writer: High speed/volume (Prose, Markdown)
+ */
+function getModel(role: "architect" | "writer") {
+  const config = getGlobalConfig();
+
+  // Defaults are handled in config.ts, but we add a fallback here just in case
+  const modelName =
+    role === "architect"
+      ? config.architectModel || "gemini-3-flash-preview"
+      : config.writerModel || "gemini-3-flash-preview";
+
+  return genAI.getGenerativeModel({ model: modelName });
+}
 
 /**
- * Generates the structural blueprint (Anatomy) for a new Hub.
- * Ref: SRS REQ-4.1.3
+ * [ARCHITECT TASK]
+ * Generates the structural blueprint for a new Hub.
  */
 export async function generateAnatomy(
   topic: string,
   goal: string,
   audience: string,
-): Promise<HubAnatomy> {
+  language: string,
+): Promise<HubBlueprint> {
+  const model = getModel("architect"); // <--- Uses Architect Model
+
   const prompt = `
     You are an expert Technical Content Strategist. 
-    Design a comprehensive content "Hub" structure for the following project:
+    Design a comprehensive content "Hub" structure.
     
     - **Topic**: ${topic}
     - **Goal**: ${goal}
     - **Target Audience**: ${audience}
+    - **Output Language**: ${language} (IMPORTANT: All headers and intents must be in this language)
     
-    Output a strictly valid JSON object. 
-    The structure must act as a logical table of contents using H2 or H3 headers.
-    Each component must have:
-    1. 'id': A short, unique slug (e.g., 'setup', 'deep-dive').
-    2. 'header': The exact header text (e.g., 'Setting up the Environment').
-    3. 'intent': Instructions for the writer/AI on what this section should cover.
-
-    The JSON must match this schema:
+    Output a strictly valid JSON object matching this schema:
     {
       "hubId": "kebab-case-slug-of-topic",
-      "goal": "${goal}",
-      "targetAudience": "${audience}",
       "components": [
-        { "id": "string", "header": "string", "intent": "string" }
+        { 
+          "id": "short-slug", 
+          "header": "Exact Header Text (H2)", 
+          "intent": "Specific instructions for what to write in this section" 
+        }
       ]
     }
   `;
 
   try {
+    const generationConfig: GenerationConfig = {
+      responseMimeType: "application/json",
+    } as any;
+
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json", // Force JSON output
-      },
+      generationConfig,
     });
 
-    const responseText = result.response.text();
-    return JSON.parse(responseText) as HubAnatomy;
+    return JSON.parse(result.response.text()) as HubBlueprint;
   } catch (error) {
     throw new Error(
       `AI Anatomy generation failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -75,15 +89,65 @@ export async function generateAnatomy(
 }
 
 /**
- * Generates prose content for a specific section of the Hub.
- * Ref: SRS REQ-4.3.1
+ * [ARCHITECT TASK]
+ * Generates a detailed outline for a Spoke article.
+ */
+export async function generateSpokeStructure(
+  title: string,
+  hubGoal: string,
+  context: string,
+  language: string,
+): Promise<SectionBlueprint[]> {
+  const model = getModel("architect"); // <--- Uses Architect Model
+
+  const prompt = `
+    You are an expert technical editor. Create a content outline for a satellite article ("Spoke").
+    
+    - **Article Title**: "${title}"
+    - **Parent Hub Goal**: "${hubGoal}"
+    - **Context**: "${context}"
+    - **Language**: ${language}
+    
+    Output strictly a JSON array of objects matching this shape:
+    [ 
+      { "header": "Section Title", "intent": "Instruction on what to cover" } 
+    ]
+    
+    Do not include the Intro or Conclusion in this list. Focus on the body sections.
+  `;
+
+  try {
+    const generationConfig: GenerationConfig = {
+      responseMimeType: "application/json",
+    } as any;
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig,
+    });
+
+    return JSON.parse(result.response.text()) as SectionBlueprint[];
+  } catch (error) {
+    return [
+      { header: "Overview", intent: "Explain the core concept" },
+      { header: "Implementation", intent: "Provide examples and code" },
+    ];
+  }
+}
+
+/**
+ * [WRITER TASK]
+ * Generates prose content for a specific section.
  */
 export async function generateContent(
   hubGoal: string,
   componentHeader: string,
   componentIntent: string,
+  language: string,
   surroundingContext: string = "",
 ): Promise<string> {
+  const model = getModel("writer"); // <--- Uses Writer Model
+
   const prompt = `
     You are a technical writer drafting a specific section of a guide.
     
@@ -91,13 +155,14 @@ export async function generateContent(
     - **Overall Guide Goal**: ${hubGoal}
     - **Current Section Header**: "${componentHeader}"
     - **Section Intent**: ${componentIntent}
+    - **Language**: ${language} (Write strictly in this language)
     
     **Instructions**:
     - Write the content for ONLY this section.
     - Do not include the header itself (it already exists).
     - Use technical, clear, and concise language.
-    - Use Markdown formatting (lists, code blocks, bolding) where appropriate.
-    ${surroundingContext ? `- Ensure flow with the following surrounding context: \n"${surroundingContext}"` : ""}
+    - Use Markdown formatting (code blocks, bolding, lists).
+    ${surroundingContext ? `- Ensure flow with context: \n"${surroundingContext}"` : ""}
   `;
 
   try {
@@ -106,6 +171,62 @@ export async function generateContent(
   } catch (error) {
     throw new Error(
       `AI Content generation failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/**
+ * [WRITER TASK]
+ * Batch Generates content for multiple sections in a SINGLE request.
+ */
+export async function generateBatchContent(
+  hubGoal: string,
+  sections: { header: string; intent: string }[],
+  language: string,
+): Promise<Record<string, string>> {
+  const model = getModel("writer"); // <--- Uses Writer Model
+
+  const sectionsList = sections
+    .map((s) => `- Header: "${s.header}"\n  Intent: ${s.intent}`)
+    .join("\n");
+
+  const prompt = `
+    You are a technical writer. Write content for the following ${sections.length} sections of a guide.
+    
+    **Context**:
+    - **Overall Guide Goal**: ${hubGoal}
+    - **Language**: ${language}
+    
+    **Sections to Write**:
+    ${sectionsList}
+    
+    **Instructions**:
+    - Output a strictly valid JSON object.
+    - Keys must be the EXACT Header text provided above.
+    - Values must be the Markdown content for that section.
+    - Do not include the header text inside the value (just the body).
+    
+    Example Output:
+    {
+      "Header Name": "Content for this section...",
+      "Another Header": "Content for that section..."
+    }
+  `;
+
+  try {
+    const generationConfig: GenerationConfig = {
+      responseMimeType: "application/json",
+    } as any;
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig,
+    });
+
+    return JSON.parse(result.response.text()) as Record<string, string>;
+  } catch (error) {
+    throw new Error(
+      `Batch generation failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

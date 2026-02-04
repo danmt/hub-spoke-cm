@@ -1,24 +1,20 @@
 # Hub & Spoke Content Manager 🧠✍️
 
 > **Scale your technical content without losing your soul.**
-> A CLI for "Vibe Coding" complex articles using the Hub & Spoke strategy and Google Gemini.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
+> A CLI for "Vibe Coding" complex content clusters using the Hub & Spoke strategy and Google Gemini.
 
 ## 🚀 What is this?
 
-This is a **Node.js CLI tool** designed for technical writers and developer advocates. It helps you plan, generate, and manage large content clusters ("Hubs") and their satellite articles ("Spokes").
+This is a **Node.js CLI tool** designed for technical writers, developer advocates, and content strategists. It helps you plan, generate, and manage large content clusters ("Hubs") and their satellite articles ("Spokes").
 
-Unlike generic AI writers, this tool respects your **filesystem as the database**. You work in Markdown, edit files manually in your favorite IDE ("Vibe Coding"), and use the CLI only to automate the boring stuff: structure planning, first drafts, and internal linking.
+**The Philosophy: "Vibe Coding"**
+Unlike generic AI writers that vomit text into a black box, this tool respects your **filesystem as the database**.
 
-## ✨ Features
+- **No Hidden State:** The "Plan" lives inside your Markdown files as `> **TODO:**` blockquotes.
+- **No Lock-in:** If you delete the tool, you still have valid, standard Markdown files.
+- **Human-in-the-Loop:** You act as the Architect; the AI acts as the Ghostwriter.
 
-- **🧠 AI Architect:** Generates a comprehensive `anatomy.json` blueprint based on your topic and audience.
-- **📝 Vibe Coding:** Writes content directly into your Markdown files without overwriting your manual edits.
-- **🔗 Auto-Linking:** Automatically manages bidirectional links between the Hub and its Spokes.
-- **✅ The Reconciler:** Checks your `hub.md` against the blueprint to find missing sections or orphaned content.
-- **🗺️ Visualization:** Visualizes your content graph in the terminal.
+---
 
 ## 🛠️ Installation
 
@@ -29,15 +25,15 @@ Unlike generic AI writers, this tool respects your **filesystem as the database*
 
 ### Setup
 
-1.  **Clone and Install:**
+1. **Clone and Install:**
 
 ```bash
-git clone [https://github.com/danmt/hub-spoke-cm.git](https://github.com/danmt/hub-spoke-cm.git)
+git clone https://github.com/your-username/hub-spoke-cm.git
 cd hub-spoke-cm
 npm install
 ```
 
-2.  **Build & Link:**
+2. **Build & Link:**
 
 This compiles the TypeScript code and registers the `hub` command globally.
 
@@ -46,9 +42,9 @@ npm run build
 npm link
 ```
 
-3.  **Configure API Key:**
+3. **Configure API Key:**
 
-You can set your key globally so you don't need a `.env` file in every project.
+Store your key securely in your OS user config (not in the repo).
 
 ```bash
 hub config set-key AIzaSyB...YourKey
@@ -56,60 +52,57 @@ hub config set-key AIzaSyB...YourKey
 
 ## ⚡ Workflow
 
-### 1. Initialize a Hub
+### 1. Initialize a Hub (`hub new`)
 
-Start by defining your project. The AI will propose a structure for you.
+Start by defining your project. The AI "Architect" model will propose a structure.
 
 ```bash
 hub new "Advanced Rust Concurrency"
 ```
 
-- **Prompts:** Asks for Goal ("Teach async/await") and Audience ("Senior Devs").
-- **Output:** Creates a folder with `anatomy.json` and a skeleton `hub.md`.
+- **Prompts:** Asks for Goal, Audience, and **Language** (English, Spanish, etc.).
+- **Output:** Creates a folder with a `hub.md` containing the "Blueprint" as blockquote TODOs.
 
-### 2. Verify Structure
+### 2. The "Vibe Check" (`hub check`)
 
-Go into your new folder. You can manually edit `hub.md` (change headers, delete sections) and then run:
+See the status of your content at a glance.
 
 ```bash
 cd advanced-rust-concurrency
 hub check
 ```
 
-- **Green (✅):** Section exists in both `anatomy.json` and `hub.md`.
-- **Red (❌):** Defined in blueprint but missing in the file.
-- **Yellow (⚠️):** You added a custom section manually (not in blueprint).
+- **Pending (⏳):** Sections with `> **TODO:**` or placeholder text.
+- **Done (✅):** Sections with real content.
+- **Empty (⚠️):** Sections that look too short.
 
-### 3. Generate Content (The "Fill")
+### 3. Generate Content (`hub fill`)
 
-Generate a first draft for specific sections. The AI reads the `intent` from the blueprint to write relevant prose.
-
-```bash
-# Fill a specific section
-hub fill --component async-basics
-
-# Or fill all empty sections
-hub fill --all
-```
-
-- **Note:** It _only_ fills the text between headers. It won't touch your surrounding notes.
-
-### 4. Spawn Spokes
-
-Need to deep-dive into a specific sub-topic? Spawn a "Spoke" article.
+Turn those TODOs into prose. You can fill one section or **batch** multiple sections into a single API request to save quota.
 
 ```bash
-hub spawn --component async-basics "understanding-tokio"
+# Fill specific sections (interactive selection)
+hub fill
+
+# Fill a specific file (if not hub.md)
+hub fill --file ./spokes/my-article.md
 ```
 
-- **Magic:**
+- **Batching:** If you select multiple sections, the CLI sends them all in one request, drastically reducing rate-limit errors.
+- **Context:** The AI reads your Hub's "Goal" and "Language" from the frontmatter to ensure consistency.
 
-1. Creates `spokes/understanding-tokio.md`.
-2. Writes an intro based on the context of the "async-basics" section.
-3. **Adds a link** in `hub.md` pointing to the new spoke.
-4. **Adds a backlink** in the spoke pointing to the hub.
+### 4. Spawn Spokes (`hub spawn`)
 
-### 5. Visualize
+Need to deep-dive into a specific sub-topic? Spawn a satellite article.
+
+```bash
+hub spawn "async-vs-threads"
+```
+
+- **Architecting:** The CLI acts as a conversational partner to outline the new article before creating it.
+- **Linking:** Automatically adds a link in `hub.md` pointing to the new spoke, and a backlink in the spoke pointing to the Hub.
+
+### 5. Visualize (`hub map`)
 
 See the tree of your content cluster.
 
@@ -117,57 +110,89 @@ See the tree of your content cluster.
 hub map
 ```
 
+- **Green (●):** Completed content.
+- **Red (○):** Pending content.
+- **Structure:** Shows which Hub section links to which Spoke file.
+
 ## 📂 Project Structure
 
-A Hub is just a folder. You can commit it to Git as usual.
+We use a **"Distributed Plan"** architecture. There is no central `anatomy.json`. The "Source of Truth" is the Markdown file itself.
 
 ```text
 my-hub-topic/
-├── anatomy.json       # The Blueprint (Metadata, Goals, Component Intent)
-├── hub.md             # The Main Article (Source of Truth)
+├── hub.md             # The Core Article + Metadata (Frontmatter)
 └── spokes/            # Satellite Articles
     ├── deep-dive-1.md
     └── deep-dive-2.md
 ```
 
-**`anatomy.json` Example:**
+**`hub.md` Example:**
 
-```json
-{
-  "hubId": "rust-concurrency",
-  "goal": "Explain async rust",
-  "components": [
-    {
-      "id": "setup",
-      "header": "Setting up the Environment",
-      "intent": "Explain how to install Tokio and Cargo."
-    }
-  ]
-}
+```markdown
+---
+title: "Advanced Rust"
+type: "hub"
+hubId: "rust-concurrency"
+goal: "Master async/await"
+language: "English"       <-- AI uses this to force output language
+---
+
+## Setup
+
+> **TODO:** Explain how to install Tokio.
+
+_Pending generation..._
+```
+
+---
+
+## ⚙️ Advanced Configuration
+
+You can configure which Gemini models to use for different tasks. This allows you to use a **"Smart"** model for planning and a **"Fast"** model for writing.
+
+**View current config:**
+
+```bash
+cat ~/.config/hub-spoke-cm/config.json
+```
+
+**Set Custom Models:**
+
+```bash
+# The "Architect" (Used for 'new' and 'spawn' structure planning)
+# Recommended: gemini-1.5-pro or gemini-2.0-flash-exp
+hub config set-model-architect gemini-1.5-pro-latest
+
+# The "Writer" (Used for 'fill' prose generation)
+# Recommended: gemini-1.5-flash (Fast & Cheap)
+hub config set-model-writer gemini-1.5-flash
 ```
 
 ## ❓ Troubleshooting
 
-**`zod: permission denied: hub`**
+**`zsh: permission denied: hub`**
 The build process might have reset file permissions. Run:
 
 ```bash
 npm run build
 ```
 
-_(We included a fix in `package.json` to auto-restore permissions on build)._
+**`Error: 429 Too Many Requests`**
+You are hitting the rate limit.
 
-**`Error: 404 Not Found (Gemini)`**
-The specific AI model version might be deprecated or unavailable in your region.
+1. Try selecting fewer sections when running `hub fill`.
+2. The tool automatically uses **Batching** when you select >1 section, which usually fixes this by doing 1 big request instead of 5 small ones.
 
-1. Open `src/core/ai.ts`.
-2. Change `const MODEL_NAME = 'gemini-1.5-flash-001'` to a supported version.
+**"My content is in English but I wanted Spanish"**
+Check the `language` field in your file's frontmatter.
 
-**Content isn't syncing?**
-The parser relies on **H2 (`##`)** and **H3 (`###`)** headers to identify sections.
+```yaml
+---
+language: "Spanish"
+---
+```
 
-- Ensure your `anatomy.json` "header" field matches the Markdown header text exactly.
-- Run `hub check` to see mismatches.
+The AI strictly obeys this field.
 
 ## 🛡️ License
 
