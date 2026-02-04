@@ -134,7 +134,7 @@ title: "Advanced Rust"
 type: "hub"
 hubId: "rust-concurrency"
 goal: "Master async/await"
-language: "English"       <-- AI uses this to force output language
+language: "English"
 ---
 
 ## Setup
@@ -196,4 +196,4 @@ The AI strictly obeys this field.
 
 ## 🛡️ License
 
-MIT © [Your Name]
+MIT © Dan
