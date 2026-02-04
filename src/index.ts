@@ -3,6 +3,15 @@ import chalk from "chalk";
 import { Command } from "commander";
 import dotenv from "dotenv";
 
+// Import Commands
+// Explicit .js extension is required for NodeNext module resolution
+import { checkCommand } from "./cli/commands/check.js";
+import { configCommand } from "./cli/commands/config.js";
+import { fillCommand } from "./cli/commands/fill.js";
+import { mapCommand } from "./cli/commands/map.js";
+import { newCommand } from "./cli/commands/new.js";
+import { spawnCommand } from "./cli/commands/spawn.js";
+
 // Load environment variables
 dotenv.config();
 
@@ -12,12 +21,17 @@ async function main() {
   program
     .name("hub")
     .description(
-      "Hub & Spoke Content Manager - CLI for scaling technical content",
+      'Hub & Spoke Content Manager - A "Vibe Coding" CLI for scaling technical content',
     )
     .version("1.0.0");
 
-  // We will register commands here in Phase 4 (Step 10)
-  // Example: program.addCommand(newCommand);
+  // Register Commands
+  program.addCommand(newCommand);
+  program.addCommand(checkCommand);
+  program.addCommand(fillCommand);
+  program.addCommand(spawnCommand);
+  program.addCommand(mapCommand);
+  program.addCommand(configCommand);
 
   // Global Error Handling
   program.on("command:*", () => {
@@ -30,6 +44,7 @@ async function main() {
     process.exit(1);
   });
 
+  // Show help if no arguments provided
   if (!process.argv.slice(2).length) {
     program.outputHelp();
   }
