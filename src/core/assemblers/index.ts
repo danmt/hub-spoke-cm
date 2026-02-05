@@ -1,107 +1,77 @@
 // src/core/assemblers/index.ts
-import { HubBlueprint, HubComponent } from "../../types/index.js";
+import { GoogleGenAI } from "@google/genai";
+import { HubBlueprint, HubBlueprintSchema } from "../../types/index.js";
+import { getGlobalConfig } from "../../utils/config.js";
 import { Brief } from "../agents/Architect.js";
-
 export interface Assembler {
   id: string;
   description: string;
+  strategyPrompt: string;
   generateSkeleton(brief: Brief): Promise<HubBlueprint>;
 }
 
-/**
- * DeepDiveAssembler
- * Designed for senior-level technical analysis.
- * Focuses on internals, architecture, and performance trade-offs.
- */
-export class DeepDiveAssembler implements Assembler {
-  id = "deep-dive";
-  description =
-    "Provides an in-depth architectural analysis. Best for senior engineers, system design, and performance optimizations.";
+abstract class BaseAgenticAssembler implements Assembler {
+  abstract id: string;
+  abstract description: string;
+  abstract strategyPrompt: string;
+  protected client: GoogleGenAI;
+
+  constructor() {
+    const config = getGlobalConfig();
+    this.client = new GoogleGenAI({ apiKey: config.apiKey! });
+  }
 
   async generateSkeleton(brief: Brief): Promise<HubBlueprint> {
-    const components: HubComponent[] = [
-      {
-        id: "architecture",
-        header: "Internal Architecture",
-        intent: `Analyze the internal structural design of ${brief.topic}.`,
-        writerId: "prose",
-      },
-      {
-        id: "mechanics",
-        header: "Core Mechanics",
-        intent: "Explain the data flow and critical system components.",
-        writerId: "prose",
-      },
-      {
-        id: "edge-cases",
-        header: "Edge Cases and Constraints",
-        intent:
-          "Identify common failure modes, bottlenecks, and scalability limits.",
-        writerId: "prose",
-      },
-      {
-        id: "optimization",
-        header: "Performance Optimization",
-        intent: `Advanced technical guide for maximizing the performance of ${brief.goal}.`,
-        writerId: "code",
-      },
-      {
-        id: "ecosystem",
-        header: "Ecosystem Comparison",
-        intent:
-          "Compare with alternative solutions and discuss technical trade-offs.",
-        writerId: "prose",
-      },
-    ];
+    const config = getGlobalConfig();
+    const model = config.architectModel || "gemini-2-flash";
 
-    return {
-      hubId: brief.topic.toLowerCase().replace(/\s+/g, "-"),
-      components,
-    };
+    const result = await this.client.models.generateContent({
+      model: model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `
+            You are a Content Architect. Generate a dynamic HubBlueprint JSON object.
+            STRATEGY: ${this.strategyPrompt}
+            TOPIC: ${brief.topic} | GOAL: ${brief.goal} | PERSONA: ${brief.personaId}
+            
+            TASK: Define sections with catchy, persona-aligned headers. 
+            If the topic is complex (e.g., a Fullstack tutorial), expand to include all necessary technical layers (DB, API, Frontend, etc.).
+            
+            OUTPUT ONLY RAW JSON matching this schema:
+            {
+              "hubId": "slugified-topic",
+              "components": [
+                { "id": "unique-id", "header": "Contextual Title", "intent": "Writing instructions", "writerId": "prose|code" }
+              ]
+            }
+          `.trim(),
+            },
+          ],
+        },
+      ],
+    });
+
+    const rawJson = (result.text ?? "").replace(/```json|```/g, "").trim();
+    return HubBlueprintSchema.parse(JSON.parse(rawJson));
   }
 }
 
-/**
- * TutorialAssembler: Focuses on a learning-oriented structure.
- */
-export class TutorialAssembler implements Assembler {
+export class TutorialAssembler extends BaseAgenticAssembler {
   id = "tutorial";
   description =
-    "Generates a step-by-step learning path. Best for 'How-to' guides, beginners, and project-based learning.";
+    "Dynamic step-by-step learning path. Adapts depth to topic complexity.";
+  strategyPrompt =
+    "Focus on a logical progression from prerequisites to a working final product. If the topic involves multiple stacks, create dedicated implementation sections for each.";
+}
 
-  async generateSkeleton(brief: Brief): Promise<HubBlueprint> {
-    const components: HubComponent[] = [
-      {
-        id: "intro",
-        header: "Introduction",
-        intent: `Explain what we are building: ${brief.topic}`,
-        writerId: "prose",
-      },
-      {
-        id: "setup",
-        header: "Environment Setup",
-        intent: "List prerequisites and installation steps",
-        writerId: "prose",
-      },
-      {
-        id: "implementation",
-        header: "Core Implementation",
-        intent: `Step-by-step code guide to achieve: ${brief.goal}`,
-        writerId: "code",
-      },
-      {
-        id: "conclusion",
-        header: "Next Steps",
-        intent: "Summary and where to go from here",
-        writerId: "prose",
-      },
-    ];
-
-    return {
-      hubId: brief.topic.toLowerCase().replace(/\s+/g, "-"),
-      components,
-    };
-  }
+export class DeepDiveAssembler extends BaseAgenticAssembler {
+  id = "deep-dive";
+  description = "Advanced architectural and performance analysis.";
+  strategyPrompt =
+    "Focus on internals, trade-offs, and edge cases. Headers should reflect senior-level technical scrutiny.";
 }
 
 export const ASSEMBLER_REGISTRY: Record<string, Assembler> = {

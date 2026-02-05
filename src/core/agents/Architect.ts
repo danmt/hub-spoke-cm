@@ -3,10 +3,6 @@ import { GoogleGenAI } from "@google/genai";
 import { getGlobalConfig } from "../../utils/config.js";
 import { getAvailableToolsManifest } from "../registry.js";
 
-/**
- * Brief interface defines the flat structure required for
- * scaffolding the Hub and Spoke content.
- */
 export interface Brief {
   topic: string;
   goal: string;
@@ -16,10 +12,6 @@ export interface Brief {
   personaId: string;
 }
 
-/**
- * The ArchitectAgent handles the discovery phase, interviewing the user
- * to ensure a high-quality content plan before scaffolding.
- */
 export class ArchitectAgent {
   private client: GoogleGenAI;
   private modelName: string;
@@ -50,7 +42,7 @@ export class ArchitectAgent {
       4. If the user's requirements cannot be met by available tools, use the [GAP_DETECTED] tag and explain why.
       5. Only when the user confirms, output [FINALIZE] followed by a RAW JSON object matching the BRIEF SCHEMA.
 
-      BRIEF SCHEMA (Strictly follow this flat JSON structure):
+      BRIEF SCHEMA:
       {
         "topic": "The final refined topic",
         "goal": "The final refined goal",
@@ -59,14 +51,9 @@ export class ArchitectAgent {
         "assemblerId": "The ID of the chosen assembler",
         "personaId": "The ID of the chosen persona"
       }
-
-      Do NOT nest properties inside 'baseline' or 'metadata' objects. Use the keys above.
     `;
   }
 
-  /**
-   * Manages the conversation loop with the user.
-   */
   async chatWithUser(input: string): Promise<{
     message: string;
     isComplete: boolean;
@@ -87,7 +74,6 @@ export class ArchitectAgent {
       const text = result.text ?? "";
       this.history.push({ role: "model", parts: [{ text }] });
 
-      // Handle Tool Gap detection
       if (text.includes("[GAP_DETECTED]")) {
         return {
           message: text.split("[GAP_DETECTED]")[0].trim(),
@@ -96,23 +82,15 @@ export class ArchitectAgent {
         };
       }
 
-      // Handle Finalization
       if (text.includes("[FINALIZE]")) {
         const parts = text.split("[FINALIZE]");
         try {
-          // Clean markdown formatting if the AI ignores "raw JSON" instruction
           const rawJson = parts[1].replace(/```json|```/g, "").trim();
           const brief = JSON.parse(rawJson) as Brief;
-
-          return {
-            message: parts[0].trim(),
-            isComplete: true,
-            brief,
-          };
+          return { message: parts[0].trim(), isComplete: true, brief };
         } catch (e) {
           return {
-            message:
-              "I encountered a formatting error in the brief. Could you please say 'Proceed' one more time?",
+            message: "Brief format error. Please say 'Proceed' again.",
             isComplete: false,
           };
         }
@@ -121,35 +99,8 @@ export class ArchitectAgent {
       return { message: text, isComplete: false };
     } catch (error) {
       throw new Error(
-        `Architect communication failed: ${error instanceof Error ? error.message : String(error)}`,
+        `Architect failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
-}
-
-/**
- * Specifically for spawning spokes. It assumes the Persona is fixed
- * and focuses purely on structural assembly.
- */
-export async function planSpoke(
-  apiKey: string,
-  hubMetadata: any,
-  spokeTopic: string,
-): Promise<Brief> {
-  const architect = new ArchitectAgent(apiKey, {
-    topic: spokeTopic,
-    language: hubMetadata.language,
-    personaId: hubMetadata.personaId,
-    audience: hubMetadata.audience,
-    goal: `Deep dive into ${spokeTopic} as part of the ${hubMetadata.title} hub.`,
-  });
-
-  // We skip the interview for speed, or you can wrap it in a chat loop
-  // similar to 'new' if you want a back-and-forth.
-  const { brief } = await architect.chatWithUser(
-    `Create a plan for a Spoke article about "${spokeTopic}". Use the ${hubMetadata.assemblerId || "tutorial"} assembler.`,
-  );
-
-  if (!brief) throw new Error("Architect failed to generate a Spoke brief.");
-  return brief;
 }

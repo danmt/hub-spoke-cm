@@ -29,7 +29,7 @@ export class ProseWriter implements Writer {
     const client = new GoogleGenAI({ apiKey: config.apiKey! });
 
     const result = await client.models.generateContent({
-      model: config.writerModel || "gemini-2.0-flash-exp",
+      model: config.writerModel || "gemini-2-flash",
       config: {
         systemInstruction: {
           parts: [{ text: persona.getInstructions(ctx) }],
@@ -76,7 +76,7 @@ export class CodeWriter implements Writer {
     const client = new GoogleGenAI({ apiKey: config.apiKey! });
 
     const result = await client.models.generateContent({
-      model: config.writerModel || "gemini-3-flash",
+      model: config.writerModel || "gemini-2-flash",
       config: {
         systemInstruction: {
           parts: [{ text: persona.getInstructions(ctx) }],
