@@ -6,14 +6,9 @@ import inquirer from "inquirer";
 import path from "path";
 import { ArchitectAgent } from "../../core/agents/Architect.js";
 import { ASSEMBLER_REGISTRY } from "../../core/assemblers/index.js";
-import {
-  findHubRoot,
-  readHubFile,
-  readHubMetadata,
-  safeWriteFile,
-} from "../../core/io.js";
-import { parseMarkdown } from "../../core/parser.js";
 import { FillService } from "../../core/services/FillService.js";
+import { IoService } from "../../core/services/IoService.js";
+import { ParserService } from "../../core/services/ParserService.js";
 import { getGlobalConfig } from "../../utils/config.js";
 
 export const spawnCommand = new Command("spawn")
@@ -21,10 +16,10 @@ export const spawnCommand = new Command("spawn")
   .action(async () => {
     try {
       const config = getGlobalConfig();
-      const rootDir = await findHubRoot(process.cwd());
-      const hubMeta = await readHubMetadata(rootDir);
-      const hubRaw = await readHubFile(rootDir);
-      const parsedHub = parseMarkdown(hubRaw);
+      const rootDir = await IoService.findHubRoot(process.cwd());
+      const hubMeta = await IoService.readHubMetadata(rootDir);
+      const hubRaw = await IoService.readHubFile(rootDir);
+      const parsedHub = ParserService.parseMarkdown(hubRaw);
 
       // 1. Identify Sections available for expansion
       const sections = Object.keys(parsedHub.sections);
@@ -114,7 +109,7 @@ export const spawnCommand = new Command("spawn")
           ].join("\n");
 
           const filePath = path.join(spokesDir, fileName);
-          await safeWriteFile(filePath, fileContent);
+          await IoService.safeWriteFile(filePath, fileContent);
 
           console.log(
             chalk.bold.green(`\n✅ Spoke created: spokes/${fileName}`),

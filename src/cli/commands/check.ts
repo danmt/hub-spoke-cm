@@ -3,15 +3,15 @@ import chalk from "chalk";
 import { Command } from "commander";
 import fs from "fs/promises";
 import path from "path";
-import { findHubRoot, readHubMetadata } from "../../core/io.js";
-import { parseMarkdown } from "../../core/parser.js";
+import { IoService } from "../../core/services/IoService.js";
+import { ParserService } from "../../core/services/ParserService.js";
 
 export const checkCommand = new Command("check")
   .description("Validate project consistency and check for pending TODOs")
   .action(async () => {
     try {
-      const rootDir = await findHubRoot(process.cwd());
-      const hubMeta = await readHubMetadata(rootDir);
+      const rootDir = await IoService.findHubRoot(process.cwd());
+      const hubMeta = await IoService.readHubMetadata(rootDir);
       const files = await fs.readdir(rootDir);
       const markdownFiles = files.filter((f) => f.endsWith(".md"));
 
@@ -25,7 +25,7 @@ export const checkCommand = new Command("check")
       for (const file of markdownFiles) {
         const filePath = path.join(rootDir, file);
         const content = await fs.readFile(filePath, "utf-8");
-        const { frontmatter, sections } = parseMarkdown(content);
+        const { frontmatter, sections } = ParserService.parseMarkdown(content);
 
         const isHub = frontmatter.type === "hub";
         const label = isHub ? chalk.magenta("[HUB]") : chalk.blue("[SPOKE]");

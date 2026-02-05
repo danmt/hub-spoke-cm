@@ -2,8 +2,8 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import path from "path";
-import { findHubRoot } from "../../core/io.js";
 import { FillService } from "../../core/services/FillService.js";
+import { IoService } from "../../core/services/IoService.js";
 
 /**
  * fillCommand
@@ -26,7 +26,7 @@ export const fillCommand = new Command("fill")
         targetFile = path.resolve(currentDir, options.file);
       } else {
         // Otherwise, find the Hub root and target the main hub.md
-        const rootDir = await findHubRoot(currentDir);
+        const rootDir = await IoService.findHubRoot(currentDir);
         targetFile = path.join(rootDir, "hub.md");
       }
 

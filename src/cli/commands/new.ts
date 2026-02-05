@@ -5,8 +5,8 @@ import inquirer from "inquirer";
 import path from "path";
 import { ArchitectAgent } from "../../core/agents/Architect.js";
 import { ASSEMBLER_REGISTRY } from "../../core/assemblers/index.js";
-import { createHubDirectory, safeWriteFile } from "../../core/io.js";
 import { FillService } from "../../core/services/FillService.js";
+import { IoService } from "../../core/services/IoService.js";
 import { getGlobalConfig } from "../../utils/config.js";
 
 export const newCommand = new Command("new")
@@ -74,7 +74,7 @@ export const newCommand = new Command("new")
 
         // The Assembler now performs its own LLM call to generate a dynamic blueprint
         const blueprint = await assembler.generateSkeleton(brief);
-        const hubDir = await createHubDirectory(blueprint.hubId);
+        const hubDir = await IoService.createHubDirectory(blueprint.hubId);
 
         // 4. Map Dynamic AI Headers to Writers
         const writerMap: Record<string, string> = {};
@@ -106,7 +106,7 @@ export const newCommand = new Command("new")
         ].join("\n");
 
         const filePath = path.join(hubDir, "hub.md");
-        await safeWriteFile(filePath, fileContent);
+        await IoService.safeWriteFile(filePath, fileContent);
 
         console.log(chalk.bold.green(`\n✅ Hub scaffolded at ${hubDir}`));
 

@@ -2,16 +2,16 @@
 import chalk from "chalk";
 import fs from "fs/promises";
 import inquirer from "inquirer";
-import { safeWriteFile } from "../io.js";
-import { parseMarkdown, reconstructMarkdown } from "../parser.js";
 import { WRITER_REGISTRY } from "../writers/index.js";
+import { IoService } from "./IoService.js";
+import { ParserService } from "./ParserService.js";
 
 const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
 export class FillService {
   static async execute(filePath: string, autoAccept = false) {
     const content = await fs.readFile(filePath, "utf-8");
-    const parsed = parseMarkdown(content);
+    const parsed = ParserService.parseMarkdown(content);
 
     // Identify sections that actually need work
     const fillableEntries = Object.entries(parsed.sections).filter(
@@ -86,10 +86,10 @@ export class FillService {
     }
 
     // Crucial: Pass the full updatedSections record, not an array of keys
-    const finalMarkdown = reconstructMarkdown(
+    const finalMarkdown = ParserService.reconstructMarkdown(
       parsed.frontmatter,
       updatedSections,
     );
-    await safeWriteFile(filePath, finalMarkdown);
+    await IoService.safeWriteFile(filePath, finalMarkdown);
   }
 }

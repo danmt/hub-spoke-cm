@@ -3,18 +3,18 @@ import { Command } from "commander";
 import fs from "fs/promises";
 import matter from "gray-matter";
 import path from "path";
-import { findHubRoot, readHubFile, readHubMetadata } from "../../core/io.js";
-import { parseMarkdown } from "../../core/parser.js";
+import { IoService } from "../../core/services/IoService.js";
+import { ParserService } from "../../core/services/ParserService.js";
 
 export const mapCommand = new Command("map")
   .description("Visualize the Hub & Spoke content structure")
   .action(async () => {
     try {
       // 1. Load Context
-      const rootDir = await findHubRoot(process.cwd());
-      const metadata = await readHubMetadata(rootDir);
-      const rawHubContent = await readHubFile(rootDir);
-      const parsedHub = parseMarkdown(rawHubContent);
+      const rootDir = await IoService.findHubRoot(process.cwd());
+      const metadata = await IoService.readHubMetadata(rootDir);
+      const rawHubContent = await IoService.readHubFile(rootDir);
+      const parsedHub = ParserService.parseMarkdown(rawHubContent);
 
       console.log(
         chalk.blue(`\n🗺️  Content Map: ${chalk.bold(metadata.title)}`),
