@@ -1,223 +1,103 @@
+// src/cli/commands/spawn.ts
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
-import { generateContent, generateSpokeStructure } from "../../core/ai.js";
-import {
-  findHubRoot,
-  readHubFile,
-  readHubMetadata,
-  safeWriteFile,
-} from "../../core/io.js";
-import { parseMarkdown, reconstructMarkdown } from "../../core/parser.js";
-import { runFillLogic } from "./fill.js";
+import { ArchitectAgent } from "../../core/agents/Architect.js";
+import { ASSEMBLER_REGISTRY } from "../../core/assemblers/index.js";
+import { findHubRoot, readHubMetadata, safeWriteFile } from "../../core/io.js";
+import { FillService } from "../../core/services/FillService.js";
+import { getGlobalConfig } from "../../utils/config.js";
 
 export const spawnCommand = new Command("spawn")
-  .description("Interactively architect a new Spoke article")
-  .argument("[slug]", "The filename slug for the new spoke")
-  .option(
-    "-c, --component <header>",
-    "Link to a specific Hub Header (fuzzy match)",
-  )
-  .action(async (slugArg, options) => {
+  .description("Create a new Spoke article inheriting Hub context")
+  .argument("<topic>", "The specific topic for this Spoke")
+  .action(async (topic) => {
     try {
+      const config = getGlobalConfig();
       const rootDir = await findHubRoot(process.cwd());
+      const hubMeta = await readHubMetadata(rootDir);
 
-      // 1. Load Context from Hub.md (No JSON)
-      const metadata = await readHubMetadata(rootDir);
-      const hubGoal = metadata.goal || metadata.title;
-      const language = metadata.language || "English";
+      console.log(chalk.blue(`\n🌱 Spawning Spoke: "${topic}"`));
+      console.log(chalk.gray(`   Inheriting Persona: ${hubMeta.personaId}`));
 
-      const rawHubContent = await readHubFile(rootDir);
-      const parsedHub = parseMarkdown(rawHubContent);
-
-      // 2. Identify Target Section
-      // We link based on existing headers in hub.md
-      let selectedHeader: string | undefined;
-
-      if (options.component) {
-        // Try to find exact or fuzzy match
-        const headers = Object.keys(parsedHub.sections);
-        selectedHeader = headers.find((h) =>
-          h.toLowerCase().includes(options.component.toLowerCase()),
-        );
-        if (!selectedHeader) {
-          console.log(
-            chalk.yellow(
-              `Warning: Could not find header matching "${options.component}". Spoke will be global.`,
-            ),
-          );
-        }
-      } else {
-        const { selection } = await inquirer.prompt([
-          {
-            type: "list",
-            name: "selection",
-            message: "Link this spoke to which Hub section?",
-            choices: [
-              { name: "#1: None (Global/General)", value: undefined },
-              ...Object.keys(parsedHub.sections).map((h, i) => ({
-                name: `#${i + 2}: ${h}`,
-                value: h,
-              })),
-            ],
-          },
-        ]);
-        selectedHeader = selection;
-      }
-
-      // 3. Determine Slug
-      let slug = slugArg;
-      if (!slug) {
-        const { inputSlug } = await inquirer.prompt([
-          {
-            type: "input",
-            name: "inputSlug",
-            message: 'Filename slug (e.g. "advanced-patterns"):',
-            validate: (val) =>
-              /^[a-z0-9-]+$/.test(val) ||
-              "Lowercase letters, numbers, and dashes only.",
-          },
-        ]);
-        slug = inputSlug;
-      }
-
-      // 4. The Conversation (Architecting)
-      const { spokeGoal } = await inquirer.prompt([
-        {
-          type: "input",
-          name: "spokeGoal",
-          message: `What is the specific goal of this article?`,
-          default: selectedHeader
-            ? `Deep dive into ${selectedHeader}`
-            : `Expand on ${hubGoal}`,
-        },
-      ]);
+      // 1. Architect Planning
+      const architect = new ArchitectAgent(config.apiKey!, {
+        topic: topic,
+        language: hubMeta.language,
+        audience: hubMeta.audience,
+        goal: hubMeta.goal,
+      });
 
       console.log(
-        chalk.yellow(`\n🧠 Drafting structure for "${slug}" in ${language}...`),
+        chalk.cyan("🧠 Architect is designing the Spoke structure..."),
       );
 
-      const title = slug
-        .replace(/-/g, " ")
-        .replace(/\b\w/g, (c: string) => c.toUpperCase());
-      const context = selectedHeader
-        ? `Parent Section Content: "${parsedHub.sections[selectedHeader] || ""}"`
-        : "";
-
-      // 5. Generate Structure
-      const structure = await generateSpokeStructure(
-        title,
-        hubGoal,
-        `${spokeGoal}. ${context}`,
-        language,
+      const { brief, message } = await architect.chatWithUser(
+        `Finalize a Spoke brief for "${topic}". Use the same Persona (${hubMeta.personaId}) and a suitable Assembler.`,
       );
 
-      console.log(chalk.cyan("\nProposed Structure:"));
-      structure.forEach((s) =>
-        console.log(`  - ${chalk.bold(s.header)}: ${chalk.gray(s.intent)}`),
-      );
-
-      const { confirm } = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "confirm",
-          message: "Create this file?",
-          default: true,
-        },
-      ]);
-      if (!confirm) return;
-
-      // 6. Create Spoke File
-      console.log(chalk.white("   Writing skeleton..."));
-      const intro = await generateContent(
-        hubGoal,
-        title,
-        `Write a compelling intro for a spoke article about: ${spokeGoal}.`,
-        language,
-      );
-
-      const spokeContent = [
-        "---",
-        `title: "${title}"`,
-        'type: "spoke"',
-        `hubId: "${metadata.hubId}"`,
-        // We use the slug as the component ID for linking context
-        selectedHeader ? `componentId: "${slug}"` : "",
-        `date: "${new Date().toISOString().split("T")[0]}"`,
-        "---",
-        "",
-        `# ${title}`,
-        "",
-        `> ⬅️ [${metadata.title}](../hub.md)`,
-        "",
-        intro,
-        "",
-        // The Blockquote TODO Pattern
-        ...structure.map(
-          (s) =>
-            `## ${s.header}\n\n> **TODO:** ${s.intent}\n\n*Pending generation...*\n`,
-        ),
-      ]
-        .filter((l) => l !== "")
-        .join("\n");
-
-      const spokePath = path.join(rootDir, "spokes", `${slug}.md`);
-      await safeWriteFile(spokePath, spokeContent);
-      console.log(chalk.green(`\n✅ Created: ./spokes/${slug}.md`));
-
-      // 7. Link Back to Hub
-      if (selectedHeader) {
-        let sectionContent = parsedHub.sections[selectedHeader] || "";
-
-        // Check if link already exists to avoid duplication
-        if (!sectionContent.includes(slug)) {
-          sectionContent += `\n\n👉 [${title}](./spokes/${slug}.md)`;
-          parsedHub.sections[selectedHeader] = sectionContent;
-
-          // Reconstruct Hub
-          const newHubContent = [
-            "---",
-            Object.entries(parsedHub.frontmatter)
-              .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
-              .join("\n"),
-            "---",
-            "",
-            reconstructMarkdown(
-              parsedHub.sections,
-              Object.keys(parsedHub.sections),
-            ),
-          ].join("\n");
-
-          await safeWriteFile(path.join(rootDir, "hub.md"), newHubContent);
-          console.log(
-            chalk.green(
-              `   Linked: Added reference to hub.md under "${selectedHeader}"`,
-            ),
-          );
-        } else {
-          console.log(
-            chalk.yellow(`   Skipped Link: Reference already exists.`),
-          );
-        }
+      if (!brief) {
+        console.log(chalk.yellow(`\nArchitect needs more info: ${message}`));
+        return; // In a real scenario, you'd wrap this in a loop like 'new'
       }
 
-      // 8. Auto-Fill Prompt
-      const { doFill } = await inquirer.prompt([
+      // 2. Assemble Structure
+      const assembler =
+        ASSEMBLER_REGISTRY[brief.assemblerId] || ASSEMBLER_REGISTRY["tutorial"];
+      const blueprint = await assembler.generateSkeleton(brief);
+
+      const writerMap: Record<string, string> = {};
+      blueprint.components.forEach((c) => {
+        writerMap[c.header] = c.writerId;
+      });
+
+      // 3. Construct Spoke Content
+      const fileName = `${blueprint.hubId}.md`;
+      const fileContent = [
+        "---",
+        `title: ${JSON.stringify(topic)}`,
+        'type: "spoke"',
+        `hubId: ${JSON.stringify(hubMeta.hubId)}`,
+        `componentId: ${JSON.stringify(blueprint.hubId)}`,
+        `goal: ${JSON.stringify(brief.goal)}`,
+        `audience: ${JSON.stringify(hubMeta.audience)}`,
+        `language: ${JSON.stringify(hubMeta.language)}`,
+        `date: ${JSON.stringify(new Date().toISOString().split("T")[0])}`,
+        `personaId: ${JSON.stringify(hubMeta.personaId)}`,
+        `writerMap: ${JSON.stringify(writerMap)}`,
+        "---",
+        "",
+        `# ${topic}`,
+        "",
+        ...blueprint.components.map(
+          (c) =>
+            `## ${c.header}\n\n> **TODO:** ${c.intent}\n\n*Pending generation...*\n`,
+        ),
+      ].join("\n");
+
+      const filePath = path.join(rootDir, fileName);
+      await safeWriteFile(filePath, fileContent);
+
+      console.log(chalk.bold.green(`\n✅ Spoke created: ${fileName}`));
+
+      // 4. Optional Auto-Fill
+      const { shouldFill } = await inquirer.prompt([
         {
           type: "confirm",
-          name: "doFill",
-          message: "Do you want to generate the content now?",
+          name: "shouldFill",
+          message: "Would you like to generate the content for this Spoke now?",
           default: true,
         },
       ]);
 
-      if (doFill) {
-        await runFillLogic(spokePath, hubGoal, language);
+      if (shouldFill) {
+        await FillService.execute(filePath, true);
+        console.log(chalk.bold.cyan("\n🚀 Spoke populated successfully!"));
       }
     } catch (error) {
       console.error(
-        chalk.red("Spawn failed:"),
+        chalk.red("\n❌ Spawn Error:"),
         error instanceof Error ? error.message : String(error),
       );
     }

@@ -75,16 +75,24 @@ function splitSections(markdownBody: string): Record<string, string> {
 }
 
 /**
- * Helper to reconstruct markdown from sections (for writing back to file).
+ * Reconstructs the markdown file.
+ * @param frontmatter - The metadata object (ContentFrontmatter)
+ * @param sections - The map of header -> content body
  */
 export function reconstructMarkdown(
+  frontmatter: Record<string, any>,
   sections: Record<string, string>,
-  order: string[],
 ): string {
-  return order
-    .map((header) => {
-      const content = sections[header] || "";
-      return `## ${header}\n\n${content}\n`;
-    })
-    .join("\n");
+  // 1. Build YAML Frontmatter
+  const yamlLines = Object.entries(frontmatter).map(([k, v]) => {
+    const value = typeof v === "object" ? JSON.stringify(v) : JSON.stringify(v);
+    return `${k}: ${value}`;
+  });
+
+  // 2. Build Markdown Body
+  const body = Object.entries(sections)
+    .map(([header, content]) => `## ${header}\n\n${content}`)
+    .join("\n\n");
+
+  return `---\n${yamlLines.join("\n")}\n---\n\n${body}`;
 }
