@@ -1,4 +1,5 @@
 // src/core/services/IoService.ts
+import { existsSync } from "fs";
 import fs from "fs/promises";
 import matter from "gray-matter";
 import path from "path";
@@ -6,7 +7,39 @@ import { ContentFrontmatter, FrontmatterSchema } from "../../types/index.js";
 
 export class IoService {
   /**
-   * Searches up the tree to find the Hub Root (hub.md).
+   * Searches up the tree to find the Workspace Root (.hub folder).
+   */
+  static async findWorkspaceRoot(startDir: string): Promise<string> {
+    let current = startDir;
+    while (current !== path.parse(current).root) {
+      const workspaceMarker = path.join(current, ".hub");
+      if (existsSync(workspaceMarker)) {
+        return current;
+      }
+      current = path.dirname(current);
+    }
+    throw new Error("Not a Hub workspace. Run 'hub init' first.");
+  }
+
+  /**
+   * Returns all Hub IDs (folder names) present in the workspace posts directory.
+   */
+  static async findAllHubsInWorkspace(
+    workspaceRoot: string,
+  ): Promise<string[]> {
+    const postsDir = path.join(workspaceRoot, "posts");
+    try {
+      const entries = await fs.readdir(postsDir, { withFileTypes: true });
+      return entries
+        .filter((dirent) => dirent.isDirectory())
+        .map((dirent) => dirent.name);
+    } catch (error) {
+      return [];
+    }
+  }
+
+  /**
+   * Searches up the tree to find a specific Hub Root (hub.md).
    */
   static async findHubRoot(startDir: string): Promise<string> {
     let current = startDir;
@@ -50,16 +83,85 @@ export class IoService {
   }
 
   static async createHubDirectory(hubId: string): Promise<string> {
-    const dirPath = path.join(process.cwd(), hubId);
+    const dirPath = path.join(process.cwd(), "posts", hubId);
     const spokesPath = path.join(dirPath, "spokes");
 
     await fs.mkdir(dirPath, { recursive: true });
     await fs.mkdir(spokesPath, { recursive: true });
 
+    await IoService.safeWriteFile(path.join(spokesPath, ".keep"), "");
+
     return dirPath;
   }
 
   static async safeWriteFile(filePath: string, content: string): Promise<void> {
+    const dir = path.dirname(filePath);
+    if (!existsSync(dir)) {
+      await fs.mkdir(dir, { recursive: true });
+    }
     await fs.writeFile(filePath, content, "utf-8");
+  }
+
+  /**
+   * Scaffolds a new workspace structure.
+   */
+  static async initWorkspace(
+    rootDir: string,
+    type: "starter" | "blank",
+  ): Promise<void> {
+    const dirs = [
+      ".hub",
+      "posts",
+      "agents/personas",
+      "agents/writers",
+      "agents/assemblers",
+    ];
+
+    for (const d of dirs) {
+      await fs.mkdir(path.join(rootDir, d), { recursive: true });
+    }
+
+    if (type === "starter") {
+      await this.seedStarterArtifacts(rootDir);
+    }
+  }
+
+  private static async seedStarterArtifacts(rootDir: string) {
+    const standardPersona = `---
+id: "standard"
+name: "Standard"
+description: "Neutral, professional, and highly clear."
+language: "English"
+tone: "Professional, Objective, Concise"
+accent: "Neutral / Standard."
+---
+You are a professional Technical Writer focused on clarity and formal documentation.`;
+
+    const tutorialAssembler = `---
+id: "tutorial"
+type: "assembler"
+description: "Step-by-step learning path."
+---
+Focus on a logical progression from prerequisites to a working final product. If the topic involves multiple stacks, create dedicated implementation sections for each.`;
+
+    const proseWriter = `---
+id: "prose"
+type: "writer"
+description: "General narrative writing strategy."
+---
+Focus on narrative flow, clarity, and transitions. Avoid code blocks unless absolutely necessary to illustrate a point. Ensure the tone remains consistent with the chosen Persona.`;
+
+    await this.safeWriteFile(
+      path.join(rootDir, "agents/personas/standard.md"),
+      standardPersona,
+    );
+    await this.safeWriteFile(
+      path.join(rootDir, "agents/assemblers/tutorial.md"),
+      tutorialAssembler,
+    );
+    await this.safeWriteFile(
+      path.join(rootDir, "agents/writers/prose.md"),
+      proseWriter,
+    );
   }
 }

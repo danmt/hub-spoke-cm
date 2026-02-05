@@ -1,6 +1,7 @@
 // src/cli/commands/fill.ts
 import chalk from "chalk";
 import { Command } from "commander";
+import inquirer from "inquirer";
 import path from "path";
 import { FillService } from "../../core/services/FillService.js";
 import { IoService } from "../../core/services/IoService.js";
@@ -26,8 +27,23 @@ export const fillCommand = new Command("fill")
         targetFile = path.resolve(currentDir, options.file);
       } else {
         // Otherwise, find the Hub root and target the main hub.md
-        const rootDir = await IoService.findHubRoot(currentDir);
-        targetFile = path.join(rootDir, "hub.md");
+        const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
+        const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
+
+        if (hubs.length === 0) {
+          throw new Error("No hubs found in the workspace posts/ directory.");
+        }
+
+        const { targetHub } = await inquirer.prompt([
+          {
+            type: "list",
+            name: "targetHub",
+            message: "Select a Hub to map:",
+            choices: hubs,
+          },
+        ]);
+
+        targetFile = path.join(workspaceRoot, "posts", targetHub, "hub.md");
       }
 
       console.log(

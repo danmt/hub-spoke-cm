@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import { checkCommand } from "./cli/commands/check.js";
 import { configCommand } from "./cli/commands/config.js";
 import { fillCommand } from "./cli/commands/fill.js";
+import { initCommand } from "./cli/commands/init.js";
 import { mapCommand } from "./cli/commands/map.js";
 import { newCommand } from "./cli/commands/new.js";
 import { spawnCommand } from "./cli/commands/spawn.js";
@@ -26,6 +27,7 @@ async function main() {
     .version("1.0.0");
 
   // Register Commands
+  program.addCommand(initCommand);
   program.addCommand(newCommand);
   program.addCommand(checkCommand);
   program.addCommand(fillCommand);

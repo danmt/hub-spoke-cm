@@ -10,9 +10,11 @@ import { IoService } from "../../core/services/IoService.js";
 import { getGlobalConfig } from "../../utils/config.js";
 
 export const newCommand = new Command("new")
-  .description("Create a new Hub with intelligent structural discovery")
+  .description("Create a new Hub inside the workspace /posts directory")
   .action(async () => {
+    const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
     const config = getGlobalConfig();
+    console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));
 
     const baseline = await inquirer.prompt([
       {
@@ -63,7 +65,6 @@ export const newCommand = new Command("new")
         if (response.isComplete && response.brief) {
           const brief = response.brief;
 
-          // --- Assembler Phase with Internal Retry ---
           console.log(
             chalk.cyan(
               `\n🏗️  Requesting structure from ${chalk.bold(brief.assemblerId)}...`,
@@ -72,7 +73,6 @@ export const newCommand = new Command("new")
           const assembler = ASSEMBLER_REGISTRY[brief.assemblerId];
           const blueprint = await assembler.generateSkeleton(brief);
 
-          // --- UX Restoration: Show the Blueprint Summary ---
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
           blueprint.components.forEach((c, i) => {
             const typeLabel = c.writerId === "code" ? "💻 CODE" : "📝 PROSE";
@@ -127,7 +127,9 @@ export const newCommand = new Command("new")
 
           const filePath = path.join(hubDir, "hub.md");
           await IoService.safeWriteFile(filePath, fileContent);
-          console.log(chalk.bold.green(`\n✅ Hub scaffolded at ${hubDir}`));
+          console.log(
+            chalk.bold.green(`\n✅ Hub scaffolded at posts/${blueprint.hubId}`),
+          );
 
           const { shouldFill } = await inquirer.prompt([
             {
@@ -140,6 +142,7 @@ export const newCommand = new Command("new")
 
           if (shouldFill) {
             await FillService.execute(filePath, true);
+            console.log(chalk.bold.cyan("\n🚀 Hub populated successfully!"));
           }
 
           isComplete = true;

@@ -16,7 +16,22 @@ export const spawnCommand = new Command("spawn")
   .action(async () => {
     try {
       const config = getGlobalConfig();
-      const rootDir = await IoService.findHubRoot(process.cwd());
+      const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
+      const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
+
+      if (hubs.length === 0)
+        throw new Error("No hubs found in posts/ directory.");
+
+      const { targetHub } = await inquirer.prompt([
+        {
+          type: "list",
+          name: "targetHub",
+          message: "Select the parent Hub:",
+          choices: hubs,
+        },
+      ]);
+
+      const rootDir = path.join(workspaceRoot, "posts", targetHub);
       const hubMeta = await IoService.readHubMetadata(rootDir);
       const hubRaw = await IoService.readHubFile(rootDir);
       const parsedHub = ParserService.parseMarkdown(hubRaw);
