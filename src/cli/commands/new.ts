@@ -14,7 +14,6 @@ export const newCommand = new Command("new")
   .action(async () => {
     const config = getGlobalConfig();
 
-    // 1. Initial Baseline Discovery
     const baseline = await inquirer.prompt([
       {
         type: "input",
@@ -50,104 +49,129 @@ export const newCommand = new Command("new")
       "Analyze the baseline and ask me follow-up questions if needed.";
     let isComplete = false;
 
-    // 2. Discovery Loop
     while (!isComplete) {
-      const response = await architect.chatWithUser(currentInput);
+      try {
+        const response = await architect.chatWithUser(currentInput);
 
-      if (response.gapFound) {
-        console.log(`\n${chalk.red("Architect [GAP]:")} ${response.message}`);
-        return;
-      }
+        if (response.gapFound) {
+          console.log(`\n${chalk.red("Architect [GAP]:")} ${response.message}`);
+          return;
+        }
 
-      console.log(`\n${chalk.green("Architect:")} ${response.message}`);
+        console.log(`\n${chalk.green("Architect:")} ${response.message}`);
 
-      if (response.isComplete && response.brief) {
-        const brief = response.brief;
+        if (response.isComplete && response.brief) {
+          const brief = response.brief;
 
-        // 3. Structural Intelligence Phase
-        console.log(
-          chalk.cyan(
-            `\n🏗️  Requesting structure from ${chalk.bold(brief.assemblerId)}...`,
-          ),
-        );
-        const assembler = ASSEMBLER_REGISTRY[brief.assemblerId];
-
-        // The Assembler now performs its own LLM call to generate a dynamic blueprint
-        const blueprint = await assembler.generateSkeleton(brief);
-        const hubDir = await IoService.createHubDirectory(blueprint.hubId);
-
-        // 4. Map Dynamic AI Headers to Writers
-        const writerMap: Record<string, string> = {};
-        blueprint.components.forEach((c) => {
-          writerMap[c.header] = c.writerId;
-        });
-
-        // 5. Construct Markdown with Metadata
-        const fileContent = [
-          "---",
-          `title: ${JSON.stringify(brief.topic)}`,
-          'type: "hub"',
-          `hubId: ${JSON.stringify(blueprint.hubId)}`,
-          `goal: ${JSON.stringify(brief.goal)}`,
-          `audience: ${JSON.stringify(brief.audience)}`,
-          `language: ${JSON.stringify(brief.language)}`,
-          `date: ${JSON.stringify(new Date().toISOString().split("T")[0])}`,
-          `assemblerId: ${JSON.stringify(brief.assemblerId)}`,
-          `personaId: ${JSON.stringify(brief.personaId)}`,
-          `writerMap: ${JSON.stringify(writerMap)}`, // Map AI headers to strategies
-          "---",
-          "",
-          `# ${brief.topic}`,
-          "",
-          ...blueprint.components.map(
-            (c) =>
-              `## ${c.header}\n\n> **TODO:** ${c.intent}\n\n*Pending generation...*\n`,
-          ),
-        ].join("\n");
-
-        const filePath = path.join(hubDir, "hub.md");
-        await IoService.safeWriteFile(filePath, fileContent);
-
-        console.log(chalk.bold.green(`\n✅ Hub scaffolded at ${hubDir}`));
-
-        // 6. Preview the AI-Generated Structure
-        console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
-        blueprint.components.forEach((c, i) => {
-          const typeLabel = c.writerId === "code" ? "💻 CODE" : "📝 PROSE";
+          // --- Assembler Phase with Internal Retry ---
           console.log(
-            chalk.white(`${i + 1}. [${typeLabel}] `) + chalk.bold(c.header),
+            chalk.cyan(
+              `\n🏗️  Requesting structure from ${chalk.bold(brief.assemblerId)}...`,
+            ),
           );
-          console.log(chalk.dim(`   Instruction: ${c.intent}\n`));
-        });
+          const assembler = ASSEMBLER_REGISTRY[brief.assemblerId];
+          const blueprint = await assembler.generateSkeleton(brief);
 
-        const { shouldFill } = await inquirer.prompt([
+          // --- UX Restoration: Show the Blueprint Summary ---
+          console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
+          blueprint.components.forEach((c, i) => {
+            const typeLabel = c.writerId === "code" ? "💻 CODE" : "📝 PROSE";
+            console.log(
+              chalk.white(`${i + 1}. [${typeLabel}] `) + chalk.bold(c.header),
+            );
+            console.log(chalk.dim(`   Instruction: ${c.intent}\n`));
+          });
+
+          const { confirmed } = await inquirer.prompt([
+            {
+              type: "confirm",
+              name: "confirmed",
+              message: "Does this structure look good?",
+              default: true,
+            },
+          ]);
+
+          if (!confirmed) {
+            currentInput =
+              "I don't like this structure. Can we try a different approach?";
+            continue;
+          }
+
+          const hubDir = await IoService.createHubDirectory(blueprint.hubId);
+          const writerMap: Record<string, string> = {};
+          blueprint.components.forEach((c) => {
+            writerMap[c.header] = c.writerId;
+          });
+
+          const fileContent = [
+            "---",
+            `title: ${JSON.stringify(brief.topic)}`,
+            'type: "hub"',
+            `hubId: ${JSON.stringify(blueprint.hubId)}`,
+            `goal: ${JSON.stringify(brief.goal)}`,
+            `audience: ${JSON.stringify(brief.audience)}`,
+            `language: ${JSON.stringify(brief.language)}`,
+            `date: ${JSON.stringify(new Date().toISOString().split("T")[0])}`,
+            `assemblerId: ${JSON.stringify(brief.assemblerId)}`,
+            `personaId: ${JSON.stringify(brief.personaId)}`,
+            `writerMap: ${JSON.stringify(writerMap)}`,
+            "---",
+            "",
+            `# ${brief.topic}`,
+            "",
+            ...blueprint.components.map(
+              (c) =>
+                `## ${c.header}\n\n> **TODO:** ${c.intent}\n\n*Pending generation...*\n`,
+            ),
+          ].join("\n");
+
+          const filePath = path.join(hubDir, "hub.md");
+          await IoService.safeWriteFile(filePath, fileContent);
+          console.log(chalk.bold.green(`\n✅ Hub scaffolded at ${hubDir}`));
+
+          const { shouldFill } = await inquirer.prompt([
+            {
+              type: "confirm",
+              name: "shouldFill",
+              message: "Generate content now?",
+              default: true,
+            },
+          ]);
+
+          if (shouldFill) {
+            await FillService.execute(filePath, true);
+          }
+
+          isComplete = true;
+        } else {
+          const { next } = await inquirer.prompt([
+            {
+              type: "input",
+              name: "next",
+              message: chalk.cyan("You:"),
+              validate: (val) => !!val || "Please provide a response.",
+            },
+          ]);
+          currentInput = next;
+        }
+      } catch (error) {
+        console.error(
+          chalk.red("\n❌ Error during Architecture/Assembly:"),
+          error instanceof Error ? error.message : String(error),
+        );
+        const { retry } = await inquirer.prompt([
           {
             type: "confirm",
-            name: "shouldFill",
-            message:
-              "This structure was generated dynamically. Generate content now?",
+            name: "retry",
+            message: "Would you like to retry the last operation?",
             default: true,
           },
         ]);
 
-        if (shouldFill) {
-          await FillService.execute(filePath, true);
-          console.log(chalk.bold.cyan("\n🚀 Hub populated successfully!"));
+        if (!retry) {
+          console.log(chalk.gray("Aborting."));
+          process.exit(1);
         }
-
-        isComplete = true;
-        break;
       }
-
-      // Continue the interview
-      const { next } = await inquirer.prompt([
-        {
-          type: "input",
-          name: "next",
-          message: chalk.cyan("You:"),
-          validate: (val) => !!val || "Please provide a response to continue.",
-        },
-      ]);
-      currentInput = next;
     }
   });

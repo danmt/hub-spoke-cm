@@ -50,42 +50,60 @@ export class FillService {
       chalk.blue(`\n🖋️  Filling with Persona: ${chalk.bold(personaId)}`),
     );
 
-    for (const header of headersToFill) {
-      const body = updatedSections[header];
-      const intent = body.match(TODO_REGEX)?.[1]?.trim() || "Expand details.";
+    let currentQueue = [...headersToFill];
 
-      // Resolve Writer (Strategy)
-      const writerId = (writerMap as any)[header] || "prose";
-      const writer = WRITER_REGISTRY[writerId] || WRITER_REGISTRY["prose"];
+    while (currentQueue.length > 0) {
+      const failedThisPass: string[] = [];
 
-      process.stdout.write(
-        chalk.gray(`   Generating [${writerId}] "${header}"... `),
-      );
+      for (const header of currentQueue) {
+        const body = updatedSections[header];
+        const intent = body.match(TODO_REGEX)?.[1]?.trim() || "Expand details.";
 
-      try {
-        const generated = await writer.write({
-          header,
-          intent,
-          topic: title,
-          goal,
-          audience,
-          language,
-          personaId,
-        });
+        const writerId = (writerMap as any)[header] || "prose";
+        const writer = WRITER_REGISTRY[writerId] || WRITER_REGISTRY["prose"];
 
-        updatedSections[header] = generated;
-        process.stdout.write(chalk.green("Done ✅\n"));
-      } catch (err) {
-        process.stdout.write(chalk.red("Failed ❌\n"));
-        console.error(
-          chalk.dim(
-            `      Error: ${err instanceof Error ? err.message : String(err)}`,
-          ),
+        process.stdout.write(
+          chalk.gray(`   Generating [${writerId}] "${header}"... `),
         );
+
+        try {
+          const generated = await writer.write({
+            header,
+            intent,
+            topic: title,
+            goal,
+            audience,
+            language,
+            personaId,
+          });
+
+          updatedSections[header] = generated;
+          process.stdout.write(chalk.green("Done ✅\n"));
+        } catch (err) {
+          process.stdout.write(chalk.red("Failed ❌\n"));
+          failedThisPass.push(header);
+        }
+      }
+
+      if (failedThisPass.length > 0) {
+        console.log(
+          chalk.yellow(`\n⚠️  Finished with ${failedThisPass.length} errors.`),
+        );
+        const { retry } = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "retry",
+            message: "Would you like to retry the failed sections?",
+            default: true,
+          },
+        ]);
+
+        currentQueue = retry ? failedThisPass : [];
+      } else {
+        currentQueue = [];
       }
     }
 
-    // Crucial: Pass the full updatedSections record, not an array of keys
     const finalMarkdown = ParserService.reconstructMarkdown(
       parsed.frontmatter,
       updatedSections,
