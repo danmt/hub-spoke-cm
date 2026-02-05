@@ -1,65 +1,123 @@
 # 🏗️ Hub & Spoke CM
 
-The system is designed around a **"Distributed Plan"** philosophy. Instead of a centralized database, the tool treats Markdown files as stateful nodes. The architecture is divided into three primary layers: **Orchestration**, **Intelligence**, and **Persistence**.
+**Hub & Spoke CM** is an AI-powered CLI tool designed to automate the creation of high-quality technical content clusters using the **Hub and Spoke** strategy. Instead of treating content as isolated files, this system views them as a "Distributed Plan"—a network of interconnected nodes where a central "Hub" (the deep-dive authority) orchestrates several "Spokes" (satellite articles) to maximize SEO, educational depth, and topical authority.
 
-## 1. The Core Execution Flow
-
-Every content cluster follows a strict lifecycle managed by different components of the system:
-
-1. **Discovery (The Interview):** The `new` command initializes the `ArchitectAgent`.
-2. **Scaffolding (The Blueprint):** The Architect selects a `Persona` and an `Assembler`. The `Assembler` generates a `HubBlueprint`.
-3. **Persistence (The Write):** The system translates the blueprint into a physical directory and a `hub.md` file with metadata and `TODO` placeholders.
-4. **Expansion (Spoke Generation):** The `spawn` command creates satellite articles that inherit context from the Hub's frontmatter.
-5. **Generation (The Fill):** The `fill` command parses the files, identifies `TODO` blocks, and routes them to specialized `Writer` strategies.
-
-## 2. Component Interaction Map
-
-### A. The Intelligence Layer (Agents & Personas)
-
-- **`ArchitectAgent`:** Acts as the project manager. It holds the conversation history and uses a system instruction that includes a manifest of all available tools. It is responsible for outputting a structured `Brief` in JSON format.
-- **Personas:** Located in `src/core/personas/`, these classes (e.g., `ArgentinianPersona`, `SarcasticSpanishPersona`) provide the unique system instructions for the LLM. They ensure that even if different models are used for planning and writing, the "voice" remains consistent across the cluster.
-
-### B. The Structural Layer (Assemblers)
-
-Found in `src/core/assemblers/`, Assemblers are the architects of the document structure.
-
-- **`generateSkeleton(brief)`:** This core method takes the user's goals and returns a `HubBlueprint`, which includes an array of `HubComponent` objects.
-- **Logic Routing:** Each component in the blueprint is assigned a `writerId` (e.g., `code` or `prose`), which pre-determines how that section will be generated later.
-
-### C. The Writing Layer (Strategies)
-
-The system uses the **Strategy Pattern** for content generation in `src/core/writers/`.
-
-- **`ProseWriter`:** Optimized for natural language, flow, and educational tone.
-- **`CodeWriter`:** Optimized for technical accuracy, providing implementation blocks with comments in the target language.
-- **Execution:** The `FillService` identifies which writer to use by looking up the `writerMap` stored in the file's YAML frontmatter.
-
-## 3. The "FileSystem as Database" Logic
-
-State management is handled through a combination of **Frontmatter** and **Sectional Parsing**:
-
-- **Frontmatter Schema (`schemas.ts`):** We use **Zod** to strictly enforce the metadata structure. This includes the `hubId` (the link between nodes), `personaId` (the voice), and `writerMap` (the generation strategy).
-- **The Parser (`parser.ts`):** This component is critical for "Vibe Coding." It uses a regex-based approach to split a single Markdown file into a `Record<string, string>` where the keys are H2 headers and the values are the body content. This allows the tool to update only the sections marked with `TODO` while leaving human-edited sections untouched.
-- **Recursive Root Discovery:** The `findHubRoot` utility allows the CLI to work from any subdirectory by searching upwards for a `hub.md` file, ensuring spokes always find their parent context.
-
-## 4. Sequence Diagram: Creating a Hub
-
-1. **User** runs `hub new`.
-2. **`newCommand`** prompts for basics and instantiates `ArchitectAgent`.
-3. **`ArchitectAgent`** interviews the user until a `[FINALIZE]` tag is issued.
-4. **`Assembler`** creates the `HubBlueprint` based on the finalized `Brief`.
-5. **`IO Utility`** creates the directory and writes the initial `hub.md`.
-6. **User** runs `hub fill`.
-7. **`FillService`** reads `hub.md`, parses sections, and calls the appropriate **Writer** for each `TODO`.
-8. **`reconstructMarkdown`** merges the new AI content with existing frontmatter and saves it back to the disk.
+Built with **TypeScript** and powered by **Google Gemini**, the tool treats the local filesystem as a stateful database, using Markdown files as the primary interface for "Vibe Coding".
 
 ---
 
-## 🔧 Configuration & Models
+## 🏛️ System Architecture
 
-The tool allows split-model usage to balance cost and intelligence:
+The tool is divided into three distinct layers that decouple project planning from content generation:
 
-- **Architect Model:** Defaulting to `gemini-3-flash-preview` (or configured via `set-model-architect`), used for complex reasoning and planning.
-- **Writer Model:** Used for prose generation, allowing for faster, cheaper models like `gemini-1.5-flash`.
+### 1. The Intelligence Layer (Agents & Personas)
 
-This decoupled architecture ensures that as AI models or technical writing requirements evolve, we only need to add new `Assemblers`, `Personas`, or `Writers` without re-engineering the core CLI.
+- **`ArchitectAgent`**: Acts as the project manager. It conducts an interactive "interview" with the user, validates requirements against available tools, and outputs a structured `Brief`.
+- **Personas**: Located in `src/core/personas/`, these define the "voice" of the content (e.g., `ArgentinianPersona`, `SarcasticSpanishPersona`). They ensure consistency across the entire cluster.
+
+### 2. The Structural Layer (Assemblers)
+
+- **Assemblers**: Found in `src/core/assemblers/`, these are the "blueprints" of document organization.
+- **`TutorialAssembler`**: Focuses on logical, step-by-step progression.
+- **`DeepDiveAssembler`**: Focuses on senior-level technical scrutiny, internals, and trade-offs.
+
+### 3. The Writing Layer (Specialized Strategies)
+
+Using the **Strategy Pattern**, the system routes specific content sections to specialized AI writers:
+
+- **`ProseWriter`**: Optimized for narrative flow, transitions, and clarity.
+- **`CodeWriter`**: Optimized for technical accuracy, providing clean, production-ready code blocks.
+
+---
+
+## 🛠️ CLI Commands
+
+### `hub new`
+
+Initializes a new content Hub.
+
+1. **Discovery**: Triggers an interactive interview to define topic, goal, audience, and language.
+2. **Scaffolding**: The `Architect` selects a `Persona` and `Assembler`.
+3. **Blueprinting**: Generates a `hub.md` file with YAML frontmatter and `TODO` placeholders for each section.
+
+### `hub spawn`
+
+Creates a satellite "Spoke" article.
+
+- It inherits the `personaId`, `audience`, and `language` from the parent Hub.
+- It creates a new file in the `/spokes` directory, linked back to the Hub via the `hubId`.
+
+### `hub fill`
+
+The primary generation engine.
+
+- **Parsing**: Scans Markdown files for `> **TODO:**` blocks.
+- **Routing**: Consults the `writerMap` in the frontmatter to determine whether to use the `CodeWriter` or `ProseWriter` for each section.
+- **Merging**: Performs "Sectional Parsing" to update only the `TODO` blocks while preserving any human-edited text.
+
+### `hub check`
+
+Audits the project for consistency.
+
+- Validates "Persona Drift" (ensuring all spokes match the hub's persona).
+- Validates "Language Mismatch".
+- Identifies empty sections or pending `TODO` blocks.
+
+### `hub map`
+
+Visualizes the relationship between the Hub and its Spokes.
+
+- Scans the `/spokes` directory and maps files back to specific sections in the `hub.md` based on internal links and metadata.
+
+### `hub config`
+
+Manages global settings.
+
+- `set-key`: Sets the Gemini API Key.
+- `set-model-architect`: Configures the model for planning (default: `gemini-3-flash-preview`).
+- `set-model-writer`: Configures the model for prose generation (default: `gemini-3-flash-preview`).
+
+---
+
+## 📂 FileSystem as a Database
+
+The system relies on strict metadata schemas to manage state without a central database:
+
+- **Frontmatter (`schemas.ts`)**: Every file contains Zod-validated metadata, including the `hubId`, `personaId`, and `writerMap`.
+- **Recursive Discovery**: The CLI uses `findHubRoot` to allow users to run commands from any subdirectory; the tool will search upwards until it finds the `hub.md` file.
+- **Sectional Parsing**: Using regex-based splitting, the tool treats H2 headers as keys in a `Record<string, string>`, allowing granular updates to specific document parts.
+
+---
+
+## 🚀 Getting Started
+
+### Installation
+
+```bash
+npm install
+npm run build
+
+```
+
+### Setup
+
+1. Set your API key:
+
+```bash
+hub config set-key YOUR_GEMINI_API_KEY
+
+```
+
+2. Start a new project:
+
+```bash
+hub new
+
+```
+
+3. Generate content:
+
+```bash
+hub fill
+
+```
