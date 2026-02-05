@@ -2,6 +2,7 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import fs from "fs/promises";
+import inquirer from "inquirer";
 import path from "path";
 import { IoService } from "../../core/services/IoService.js";
 import { ParserService } from "../../core/services/ParserService.js";
@@ -10,7 +11,21 @@ export const checkCommand = new Command("check")
   .description("Validate project consistency and check for pending TODOs")
   .action(async () => {
     try {
-      const rootDir = await IoService.findHubRoot(process.cwd());
+      const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
+      const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
+
+      if (hubs.length === 0) throw new Error("No hubs found in workspace.");
+
+      const { targetHub } = await inquirer.prompt([
+        {
+          type: "list",
+          name: "targetHub",
+          message: "Select a Hub to audit:",
+          choices: hubs,
+        },
+      ]);
+
+      const rootDir = path.join(workspaceRoot, "posts", targetHub);
       const hubMeta = await IoService.readHubMetadata(rootDir);
       const files = await fs.readdir(rootDir);
       const markdownFiles = files.filter((f) => f.endsWith(".md"));

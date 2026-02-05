@@ -1,29 +1,31 @@
 import { GoogleGenAI } from "@google/genai";
 import { HubBlueprint, HubBlueprintSchema } from "../../types/index.js";
-import { getGlobalConfig } from "../../utils/config.js";
-import { Brief } from "../agents/Architect.js";
+import { GlobalConfig } from "../../utils/config.js";
+import { Brief } from "./Architect.js";
 
-export interface Assembler {
+export interface IAssembler {
   id: string;
   description: string;
   strategyPrompt: string;
+  writerIds: string[];
   generateSkeleton(brief: Brief): Promise<HubBlueprint>;
 }
 
-export abstract class BaseAssembler implements Assembler {
-  abstract id: string;
-  abstract description: string;
-  abstract strategyPrompt: string;
-  protected client: GoogleGenAI;
-
-  constructor() {
-    const config = getGlobalConfig();
-    this.client = new GoogleGenAI({ apiKey: config.apiKey! });
-  }
+export class Assembler implements IAssembler {
+  constructor(
+    protected client: GoogleGenAI,
+    protected config: GlobalConfig,
+    public id: string,
+    public description: string,
+    public strategyPrompt: string,
+    public writerIds: string[],
+  ) {}
 
   async generateSkeleton(brief: Brief): Promise<HubBlueprint> {
-    const config = getGlobalConfig();
-    const model = config.architectModel || "gemini-2-flash";
+    const model = this.config.architectModel || "gemini-2-flash";
+
+    const writerConstraint =
+      this.writerIds.length > 0 ? this.writerIds.join("|") : "prose";
 
     const result = await this.client.models.generateContent({
       model: model,
@@ -38,13 +40,16 @@ export abstract class BaseAssembler implements Assembler {
             TOPIC: ${brief.topic} | GOAL: ${brief.goal} | PERSONA: ${brief.personaId}
             
             TASK: Define sections with catchy, persona-aligned headers. 
-            If the topic is complex (e.g., a Fullstack tutorial), expand to include all necessary technical layers (DB, API, Frontend, etc.).
+            If the topic is complex, expand to include all necessary layers.
+
+            WRITER ASSIGNMENT:
+            For each section, assign a 'writerId' from this available list: [${writerConstraint}].
             
             OUTPUT ONLY RAW JSON matching this schema:
             {
               "hubId": "slugified-topic",
               "components": [
-                { "id": "unique-id", "header": "Contextual Title", "intent": "Writing instructions", "writerId": "prose|code" }
+                { "id": "unique-id", "header": "Contextual Title", "intent": "Writing instructions", "writerId": "${writerConstraint}" }
               ]
             }
           `.trim(),

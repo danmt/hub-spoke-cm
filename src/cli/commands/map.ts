@@ -2,6 +2,7 @@ import chalk from "chalk";
 import { Command } from "commander";
 import fs from "fs/promises";
 import matter from "gray-matter";
+import inquirer from "inquirer";
 import path from "path";
 import { IoService } from "../../core/services/IoService.js";
 import { ParserService } from "../../core/services/ParserService.js";
@@ -11,7 +12,21 @@ export const mapCommand = new Command("map")
   .action(async () => {
     try {
       // 1. Load Context
-      const rootDir = await IoService.findHubRoot(process.cwd());
+      const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
+      const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
+
+      if (hubs.length === 0) throw new Error("No hubs found in workspace.");
+
+      const { targetHub } = await inquirer.prompt([
+        {
+          type: "list",
+          name: "targetHub",
+          message: "Select a Hub to map:",
+          choices: hubs,
+        },
+      ]);
+
+      const rootDir = path.join(workspaceRoot, "posts", targetHub);
       const metadata = await IoService.readHubMetadata(rootDir);
       const rawHubContent = await IoService.readHubFile(rootDir);
       const parsedHub = ParserService.parseMarkdown(rawHubContent);

@@ -1,9 +1,12 @@
 // src/cli/commands/fill.ts
+import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import { Command } from "commander";
+import inquirer from "inquirer";
 import path from "path";
 import { FillService } from "../../core/services/FillService.js";
 import { IoService } from "../../core/services/IoService.js";
+import { getGlobalConfig } from "../../utils/config.js";
 
 /**
  * fillCommand
@@ -18,6 +21,8 @@ export const fillCommand = new Command("fill")
   )
   .action(async (options) => {
     try {
+      const config = getGlobalConfig();
+      const client = new GoogleGenAI({ apiKey: config.apiKey! });
       const currentDir = process.cwd();
       let targetFile: string;
 
@@ -26,8 +31,23 @@ export const fillCommand = new Command("fill")
         targetFile = path.resolve(currentDir, options.file);
       } else {
         // Otherwise, find the Hub root and target the main hub.md
-        const rootDir = await IoService.findHubRoot(currentDir);
-        targetFile = path.join(rootDir, "hub.md");
+        const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
+        const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
+
+        if (hubs.length === 0) {
+          throw new Error("No hubs found in the workspace posts/ directory.");
+        }
+
+        const { targetHub } = await inquirer.prompt([
+          {
+            type: "list",
+            name: "targetHub",
+            message: "Select a Hub to map:",
+            choices: hubs,
+          },
+        ]);
+
+        targetFile = path.join(workspaceRoot, "posts", targetHub, "hub.md");
       }
 
       console.log(
@@ -36,7 +56,7 @@ export const fillCommand = new Command("fill")
 
       // Execute the service. autoAccept is false here to allow
       // the user to pick sections via checkboxes.
-      await FillService.execute(targetFile, false);
+      await FillService.execute(config, client, targetFile, false);
 
       console.log(chalk.bold.green(`\n✨ Generation complete.`));
     } catch (error) {

@@ -5,22 +5,28 @@ export interface PersonaContext {
   language: string;
 }
 
-/**
- * Base abstract class for all Personas.
- * Centralizes prompt generation and structural influence.
- */
-export abstract class BasePersona {
-  abstract id: string;
-  abstract name: string;
-  abstract description: string;
-  abstract language: string;
-  abstract accent: string;
-  abstract tone: string;
-  abstract roleDescription: string;
+export interface IPersona {
+  id: string;
+  name: string;
+  description: string;
+  language: string;
+  accent: string;
+  tone: string;
+  roleDescription: string;
+  getInstructions(ctx: PersonaContext): string;
+}
 
-  /**
-   * Generates the system instructions for the Writer agents.
-   */
+export class Persona implements IPersona {
+  constructor(
+    public id: string,
+    public name: string,
+    public description: string,
+    public language: string,
+    public accent: string,
+    public tone: string,
+    public roleDescription: string,
+  ) {}
+
   getInstructions(ctx: PersonaContext): string {
     return `
       ROLE:

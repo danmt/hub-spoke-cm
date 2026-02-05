@@ -1,18 +1,21 @@
 // src/cli/commands/new.ts
+import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
 import { ArchitectAgent } from "../../core/agents/Architect.js";
-import { ASSEMBLER_REGISTRY } from "../../core/assemblers/index.js";
 import { FillService } from "../../core/services/FillService.js";
 import { IoService } from "../../core/services/IoService.js";
+import { RegistryService } from "../../core/services/RegistryService.js";
 import { getGlobalConfig } from "../../utils/config.js";
 
 export const newCommand = new Command("new")
-  .description("Create a new Hub with intelligent structural discovery")
+  .description("Create a new Hub inside the workspace /posts directory")
   .action(async () => {
+    const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
     const config = getGlobalConfig();
+    console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));
 
     const baseline = await inquirer.prompt([
       {
@@ -42,7 +45,16 @@ export const newCommand = new Command("new")
       },
     ]);
 
-    const architect = new ArchitectAgent(config.apiKey!, baseline);
+    const rawArtifacts = await RegistryService.getAllArtifacts();
+    const client = new GoogleGenAI({ apiKey: config.apiKey! });
+    const agents = RegistryService.initializeAgents(
+      config,
+      client,
+      rawArtifacts,
+    );
+    const manifest = RegistryService.toManifest(agents);
+
+    const architect = new ArchitectAgent(client, manifest, baseline);
     console.log(chalk.blue("\n🧠 Architect is analyzing project scope..."));
 
     let currentInput =
@@ -63,16 +75,30 @@ export const newCommand = new Command("new")
         if (response.isComplete && response.brief) {
           const brief = response.brief;
 
-          // --- Assembler Phase with Internal Retry ---
           console.log(
             chalk.cyan(
               `\n🏗️  Requesting structure from ${chalk.bold(brief.assemblerId)}...`,
             ),
           );
-          const assembler = ASSEMBLER_REGISTRY[brief.assemblerId];
-          const blueprint = await assembler.generateSkeleton(brief);
+          const assemblers = RegistryService.getAgentsByType(
+            agents,
+            "assembler",
+          );
+          const assembler = assemblers.find(
+            (a) => a.artifact.id === brief.assemblerId,
+          );
 
-          // --- UX Restoration: Show the Blueprint Summary ---
+          if (!assembler) {
+            // This error is caught by the catch block in the loop,
+            // which prompts the user to retry or abort
+            throw new Error(
+              `Assembler "${brief.assemblerId}" not found in workspace. ` +
+                `Available: ${assemblers.map((a) => a.artifact.id).join(", ")}`,
+            );
+          }
+
+          const blueprint = await assembler.agent.generateSkeleton(brief);
+
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
           blueprint.components.forEach((c, i) => {
             const typeLabel = c.writerId === "code" ? "💻 CODE" : "📝 PROSE";
@@ -127,7 +153,9 @@ export const newCommand = new Command("new")
 
           const filePath = path.join(hubDir, "hub.md");
           await IoService.safeWriteFile(filePath, fileContent);
-          console.log(chalk.bold.green(`\n✅ Hub scaffolded at ${hubDir}`));
+          console.log(
+            chalk.bold.green(`\n✅ Hub scaffolded at posts/${blueprint.hubId}`),
+          );
 
           const { shouldFill } = await inquirer.prompt([
             {
@@ -139,7 +167,8 @@ export const newCommand = new Command("new")
           ]);
 
           if (shouldFill) {
-            await FillService.execute(filePath, true);
+            await FillService.execute(config, client, filePath, true);
+            console.log(chalk.bold.cyan("\n🚀 Hub populated successfully!"));
           }
 
           isComplete = true;
