@@ -1,7 +1,5 @@
-// src/core/agents/Architect.ts
 import { GoogleGenAI } from "@google/genai";
 import { getGlobalConfig } from "../../utils/config.js";
-import { getAvailableToolsManifest } from "../registry.js";
 
 export interface Brief {
   topic: string;
@@ -13,14 +11,15 @@ export interface Brief {
 }
 
 export class ArchitectAgent {
-  private client: GoogleGenAI;
   private modelName: string;
   private systemInstruction: string;
   private history: any[] = [];
 
-  constructor(apiKey: string, initialContext: Partial<Brief>) {
-    this.client = new GoogleGenAI({ apiKey });
-    const manifest = getAvailableToolsManifest();
+  constructor(
+    private client: GoogleGenAI,
+    manifest: string,
+    initialContext: Partial<Brief>,
+  ) {
     this.modelName = getGlobalConfig().architectModel || "gemini-3-flash";
 
     this.systemInstruction = `

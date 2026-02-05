@@ -1,14 +1,15 @@
 // src/cli/commands/spawn.ts
+import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import { Command } from "commander";
 import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
 import { ArchitectAgent } from "../../core/agents/Architect.js";
-import { ASSEMBLER_REGISTRY } from "../../core/assemblers/index.js";
 import { FillService } from "../../core/services/FillService.js";
 import { IoService } from "../../core/services/IoService.js";
 import { ParserService } from "../../core/services/ParserService.js";
+import { RegistryService } from "../../core/services/RegistryService.js";
 import { getGlobalConfig } from "../../utils/config.js";
 
 export const spawnCommand = new Command("spawn")
@@ -17,6 +18,16 @@ export const spawnCommand = new Command("spawn")
     try {
       const config = getGlobalConfig();
       const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
+
+      const rawArtifacts = await RegistryService.getAllArtifacts();
+      const client = new GoogleGenAI({ apiKey: config.apiKey! });
+      const agents = RegistryService.initializeAgents(
+        config,
+        client,
+        rawArtifacts,
+      );
+      const manifest = RegistryService.toManifest(agents);
+
       const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
 
       if (hubs.length === 0)
@@ -49,7 +60,7 @@ export const spawnCommand = new Command("spawn")
         },
       ]);
 
-      const architect = new ArchitectAgent(config.apiKey!, {
+      const architect = new ArchitectAgent(client, manifest, {
         topic: targetSection,
         language: hubMeta.language,
         audience: hubMeta.audience,
@@ -69,12 +80,22 @@ export const spawnCommand = new Command("spawn")
 
           if (response.isComplete && response.brief) {
             const brief = response.brief;
-            const assembler =
-              ASSEMBLER_REGISTRY[brief.assemblerId] ||
-              ASSEMBLER_REGISTRY["tutorial"];
+            const assemblers = RegistryService.getAgentsByType(
+              agents,
+              "assembler",
+            );
+            const assembler = assemblers.find(
+              (a) => a.artifact.id === brief.assemblerId,
+            );
 
-            // Generate Skeleton inside the retry-able block
-            const blueprint = await assembler.generateSkeleton(brief);
+            if (!assembler) {
+              throw new Error(
+                `Assembler "${brief.assemblerId}" not found in /agents/assemblers. ` +
+                  `Available: ${assemblers.map((a) => a.artifact.id).join(", ")}`,
+              );
+            }
+
+            const blueprint = await assembler.agent.generateSkeleton(brief);
 
             // Spoke UX: Brief summary of the structure
             console.log(
@@ -129,7 +150,8 @@ export const spawnCommand = new Command("spawn")
               },
             ]);
 
-            if (shouldFill) await FillService.execute(filePath, true);
+            if (shouldFill)
+              await FillService.execute(config, client, filePath, true);
             isComplete = true;
           } else {
             const { next } = await inquirer.prompt([

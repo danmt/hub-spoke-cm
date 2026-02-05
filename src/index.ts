@@ -11,6 +11,7 @@ import { fillCommand } from "./cli/commands/fill.js";
 import { initCommand } from "./cli/commands/init.js";
 import { mapCommand } from "./cli/commands/map.js";
 import { newCommand } from "./cli/commands/new.js";
+import { registryCommand } from "./cli/commands/registry.js";
 import { spawnCommand } from "./cli/commands/spawn.js";
 
 // Load environment variables
@@ -28,6 +29,7 @@ async function main() {
 
   // Register Commands
   program.addCommand(initCommand);
+  program.addCommand(registryCommand);
   program.addCommand(newCommand);
   program.addCommand(checkCommand);
   program.addCommand(fillCommand);

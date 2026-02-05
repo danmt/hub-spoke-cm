@@ -1,29 +1,26 @@
 import { GoogleGenAI } from "@google/genai";
 import { HubBlueprint, HubBlueprintSchema } from "../../types/index.js";
-import { getGlobalConfig } from "../../utils/config.js";
-import { Brief } from "../agents/Architect.js";
+import { GlobalConfig } from "../../utils/config.js";
+import { Brief } from "./Architect.js";
 
-export interface Assembler {
+export interface IAssembler {
   id: string;
   description: string;
   strategyPrompt: string;
   generateSkeleton(brief: Brief): Promise<HubBlueprint>;
 }
 
-export abstract class BaseAssembler implements Assembler {
-  abstract id: string;
-  abstract description: string;
-  abstract strategyPrompt: string;
-  protected client: GoogleGenAI;
-
-  constructor() {
-    const config = getGlobalConfig();
-    this.client = new GoogleGenAI({ apiKey: config.apiKey! });
-  }
+export class Assembler implements IAssembler {
+  constructor(
+    protected client: GoogleGenAI,
+    protected config: GlobalConfig,
+    public id: string,
+    public description: string,
+    public strategyPrompt: string,
+  ) {}
 
   async generateSkeleton(brief: Brief): Promise<HubBlueprint> {
-    const config = getGlobalConfig();
-    const model = config.architectModel || "gemini-2-flash";
+    const model = this.config.architectModel || "gemini-2-flash";
 
     const result = await this.client.models.generateContent({
       model: model,
