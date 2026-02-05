@@ -3,10 +3,11 @@ import { Command } from "commander";
 import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
-import { generateBatchContent, generateContent } from "../../core/ai.js"; // Import new function
+import { generateContent } from "../../core/ai.js";
 import { findHubRoot, readHubMetadata, safeWriteFile } from "../../core/io.js";
 import { parseMarkdown, reconstructMarkdown } from "../../core/parser.js";
 
+// Regex to find Blockquote TODOs (e.g., "> **TODO:** Explain X" or "> TODO: Explain X")
 const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
 export async function runFillLogic(
@@ -17,7 +18,7 @@ export async function runFillLogic(
   const content = await fs.readFile(filePath, "utf-8");
   const parsed = parseMarkdown(content);
 
-  // 1. Identify Sections
+  // 1. Identify Sections with Blockquote TODOs
   const fillableSections = Object.entries(parsed.sections).filter(
     ([header, body]) => {
       return TODO_REGEX.test(body);
@@ -25,16 +26,18 @@ export async function runFillLogic(
   );
 
   if (fillableSections.length === 0) {
-    console.log(chalk.yellow('No sections with "> **TODO:** ..." found.'));
+    console.log(
+      chalk.yellow('No sections with "> **TODO:** ..." found in this file.'),
+    );
     return;
   }
 
-  // 2. Selection
+  // 2. Interactive Selection
   const { selectedHeaders } = await inquirer.prompt([
     {
       type: "checkbox",
       name: "selectedHeaders",
-      message: `Found ${fillableSections.length} pending sections. Fill which ones?`,
+      message: `Found ${fillableSections.length} pending sections. Which ones to fill?`,
       choices: fillableSections.map(([header]) => ({
         name: header,
         value: header,
@@ -45,83 +48,47 @@ export async function runFillLogic(
 
   if (selectedHeaders.length === 0) return;
 
+  console.log(
+    chalk.blue(
+      `\n🤖 Generating content for ${selectedHeaders.length} section(s) in ${language}...`,
+    ),
+  );
+  console.log(chalk.gray(`   Mode: Sequential (High Quality)\n`));
+
   const updatedSections = { ...parsed.sections };
   const sectionOrder = Object.keys(parsed.sections);
 
-  // --- NEW: Batching Strategy ---
-
-  if (selectedHeaders.length > 1) {
-    console.log(
-      chalk.blue(
-        `\n⚡ Batching ${selectedHeaders.length} sections into 1 API Request...`,
-      ),
-    );
-
-    // Prepare the payload
-    const batchPayload = selectedHeaders.map((header: string) => {
-      const currentBody = updatedSections[header];
-      const match = currentBody.match(TODO_REGEX);
-      return {
-        header,
-        intent: match ? match[1].trim() : "Expand on this topic.",
-      };
-    });
-
-    try {
-      process.stdout.write(chalk.white(`   > Generating all... `));
-
-      // ONE Call to Rule Them All
-      const batchResults = await generateBatchContent(
-        hubGoal,
-        batchPayload,
-        language,
-      );
-
-      // Map results back
-      Object.entries(batchResults).forEach(([header, content]) => {
-        if (updatedSections[header] !== undefined) {
-          updatedSections[header] = content;
-        }
-      });
-
-      process.stdout.write(chalk.green("Done ✅\n"));
-    } catch (err) {
-      console.error(
-        chalk.red(
-          `\n❌ Batch failed: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
-      console.log(
-        chalk.yellow(
-          "   Tip: Try selecting fewer sections if tokens exceeded.",
-        ),
-      );
-      return; // Don't save partial corruption
-    }
-  } else {
-    // SINGLE MODE (Legacy loop for 1 item)
-    // Keep this for granular errors if user only selects 1
-    const header = selectedHeaders[0];
+  // 3. Sequential Loop (1 Request = 1 Section)
+  for (const header of selectedHeaders) {
     const currentBody = updatedSections[header];
     const match = currentBody.match(TODO_REGEX);
+    // If regex matches, use captured group; otherwise fallback
     const intent = match ? match[1].trim() : "Expand on this topic.";
 
     process.stdout.write(chalk.white(`   > Writing "${header}"... `));
+
     try {
+      // Calls the Writer model (configured in ai.ts) for a single section
       const newContent = await generateContent(
         hubGoal,
         header,
         intent,
         language,
       );
+
       updatedSections[header] = newContent;
       process.stdout.write(chalk.green("Done ✅\n"));
     } catch (err) {
       process.stdout.write(chalk.red("Failed ❌\n"));
+      console.error(
+        chalk.red(
+          `     Error: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
     }
   }
 
-  // 3. Save
+  // 4. Save (Reconstruct file preserving frontmatter)
   const newFileContent = [
     "---",
     Object.entries(parsed.frontmatter)
@@ -136,13 +103,15 @@ export async function runFillLogic(
   console.log(chalk.green(`\n✨ Successfully updated file.`));
 }
 
-// ... rest of the file (fillCommand definition) remains the same ...
 export const fillCommand = new Command("fill")
   .description("Generate AI content for sections with TODO blockquotes")
   .option("-f, --file <path>", "Specific file to fill (defaults to hub.md)")
   .action(async (options) => {
     try {
+      // 1. Resolve Context
       const rootDir = await findHubRoot(process.cwd());
+
+      // We need the Hub Metadata to get the Goal and Language
       const metadata = await readHubMetadata(rootDir);
       const hubGoal = metadata.goal || metadata.title;
       const language = metadata.language || "English";

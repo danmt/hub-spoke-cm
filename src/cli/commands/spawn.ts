@@ -55,9 +55,9 @@ export const spawnCommand = new Command("spawn")
             name: "selection",
             message: "Link this spoke to which Hub section?",
             choices: [
-              { name: "None (Global/General)", value: undefined },
-              ...Object.keys(parsedHub.sections).map((h) => ({
-                name: h,
+              { name: "#1: None (Global/General)", value: undefined },
+              ...Object.keys(parsedHub.sections).map((h, i) => ({
+                name: `#${i + 2}: ${h}`,
                 value: h,
               })),
             ],

@@ -28,18 +28,18 @@ export function parseMarkdown(rawContent: string): ParsedFile {
 }
 
 /**
- * Splits markdown content by H2 (##) and H3 (###) headers.
+ * Splits markdown content by H2 (##) headers.
  * Uses a robust match-and-slice approach to avoid regex lookahead issues.
  */
 function splitSections(markdownBody: string): Record<string, string> {
   const sections: Record<string, string> = {};
 
   // Regex to find headers only.
-  // ^(#{2,3}) -> Starts with ## or ###
+  // ^(#{2}) -> Starts with ##
   // \s+       -> One or more spaces
   // (.*?)     -> Header text (Group 2)
   // \s*$      -> Optional trailing spaces, end of line
-  const headerRegex = /^(#{2,3})\s+(.*?)\s*$/gm;
+  const headerRegex = /^(#{2})\s+(.*?)\s*$/gm;
 
   let match;
   const matches: { key: string; index: number; end: number }[] = [];
