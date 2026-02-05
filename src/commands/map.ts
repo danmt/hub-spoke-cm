@@ -4,8 +4,8 @@ import fs from "fs/promises";
 import matter from "gray-matter";
 import inquirer from "inquirer";
 import path from "path";
-import { IoService } from "../../core/services/IoService.js";
-import { ParserService } from "../../core/services/ParserService.js";
+import { IoService } from "../services/IoService.js";
+import { ParserService } from "../services/ParserService.js";
 
 export const mapCommand = new Command("map")
   .description("Visualize the Hub & Spoke content structure")

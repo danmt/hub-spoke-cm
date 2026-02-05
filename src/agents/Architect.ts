@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { getGlobalConfig } from "../../utils/config.js";
+import { getGlobalConfig } from "../utils/config.js";
 
 export interface Brief {
   topic: string;

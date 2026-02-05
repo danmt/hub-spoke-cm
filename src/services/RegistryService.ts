@@ -4,10 +4,10 @@ import { existsSync } from "fs";
 import fs from "fs/promises";
 import matter from "gray-matter";
 import path from "path";
-import { GlobalConfig } from "../../utils/config.js";
 import { Assembler } from "../agents/Assembler.js";
 import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
+import { GlobalConfig } from "../utils/config.js";
 import { IoService } from "./IoService.js";
 
 export type ArtifactType = "persona" | "writer" | "assembler";

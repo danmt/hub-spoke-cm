@@ -1,6 +1,6 @@
 // src/core/services/ParserService.ts
 import matter from "gray-matter";
-import { ContentFrontmatter, FrontmatterSchema } from "../../types/index.js";
+import { ContentFrontmatter, FrontmatterSchema } from "../types/index.js";
 
 export interface ParsedFile {
   frontmatter: ContentFrontmatter;

@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
-import { HubBlueprint, HubBlueprintSchema } from "../../types/index.js";
-import { GlobalConfig } from "../../utils/config.js";
+import { HubBlueprint, HubBlueprintSchema } from "../types/index.js";
+import { GlobalConfig } from "../utils/config.js";
 import { Brief } from "./Architect.js";
 
 export interface IAssembler {

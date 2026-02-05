@@ -4,8 +4,8 @@ import { Command } from "commander";
 import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
-import { IoService } from "../../core/services/IoService.js";
-import { ParserService } from "../../core/services/ParserService.js";
+import { IoService } from "../services/IoService.js";
+import { ParserService } from "../services/ParserService.js";
 
 export const checkCommand = new Command("check")
   .description("Validate project consistency and check for pending TODOs")

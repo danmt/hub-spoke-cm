@@ -5,12 +5,12 @@ import { Command } from "commander";
 import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
-import { ArchitectAgent } from "../../core/agents/Architect.js";
-import { FillService } from "../../core/services/FillService.js";
-import { IoService } from "../../core/services/IoService.js";
-import { ParserService } from "../../core/services/ParserService.js";
-import { RegistryService } from "../../core/services/RegistryService.js";
-import { getGlobalConfig } from "../../utils/config.js";
+import { ArchitectAgent } from "../agents/Architect.js";
+import { FillService } from "../services/FillService.js";
+import { IoService } from "../services/IoService.js";
+import { ParserService } from "../services/ParserService.js";
+import { RegistryService } from "../services/RegistryService.js";
+import { getGlobalConfig } from "../utils/config.js";
 
 export const spawnCommand = new Command("spawn")
   .description("Create a new Spoke article by expanding a Hub section")

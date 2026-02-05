@@ -3,7 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import fs from "fs/promises";
 import inquirer from "inquirer";
-import { GlobalConfig } from "../../utils/config.js";
+import { GlobalConfig } from "../utils/config.js";
 import { IoService } from "./IoService.js";
 import { ParserService } from "./ParserService.js";
 import { RegistryService } from "./RegistryService.js";

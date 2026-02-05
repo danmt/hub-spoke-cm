@@ -4,11 +4,11 @@ import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
-import { ArchitectAgent } from "../../core/agents/Architect.js";
-import { FillService } from "../../core/services/FillService.js";
-import { IoService } from "../../core/services/IoService.js";
-import { RegistryService } from "../../core/services/RegistryService.js";
-import { getGlobalConfig } from "../../utils/config.js";
+import { ArchitectAgent } from "../agents/Architect.js";
+import { FillService } from "../services/FillService.js";
+import { IoService } from "../services/IoService.js";
+import { RegistryService } from "../services/RegistryService.js";
+import { getGlobalConfig } from "../utils/config.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")

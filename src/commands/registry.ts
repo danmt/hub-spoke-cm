@@ -1,7 +1,7 @@
 // src/cli/commands/registry.ts
 import chalk from "chalk";
 import { Command } from "commander";
-import { RegistryService } from "../../core/services/RegistryService.js";
+import { RegistryService } from "../services/RegistryService.js";
 
 /**
  * registryCommand

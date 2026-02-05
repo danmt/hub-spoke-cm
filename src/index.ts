@@ -5,14 +5,14 @@ import dotenv from "dotenv";
 
 // Import Commands
 // Explicit .js extension is required for NodeNext module resolution
-import { checkCommand } from "./cli/commands/check.js";
-import { configCommand } from "./cli/commands/config.js";
-import { fillCommand } from "./cli/commands/fill.js";
-import { initCommand } from "./cli/commands/init.js";
-import { mapCommand } from "./cli/commands/map.js";
-import { newCommand } from "./cli/commands/new.js";
-import { registryCommand } from "./cli/commands/registry.js";
-import { spawnCommand } from "./cli/commands/spawn.js";
+import { checkCommand } from "./commands/check.js";
+import { configCommand } from "./commands/config.js";
+import { fillCommand } from "./commands/fill.js";
+import { initCommand } from "./commands/init.js";
+import { mapCommand } from "./commands/map.js";
+import { newCommand } from "./commands/new.js";
+import { registryCommand } from "./commands/registry.js";
+import { spawnCommand } from "./commands/spawn.js";
 
 // Load environment variables
 dotenv.config();

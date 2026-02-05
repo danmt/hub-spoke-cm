@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { GlobalConfig } from "../../utils/config.js";
+import { GlobalConfig } from "../utils/config.js";
 import { Persona } from "./Persona.js";
 
 export interface WriterContext {

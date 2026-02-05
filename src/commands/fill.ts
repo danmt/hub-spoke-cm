@@ -4,9 +4,9 @@ import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
-import { FillService } from "../../core/services/FillService.js";
-import { IoService } from "../../core/services/IoService.js";
-import { getGlobalConfig } from "../../utils/config.js";
+import { FillService } from "../services/FillService.js";
+import { IoService } from "../services/IoService.js";
+import { getGlobalConfig } from "../utils/config.js";
 
 /**
  * fillCommand

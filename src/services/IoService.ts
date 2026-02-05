@@ -3,7 +3,7 @@ import { existsSync } from "fs";
 import fs from "fs/promises";
 import matter from "gray-matter";
 import path from "path";
-import { ContentFrontmatter, FrontmatterSchema } from "../../types/index.js";
+import { ContentFrontmatter, FrontmatterSchema } from "../types/index.js";
 
 export class IoService {
   /**

@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { Command } from "commander";
-import { IoService } from "../../core/services/IoService.js";
+import { IoService } from "../services/IoService.js";
 
 export const initCommand = new Command("init")
   .description("Initialize a new Hub & Spoke workspace")
