@@ -1,199 +1,65 @@
-# Hub & Spoke Content Manager 🧠✍️
+# 🏗️ Hub & Spoke CM
 
-> **Scale your technical content without losing your soul.**
-> A CLI for "Vibe Coding" complex content clusters using the Hub & Spoke strategy and Google Gemini.
+The system is designed around a **"Distributed Plan"** philosophy. Instead of a centralized database, the tool treats Markdown files as stateful nodes. The architecture is divided into three primary layers: **Orchestration**, **Intelligence**, and **Persistence**.
 
-## 🚀 What is this?
+## 1. The Core Execution Flow
 
-This is a **Node.js CLI tool** designed for technical writers, developer advocates, and content strategists. It helps you plan, generate, and manage large content clusters ("Hubs") and their satellite articles ("Spokes").
+Every content cluster follows a strict lifecycle managed by different components of the system:
 
-**The Philosophy: "Vibe Coding"**
-Unlike generic AI writers that vomit text into a black box, this tool respects your **filesystem as the database**.
+1. **Discovery (The Interview):** The `new` command initializes the `ArchitectAgent`.
+2. **Scaffolding (The Blueprint):** The Architect selects a `Persona` and an `Assembler`. The `Assembler` generates a `HubBlueprint`.
+3. **Persistence (The Write):** The system translates the blueprint into a physical directory and a `hub.md` file with metadata and `TODO` placeholders.
+4. **Expansion (Spoke Generation):** The `spawn` command creates satellite articles that inherit context from the Hub's frontmatter.
+5. **Generation (The Fill):** The `fill` command parses the files, identifies `TODO` blocks, and routes them to specialized `Writer` strategies.
 
-- **No Hidden State:** The "Plan" lives inside your Markdown files as `> **TODO:**` blockquotes.
-- **No Lock-in:** If you delete the tool, you still have valid, standard Markdown files.
-- **Human-in-the-Loop:** You act as the Architect; the AI acts as the Ghostwriter.
+## 2. Component Interaction Map
 
----
+### A. The Intelligence Layer (Agents & Personas)
 
-## 🛠️ Installation
+- **`ArchitectAgent`:** Acts as the project manager. It holds the conversation history and uses a system instruction that includes a manifest of all available tools. It is responsible for outputting a structured `Brief` in JSON format.
+- **Personas:** Located in `src/core/personas/`, these classes (e.g., `ArgentinianPersona`, `SarcasticSpanishPersona`) provide the unique system instructions for the LLM. They ensure that even if different models are used for planning and writing, the "voice" remains consistent across the cluster.
 
-### Prerequisites
+### B. The Structural Layer (Assemblers)
 
-- Node.js v18+
-- A Google Gemini API Key ([Get one here](https://aistudio.google.com/))
+Found in `src/core/assemblers/`, Assemblers are the architects of the document structure.
 
-### Setup
+- **`generateSkeleton(brief)`:** This core method takes the user's goals and returns a `HubBlueprint`, which includes an array of `HubComponent` objects.
+- **Logic Routing:** Each component in the blueprint is assigned a `writerId` (e.g., `code` or `prose`), which pre-determines how that section will be generated later.
 
-1. **Clone and Install:**
+### C. The Writing Layer (Strategies)
 
-```bash
-git clone https://github.com/your-username/hub-spoke-cm.git
-cd hub-spoke-cm
-npm install
-```
+The system uses the **Strategy Pattern** for content generation in `src/core/writers/`.
 
-2. **Build & Link:**
+- **`ProseWriter`:** Optimized for natural language, flow, and educational tone.
+- **`CodeWriter`:** Optimized for technical accuracy, providing implementation blocks with comments in the target language.
+- **Execution:** The `FillService` identifies which writer to use by looking up the `writerMap` stored in the file's YAML frontmatter.
 
-This compiles the TypeScript code and registers the `hub` command globally.
+## 3. The "FileSystem as Database" Logic
 
-```bash
-npm run build
-npm link
-```
+State management is handled through a combination of **Frontmatter** and **Sectional Parsing**:
 
-3. **Configure API Key:**
+- **Frontmatter Schema (`schemas.ts`):** We use **Zod** to strictly enforce the metadata structure. This includes the `hubId` (the link between nodes), `personaId` (the voice), and `writerMap` (the generation strategy).
+- **The Parser (`parser.ts`):** This component is critical for "Vibe Coding." It uses a regex-based approach to split a single Markdown file into a `Record<string, string>` where the keys are H2 headers and the values are the body content. This allows the tool to update only the sections marked with `TODO` while leaving human-edited sections untouched.
+- **Recursive Root Discovery:** The `findHubRoot` utility allows the CLI to work from any subdirectory by searching upwards for a `hub.md` file, ensuring spokes always find their parent context.
 
-Store your key securely in your OS user config (not in the repo).
+## 4. Sequence Diagram: Creating a Hub
 
-```bash
-hub config set-key AIzaSyB...YourKey
-```
-
-## ⚡ Workflow
-
-### 1. Initialize a Hub (`hub new`)
-
-Start by defining your project. The AI "Architect" model will propose a structure.
-
-```bash
-hub new "Advanced Rust Concurrency"
-```
-
-- **Prompts:** Asks for Goal, Audience, and **Language** (English, Spanish, etc.).
-- **Output:** Creates a folder with a `hub.md` containing the "Blueprint" as blockquote TODOs.
-
-### 2. The "Vibe Check" (`hub check`)
-
-See the status of your content at a glance.
-
-```bash
-cd advanced-rust-concurrency
-hub check
-```
-
-- **Pending (⏳):** Sections with `> **TODO:**` or placeholder text.
-- **Done (✅):** Sections with real content.
-- **Empty (⚠️):** Sections that look too short.
-
-### 3. Generate Content (`hub fill`)
-
-Turn those TODOs into prose. You can fill one section or **batch** multiple sections into a single API request to save quota.
-
-```bash
-# Fill specific sections (interactive selection)
-hub fill
-
-# Fill a specific file (if not hub.md)
-hub fill --file ./spokes/my-article.md
-```
-
-- **Batching:** If you select multiple sections, the CLI sends them all in one request, drastically reducing rate-limit errors.
-- **Context:** The AI reads your Hub's "Goal" and "Language" from the frontmatter to ensure consistency.
-
-### 4. Spawn Spokes (`hub spawn`)
-
-Need to deep-dive into a specific sub-topic? Spawn a satellite article.
-
-```bash
-hub spawn "async-vs-threads"
-```
-
-- **Architecting:** The CLI acts as a conversational partner to outline the new article before creating it.
-- **Linking:** Automatically adds a link in `hub.md` pointing to the new spoke, and a backlink in the spoke pointing to the Hub.
-
-### 5. Visualize (`hub map`)
-
-See the tree of your content cluster.
-
-```bash
-hub map
-```
-
-- **Green (●):** Completed content.
-- **Red (○):** Pending content.
-- **Structure:** Shows which Hub section links to which Spoke file.
-
-## 📂 Project Structure
-
-We use a **"Distributed Plan"** architecture. There is no central `anatomy.json`. The "Source of Truth" is the Markdown file itself.
-
-```text
-my-hub-topic/
-├── hub.md             # The Core Article + Metadata (Frontmatter)
-└── spokes/            # Satellite Articles
-    ├── deep-dive-1.md
-    └── deep-dive-2.md
-```
-
-**`hub.md` Example:**
-
-```markdown
----
-title: "Advanced Rust"
-type: "hub"
-hubId: "rust-concurrency"
-goal: "Master async/await"
-language: "English"
----
-
-## Setup
-
-> **TODO:** Explain how to install Tokio.
-
-_Pending generation..._
-```
+1. **User** runs `hub new`.
+2. **`newCommand`** prompts for basics and instantiates `ArchitectAgent`.
+3. **`ArchitectAgent`** interviews the user until a `[FINALIZE]` tag is issued.
+4. **`Assembler`** creates the `HubBlueprint` based on the finalized `Brief`.
+5. **`IO Utility`** creates the directory and writes the initial `hub.md`.
+6. **User** runs `hub fill`.
+7. **`FillService`** reads `hub.md`, parses sections, and calls the appropriate **Writer** for each `TODO`.
+8. **`reconstructMarkdown`** merges the new AI content with existing frontmatter and saves it back to the disk.
 
 ---
 
-## ⚙️ Advanced Configuration
+## 🔧 Configuration & Models
 
-You can configure which Gemini models to use for different tasks. This allows you to use a **"Smart"** model for planning and a **"Fast"** model for writing.
+The tool allows split-model usage to balance cost and intelligence:
 
-**View current config:**
+- **Architect Model:** Defaulting to `gemini-3-flash-preview` (or configured via `set-model-architect`), used for complex reasoning and planning.
+- **Writer Model:** Used for prose generation, allowing for faster, cheaper models like `gemini-1.5-flash`.
 
-```bash
-cat ~/.config/hub-spoke-cm/config.json
-```
-
-**Set Custom Models:**
-
-```bash
-# The "Architect" (Used for 'new' and 'spawn' structure planning)
-# Recommended: gemini-1.5-pro or gemini-2.0-flash-exp
-hub config set-model-architect gemini-1.5-pro-latest
-
-# The "Writer" (Used for 'fill' prose generation)
-# Recommended: gemini-1.5-flash (Fast & Cheap)
-hub config set-model-writer gemini-1.5-flash
-```
-
-## ❓ Troubleshooting
-
-**`zsh: permission denied: hub`**
-The build process might have reset file permissions. Run:
-
-```bash
-npm run build
-```
-
-**`Error: 429 Too Many Requests`**
-You are hitting the rate limit.
-
-1. Try selecting fewer sections when running `hub fill`.
-2. The tool automatically uses **Batching** when you select >1 section, which usually fixes this by doing 1 big request instead of 5 small ones.
-
-**"My content is in English but I wanted Spanish"**
-Check the `language` field in your file's frontmatter.
-
-```yaml
----
-language: "Spanish"
----
-```
-
-The AI strictly obeys this field.
-
-## 🛡️ License
-
-MIT © Dan
+This decoupled architecture ensures that as AI models or technical writing requirements evolve, we only need to add new `Assemblers`, `Personas`, or `Writers` without re-engineering the core CLI.
