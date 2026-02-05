@@ -33,6 +33,7 @@ export interface WriterArtifact extends BaseArtifact {
 
 export interface AssemblerArtifact extends BaseArtifact {
   type: "assembler";
+  writerIds: string[];
 }
 
 export type Artifact = PersonaArtifact | WriterArtifact | AssemblerArtifact;
@@ -95,6 +96,7 @@ export class RegistryService {
           } else {
             allArtifacts.push({
               ...base,
+              writerIds: data.writerIds,
               type: "assembler",
             } as AssemblerArtifact);
           }
@@ -149,6 +151,7 @@ export class RegistryService {
               artifact.id,
               artifact.description,
               artifact.content,
+              artifact.writerIds,
             ),
           };
       }

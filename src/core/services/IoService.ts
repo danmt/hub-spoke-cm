@@ -141,7 +141,11 @@ You are a professional Technical Writer focused on clarity and formal documentat
 id: "tutorial"
 type: "assembler"
 description: "Step-by-step learning path."
+writerIds:
+  - code
+  - prose
 ---
+
 Focus on a logical progression from prerequisites to a working final product. If the topic involves multiple stacks, create dedicated implementation sections for each.`;
 
     const proseWriter = `---
@@ -150,6 +154,14 @@ type: "writer"
 description: "General narrative writing strategy."
 ---
 Focus on narrative flow, clarity, and transitions. Avoid code blocks unless absolutely necessary to illustrate a point. Ensure the tone remains consistent with the chosen Persona.`;
+
+    const codeWriter = `---
+id: "code"
+type: "writer"
+description: "Technical writing strategy."
+---
+
+Prioritize technical implementation. Provide clean, production-ready code blocks. Ensure all code comments and explanations are in the target language. Ensure the tone remains consistent with the chosen Persona.`;
 
     await this.safeWriteFile(
       path.join(rootDir, "agents/personas/standard.md"),
@@ -162,6 +174,10 @@ Focus on narrative flow, clarity, and transitions. Avoid code blocks unless abso
     await this.safeWriteFile(
       path.join(rootDir, "agents/writers/prose.md"),
       proseWriter,
+    );
+    await this.safeWriteFile(
+      path.join(rootDir, "agents/writers/code.md"),
+      codeWriter,
     );
   }
 }
