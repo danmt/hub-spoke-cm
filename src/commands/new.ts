@@ -168,34 +168,71 @@ export const newCommand = new Command("new")
           ]);
           if (shouldFill) {
             await FillService.execute(config, client, filePath, true);
-            console.log(
-              chalk.bold.cyan(
-                "\n🚀 Hub populated. Starting multi-pass audit...",
-              ),
-            );
+            console.log(chalk.bold.cyan("\n🚀 Hub populated successfully!"));
 
-            const auditors = RegistryService.getAgentsByType(agents, "auditor");
-            if (auditors.length > 0) {
-              const { allIssues } = await ValidationService.runFullAudit(
-                config,
-                client,
-                filePath,
-                auditors[0].agent,
+            const { shouldAudit } = await inquirer.prompt([
+              {
+                type: "confirm",
+                name: "shouldAudit",
+                message: "Run a semantic audit on the new content?",
+                default: true,
+              },
+            ]);
+
+            if (shouldAudit) {
+              const auditors = RegistryService.getAgentsByType(
+                agents,
+                "auditor",
               );
+              if (auditors.length > 0) {
+                const { auditorId } = await inquirer.prompt([
+                  {
+                    type: "list",
+                    name: "auditorId",
+                    message: "Select Auditor Strategy:",
+                    choices: auditors.map((a) => ({
+                      name: `${a.artifact.id}: ${a.artifact.description}`,
+                      value: a.artifact.id,
+                    })),
+                  },
+                ]);
+                const selectedAuditor = auditors.find(
+                  (a) => a.artifact.id === auditorId,
+                )!;
 
-              if (allIssues.length === 0) {
                 console.log(
-                  chalk.bold.green("\n✨ Audit passed! No issues found."),
-                );
-              } else {
-                console.log(
-                  chalk.yellow(
-                    `\n⚠️  Auditor found ${allIssues.length} issues. Run 'hub audit' to fix.`,
+                  chalk.cyan(
+                    `\n🧠 Running Step 2: Semantic Analysis [${auditorId}]...`,
                   ),
                 );
+
+                const { allIssues } = await ValidationService.runFullAudit(
+                  config,
+                  client,
+                  filePath,
+                  selectedAuditor.agent,
+                );
+
+                if (allIssues.length === 0) {
+                  console.log(
+                    chalk.bold.green("\n✨ Audit passed! No issues found."),
+                  );
+                } else {
+                  console.log(
+                    chalk.yellow(
+                      `\n⚠️  Auditor found ${allIssues.length} issues. Run 'hub audit' to fix.`,
+                    ),
+                  );
+                  console.log(
+                    chalk.gray(
+                      "Run 'hub audit' manually to apply verified fixes.",
+                    ),
+                  );
+                }
               }
             }
           }
+
           isComplete = true;
         } else {
           const { next } = await inquirer.prompt([
@@ -209,8 +246,23 @@ export const newCommand = new Command("new")
           currentInput = next;
         }
       } catch (error) {
-        console.error(chalk.red("\n❌ Architecture Error:"), error);
-        process.exit(1);
+        console.error(
+          chalk.red("\n❌ Error during Architecture/Assembly:"),
+          error instanceof Error ? error.message : String(error),
+        );
+        const { retry } = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "retry",
+            message: "Would you like to retry the last operation?",
+            default: true,
+          },
+        ]);
+
+        if (!retry) {
+          console.log(chalk.gray("Aborting."));
+          process.exit(1);
+        }
       }
     }
   });
