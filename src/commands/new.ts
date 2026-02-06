@@ -124,8 +124,14 @@ export const newCommand = new Command("new")
           }
 
           const hubDir = await IoService.createHubDirectory(blueprint.hubId);
+          const blueprintData: Record<string, any> = {};
           const writerMap: Record<string, string> = {};
+
           blueprint.components.forEach((c) => {
+            blueprintData[c.header] = {
+              intent: c.intent,
+              writerId: c.writerId,
+            };
             writerMap[c.header] = c.writerId;
           });
 
@@ -140,6 +146,7 @@ export const newCommand = new Command("new")
             `date: ${JSON.stringify(new Date().toISOString().split("T")[0])}`,
             `assemblerId: ${JSON.stringify(brief.assemblerId)}`,
             `personaId: ${JSON.stringify(brief.personaId)}`,
+            `blueprint: ${JSON.stringify(blueprintData)}`,
             `writerMap: ${JSON.stringify(writerMap)}`,
             "---",
             "",

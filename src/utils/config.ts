@@ -13,8 +13,8 @@ export interface GlobalConfig {
 
 // Defaults requested
 const DEFAULTS: Partial<GlobalConfig> = {
-  architectModel: "gemini-3-flash-preview",
-  writerModel: "gemini-3-flash-preview",
+  architectModel: "gemini-3-flash",
+  writerModel: "gemini-3-flash",
 };
 
 function ensureConfigDir() {

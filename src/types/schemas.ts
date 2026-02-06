@@ -39,13 +39,25 @@ export const FrontmatterSchema = z.object({
   // Generation Metadata
   date: z.string(),
 
-  // --- NEW: Agentic Hierarchy Metadata ---
+  // Agentic Hierarchy Metadata ---
 
   // Tracks which Assembler class was used to generate the structure
   assemblerId: z.string().optional(),
 
   // Tracks which Persona class provides the 'voice' for this article
   personaId: z.string().default("standard"),
+
+  // Persists the structural plan to provide context for Auditors
+  // Maps Header -> { intent, writerId }
+  blueprint: z
+    .record(
+      z.string(),
+      z.object({
+        intent: z.string(),
+        writerId: z.string(),
+      }),
+    )
+    .optional(),
 
   // A lookup map of "Header Text" -> "WriterId"
   // This allows the 'fill' command to know which Writer strategy to use for each section

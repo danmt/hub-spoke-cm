@@ -5,16 +5,17 @@ import fs from "fs/promises";
 import matter from "gray-matter";
 import path from "path";
 import { Assembler } from "../agents/Assembler.js";
+import { Auditor } from "../agents/Auditor.js";
 import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
 import { GlobalConfig } from "../utils/config.js";
 import { IoService } from "./IoService.js";
 
-export type ArtifactType = "persona" | "writer" | "assembler";
+export type ArtifactType = "persona" | "writer" | "assembler" | "auditor";
 
 export interface BaseArtifact {
   id: string;
-  type: ArtifactType; // Discriminator
+  type: ArtifactType;
   description: string;
   content: string;
 }
@@ -36,12 +37,21 @@ export interface AssemblerArtifact extends BaseArtifact {
   writerIds: string[];
 }
 
-export type Artifact = PersonaArtifact | WriterArtifact | AssemblerArtifact;
+export interface AuditorArtifact extends BaseArtifact {
+  type: "auditor";
+}
+
+export type Artifact =
+  | PersonaArtifact
+  | WriterArtifact
+  | AssemblerArtifact
+  | AuditorArtifact;
 
 export type AgentPair =
   | { type: "persona"; artifact: PersonaArtifact; agent: Persona }
   | { type: "writer"; artifact: WriterArtifact; agent: Writer }
-  | { type: "assembler"; artifact: AssemblerArtifact; agent: Assembler };
+  | { type: "assembler"; artifact: AssemblerArtifact; agent: Assembler }
+  | { type: "auditor"; artifact: AuditorArtifact; agent: Auditor };
 
 export function isAgentType<T extends AgentPair["type"]>(
   pair: AgentPair,
@@ -59,6 +69,7 @@ export class RegistryService {
       personas: "persona",
       writers: "writer",
       assemblers: "assembler",
+      auditors: "auditor",
     };
 
     const allArtifacts: Artifact[] = [];
@@ -91,6 +102,8 @@ export class RegistryService {
               tone: data.tone || "Neutral",
               accent: data.accent || "Standard",
             } as PersonaArtifact);
+          } else if (type === "auditor") {
+            allArtifacts.push({ ...base, type: "auditor" } as AuditorArtifact);
           } else if (type === "writer") {
             allArtifacts.push({ ...base, type: "writer" } as WriterArtifact);
           } else {
@@ -154,6 +167,18 @@ export class RegistryService {
               artifact.writerIds,
             ),
           };
+        case "auditor":
+          return {
+            type: "auditor",
+            artifact: artifact as AuditorArtifact,
+            agent: new Auditor(
+              client,
+              config,
+              artifact.id,
+              artifact.description,
+              artifact.content,
+            ),
+          };
       }
     });
   }
@@ -186,6 +211,12 @@ export class RegistryService {
         })),
       assemblers: agents
         .filter((a) => a.type === "assembler")
+        .map((a) => ({
+          id: a.artifact.id,
+          description: a.artifact.description,
+        })),
+      auditors: agents
+        .filter((a) => a.type === "auditor")
         .map((a) => ({
           id: a.artifact.id,
           description: a.artifact.description,
