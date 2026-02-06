@@ -224,4 +224,23 @@ export class RegistryService {
     };
     return JSON.stringify(manifest, null, 2);
   }
+
+  static validateIntegrity(agents: AgentPair[]): void {
+    const writers = this.getAgentsByType(agents, "writer");
+    const assemblers = this.getAgentsByType(agents, "assembler");
+    const availableWriterIds = new Set(writers.map((w) => w.artifact.id));
+
+    for (const assembler of assemblers) {
+      const missing = assembler.artifact.writerIds.filter(
+        (id) => !availableWriterIds.has(id),
+      );
+
+      if (missing.length > 0) {
+        throw new Error(
+          `Registry Integrity Error: Assembler "${assembler.artifact.id}" requires missing writers: [${missing.join(", ")}]. ` +
+            `Available writers: [${Array.from(availableWriterIds).join(", ")}]`,
+        );
+      }
+    }
+  }
 }
