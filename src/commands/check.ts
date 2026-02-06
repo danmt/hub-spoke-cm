@@ -1,11 +1,8 @@
-// src/cli/commands/check.ts
 import chalk from "chalk";
 import { Command } from "commander";
-import fs from "fs/promises";
-import inquirer from "inquirer";
 import path from "path";
 import { IoService } from "../services/IoService.js";
-import { ParserService } from "../services/ParserService.js";
+import { ValidationService } from "../services/ValidationService.js";
 
 export const checkCommand = new Command("check")
   .description("Validate project consistency and check for pending TODOs")
@@ -14,92 +11,38 @@ export const checkCommand = new Command("check")
       const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
       const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
 
-      if (hubs.length === 0) throw new Error("No hubs found in workspace.");
+      for (const hubId of hubs) {
+        const rootDir = path.join(workspaceRoot, "posts", hubId);
+        const hubMeta = await IoService.readHubMetadata(rootDir);
+        const files = await IoService.getSpokeFiles(rootDir);
+        const allFiles = [
+          "hub.md",
+          ...files.map((f) => path.join("spokes", f)),
+        ];
 
-      const { targetHub } = await inquirer.prompt([
-        {
-          type: "list",
-          name: "targetHub",
-          message: "Select a Hub to audit:",
-          choices: hubs,
-        },
-      ]);
+        console.log(
+          chalk.bold(`\n🔍 Checking Hub: ${chalk.cyan(hubMeta.title)}`),
+        );
 
-      const rootDir = path.join(workspaceRoot, "posts", targetHub);
-      const hubMeta = await IoService.readHubMetadata(rootDir);
-      const files = await fs.readdir(rootDir);
-      const markdownFiles = files.filter((f) => f.endsWith(".md"));
-
-      console.log(
-        chalk.bold(`\n🔍 Auditing Hub: ${chalk.cyan(hubMeta.title)}`),
-      );
-      console.log(chalk.gray(`   Directory: ${rootDir}\n`));
-
-      let totalIssues = 0;
-
-      for (const file of markdownFiles) {
-        const filePath = path.join(rootDir, file);
-        const content = await fs.readFile(filePath, "utf-8");
-        const { frontmatter, sections } = ParserService.parseMarkdown(content);
-
-        const isHub = frontmatter.type === "hub";
-        const label = isHub ? chalk.magenta("[HUB]") : chalk.blue("[SPOKE]");
-        console.log(`${label} ${file}`);
-
-        // 1. Validate Persona Consistency
-        if (frontmatter.personaId !== hubMeta.personaId) {
-          console.log(
-            chalk.yellow(
-              `   ⚠️  Persona Drift: Found "${frontmatter.personaId}", expected "${hubMeta.personaId}"`,
-            ),
+        for (const file of allFiles) {
+          const filePath = path.join(rootDir, file);
+          const report = await ValidationService.checkIntegrity(
+            filePath,
+            hubMeta.personaId,
+            hubMeta.language,
           );
-          totalIssues++;
+
+          if (report.isValid) {
+            console.log(chalk.green(`   ✅ ${file}: Valid`));
+          } else {
+            console.log(chalk.red(`   ❌ ${file}: Issues found`));
+            report.issues.forEach((issue) =>
+              console.log(chalk.gray(`      - ${issue}`)),
+            );
+          }
         }
-
-        // 2. Validate Language Consistency
-        if (frontmatter.language !== hubMeta.language) {
-          console.log(
-            chalk.yellow(
-              `   ⚠️  Language Mismatch: Found "${frontmatter.language}", expected "${hubMeta.language}"`,
-            ),
-          );
-          totalIssues++;
-        }
-
-        // 3. Check for empty sections or pending TODOs
-        const pendingSections = Object.entries(sections).filter(
-          ([_, body]) => body.includes("TODO:") || body.trim().length < 50,
-        );
-
-        if (pendingSections.length > 0) {
-          pendingSections.forEach(([header]) => {
-            console.log(chalk.red(`   ❌ Pending Content: "${header}"`));
-          });
-          totalIssues += pendingSections.length;
-        } else {
-          console.log(chalk.green(`   ✅ Fully populated.`));
-        }
-        console.log("");
-      }
-
-      if (totalIssues === 0) {
-        console.log(
-          chalk.bold.green(
-            "✨ Audit passed! Your Hub is consistent and complete.",
-          ),
-        );
-      } else {
-        console.log(
-          chalk.bold.yellow(`Audit finished with ${totalIssues} issues found.`),
-        );
-        console.log(
-          chalk.gray("Run 'hub fill' to resolve pending content issues."),
-        );
       }
     } catch (error) {
-      console.error(
-        chalk.red("\n❌ Check Error:"),
-        error instanceof Error ? error.message : String(error),
-      );
+      console.error(chalk.red("\n❌ Check Error:"), error);
     }
   });

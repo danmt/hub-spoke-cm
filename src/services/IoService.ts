@@ -115,6 +115,7 @@ export class IoService {
       "agents/personas",
       "agents/writers",
       "agents/assemblers",
+      "agents/auditors",
     ];
 
     for (const d of dirs) {
@@ -142,7 +143,6 @@ id: "tutorial"
 type: "assembler"
 description: "Step-by-step learning path."
 writerIds:
-  - code
   - prose
 ---
 
@@ -155,13 +155,20 @@ description: "General narrative writing strategy."
 ---
 Focus on narrative flow, clarity, and transitions. Avoid code blocks unless absolutely necessary to illustrate a point. Ensure the tone remains consistent with the chosen Persona.`;
 
-    const codeWriter = `---
-id: "code"
-type: "writer"
-description: "Technical writing strategy."
+    const standardAuditor = `---
+id: "standard"
+type: "auditor"
+description: "General quality, flow, and duplication check."
 ---
+1. Check for logical flow between paragraphs.
+2. Identify any repetitive phrases or redundant information.
+3. Ensure the tone is consistent and not overly "robotic".
+4. Verify that the conclusion actually summarizes the points made.`;
 
-Prioritize technical implementation. Provide clean, production-ready code blocks. Ensure all code comments and explanations are in the target language. Ensure the tone remains consistent with the chosen Persona.`;
+    await this.safeWriteFile(
+      path.join(rootDir, "agents/auditors/standard.md"),
+      standardAuditor,
+    );
 
     await this.safeWriteFile(
       path.join(rootDir, "agents/personas/standard.md"),
@@ -176,8 +183,8 @@ Prioritize technical implementation. Provide clean, production-ready code blocks
       proseWriter,
     );
     await this.safeWriteFile(
-      path.join(rootDir, "agents/writers/code.md"),
-      codeWriter,
+      path.join(rootDir, "agents/auditors/standard.md"),
+      standardAuditor,
     );
   }
 }

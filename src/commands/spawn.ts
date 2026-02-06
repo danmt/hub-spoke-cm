@@ -96,6 +96,16 @@ export const spawnCommand = new Command("spawn")
             }
 
             const blueprint = await assembler.agent.generateSkeleton(brief);
+            const blueprintData: Record<string, any> = {};
+            const writerMap: Record<string, string> = {};
+
+            blueprint.components.forEach((c) => {
+              blueprintData[c.header] = {
+                intent: c.intent,
+                writerId: c.writerId,
+              };
+              writerMap[c.header] = c.writerId;
+            });
 
             // Spoke UX: Brief summary of the structure
             console.log(
@@ -103,11 +113,6 @@ export const spawnCommand = new Command("spawn")
                 `\n🏗️  Spoke Structure Generated (${blueprint.components.length} sections)`,
               ),
             );
-
-            const writerMap: Record<string, string> = {};
-            blueprint.components.forEach((c) => {
-              writerMap[c.header] = c.writerId;
-            });
 
             const fileName = `${blueprint.hubId}.md`;
             const spokesDir = path.join(rootDir, "spokes");
@@ -124,6 +129,7 @@ export const spawnCommand = new Command("spawn")
               `language: ${JSON.stringify(hubMeta.language)}`,
               `date: ${JSON.stringify(new Date().toISOString().split("T")[0])}`,
               `personaId: ${JSON.stringify(hubMeta.personaId)}`,
+              `blueprint: ${JSON.stringify(blueprintData)}`,
               `writerMap: ${JSON.stringify(writerMap)}`,
               "---",
               "",
