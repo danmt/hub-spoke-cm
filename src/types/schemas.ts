@@ -62,6 +62,9 @@ export const FrontmatterSchema = z.object({
   // A lookup map of "Header Text" -> "WriterId"
   // This allows the 'fill' command to know which Writer strategy to use for each section
   writerMap: z.record(z.string(), z.string()).optional(),
+
+  // Persists the bridge generated for each section to maintain flow state
+  bridges: z.record(z.string(), z.string()).default({}),
 });
 
 /**

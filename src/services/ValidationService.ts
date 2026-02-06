@@ -1,3 +1,4 @@
+// src/services/ValidationService.ts
 import { GoogleGenAI } from "@google/genai";
 import fs from "fs/promises";
 import { AuditIssue, Auditor, AuditResult } from "../agents/Auditor.js";
@@ -7,9 +8,6 @@ import { ParserService } from "./ParserService.js";
 import { RegistryService } from "./RegistryService.js";
 
 export class ValidationService {
-  /**
-   * Phase 1: Structural Integrity (Static Check)
-   */
   static async checkIntegrity(
     filePath: string,
     expectedPersonaId: string,
@@ -32,9 +30,6 @@ export class ValidationService {
     return { isValid: issues.length === 0, issues };
   }
 
-  /**
-   * Phase 2: Semantic Audit (AI Analysis)
-   */
   static async runAudit(
     config: GlobalConfig,
     client: GoogleGenAI,
@@ -53,9 +48,6 @@ export class ValidationService {
     return await auditor.analyze(rawContent, parsed.frontmatter, persona.agent);
   }
 
-  /**
-   * Phase 3: Verified Fix (Surgical Refactoring)
-   */
   static async verifyAndFix(
     config: GlobalConfig,
     client: GoogleGenAI,
@@ -67,6 +59,8 @@ export class ValidationService {
     const parsed = ParserService.parseMarkdown(rawContent);
     const artifacts = await RegistryService.getAllArtifacts();
     const agents = RegistryService.initializeAgents(config, client, artifacts);
+    const sectionHeaders = Object.keys(parsed.sections);
+    const sectionIndex = sectionHeaders.indexOf(issue.section);
 
     const writerId =
       (parsed.frontmatter.blueprint as any)?.[issue.section]?.writerId ||
@@ -80,8 +74,19 @@ export class ValidationService {
 
     if (!writer || !persona) throw new Error("Missing agents for fix.");
 
-    // Generate Candidate
-    const candidate = await writer.agent.write({
+    // Access persisted bridge context
+    const bridges = (parsed.frontmatter as any).bridges || {};
+    const prevHeader = sectionHeaders[sectionIndex - 1];
+    const precedingBridge = prevHeader ? bridges[prevHeader] : undefined;
+
+    const upcomingIntents = sectionHeaders
+      .slice(sectionIndex + 1)
+      .map(
+        (h) =>
+          `[${h}]: ${(parsed.frontmatter.blueprint as any)?.[h]?.intent || "Next topic"}`,
+      );
+
+    const response = await writer.agent.write({
       header: issue.section,
       intent: `FIX SUGGESTION: ${issue.suggestion}\nISSUE: ${issue.message}\nORIGINAL INTENT: ${(parsed.frontmatter.blueprint as any)?.[issue.section]?.intent}`,
       topic: parsed.frontmatter.title,
@@ -89,29 +94,35 @@ export class ValidationService {
       audience: parsed.frontmatter.audience || "",
       language: parsed.frontmatter.language,
       persona: persona.agent,
+      precedingBridge,
+      upcomingIntents,
+      isFirst: sectionIndex === 0,
+      isLast: sectionIndex === sectionHeaders.length - 1,
     });
 
-    // Verify Candidate
     const verification = await auditor.analyze(
-      `## ${issue.section}\n\n${candidate}`,
+      `## ${issue.section}\n\n${response.content}`,
       parsed.frontmatter,
       persona.agent,
     );
+
     if (
       verification.issues.find(
         (i) => i.section === issue.section && i.type === issue.type,
       )
     ) {
-      return {
-        success: false,
-        message: "Fix rejected: Issue persists in candidate.",
-      };
+      return { success: false, message: "Fix rejected: Issue persists." };
     }
 
-    // Surgical Merge
-    const updatedSections = { ...parsed.sections, [issue.section]: candidate };
+    // Merge content and update the bridge for subsequent sections
+    const updatedSections = {
+      ...parsed.sections,
+      [issue.section]: response.content,
+    };
+    const updatedBridges = { ...bridges, [issue.section]: response.bridge };
+
     const finalMarkdown = ParserService.reconstructMarkdown(
-      parsed.frontmatter,
+      { ...parsed.frontmatter, bridges: updatedBridges },
       updatedSections,
     );
     await IoService.safeWriteFile(filePath, finalMarkdown);

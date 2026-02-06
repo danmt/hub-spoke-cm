@@ -10,13 +10,22 @@ export interface WriterContext {
   audience: string;
   language: string;
   persona: Persona;
+  precedingBridge?: string;
+  upcomingIntents?: string[];
+  isFirst: boolean;
+  isLast: boolean;
+}
+
+export interface WriterResponse {
+  content: string;
+  bridge: string;
 }
 
 export interface IWriter {
   id: string;
   description: string;
   writingStrategy: string;
-  write(ctx: WriterContext): Promise<string>;
+  write(ctx: WriterContext): Promise<WriterResponse>;
 }
 
 export class Writer implements IWriter {
@@ -28,8 +37,16 @@ export class Writer implements IWriter {
     public writingStrategy: string,
   ) {}
 
-  async write(ctx: WriterContext): Promise<string> {
+  async write(ctx: WriterContext): Promise<WriterResponse> {
     const modelName = this.config.writerModel || "gemini-2.0-flash";
+
+    const contextPrompt = `
+      PROGRESS CONTEXT:
+      ${ctx.isFirst ? "- This is the START of the article." : ""}
+      ${ctx.isLast ? "- This is the CONCLUSION of the article." : ""}
+      ${ctx.precedingBridge ? `- PREVIOUSLY ESTABLISHED: ${ctx.precedingBridge}` : ""}
+      ${ctx.upcomingIntents?.length ? `- REMAINING TOPICS TO BE COVERED: ${ctx.upcomingIntents.join(", ")}` : ""}
+    `.trim();
 
     const result = await this.client.models.generateContent({
       model: modelName,
@@ -37,7 +54,13 @@ export class Writer implements IWriter {
         systemInstruction: {
           parts: [
             {
-              text: `${ctx.persona.getInstructions(ctx)}\n\nWRITING STRATEGY: ${this.writingStrategy}`,
+              text: `${ctx.persona.getInstructions(ctx)}\n\nWRITING STRATEGY: ${this.writingStrategy}
+              
+              TASK GUIDELINES:
+              1. Generate the section content based on the INTENT.
+              2. Maintain flow by acknowledging the PREVIOUSLY ESTABLISHED context without repeating it.
+              3. Do NOT "steal" content from the REMAINING TOPICS.
+              4. Provide a "BRIDGE": A short summary of what you wrote to help the next writer maintain continuity.`,
             },
           ],
         },
@@ -53,10 +76,13 @@ export class Writer implements IWriter {
                 TOPIC: ${ctx.topic}
                 GOAL: ${ctx.goal}
                 AUDIENCE: ${ctx.audience}
-                
-                TASK: Generate the content for this section. 
-                Do NOT include the header in your response. 
-                Use valid Markdown.
+                ${contextPrompt}
+
+                OUTPUT FORMAT (JSON ONLY):
+                {
+                  "content": "The markdown content (omit the H2 header)",
+                  "bridge": "Context for the next agent"
+                }
               `.trim(),
             },
           ],
@@ -64,12 +90,13 @@ export class Writer implements IWriter {
       ],
     });
 
-    const text = result.text ?? "";
-    if (!text)
+    const rawJson = (result.text ?? "").replace(/```json|```/g, "").trim();
+    try {
+      return JSON.parse(rawJson) as WriterResponse;
+    } catch (e) {
       throw new Error(
-        `${this.constructor.name}: Empty response for ${ctx.header}`,
+        `Writer ${this.id} failed to return valid JSON: ${result.text}`,
       );
-
-    return text.trim();
+    }
   }
 }

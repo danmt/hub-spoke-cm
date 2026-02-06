@@ -8,6 +8,7 @@ import { ArchitectAgent } from "../agents/Architect.js";
 import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
 import { RegistryService } from "../services/RegistryService.js";
+import { ValidationService } from "../services/ValidationService.js"; // Added for direct audit access
 import { getGlobalConfig } from "../utils/config.js";
 
 export const newCommand = new Command("new")
@@ -89,8 +90,6 @@ export const newCommand = new Command("new")
           );
 
           if (!assembler) {
-            // This error is caught by the catch block in the loop,
-            // which prompts the user to retry or abort
             throw new Error(
               `Assembler "${brief.assemblerId}" not found in workspace. ` +
                 `Available: ${assemblers.map((a) => a.artifact.id).join(", ")}`,
@@ -148,6 +147,7 @@ export const newCommand = new Command("new")
             `personaId: ${JSON.stringify(brief.personaId)}`,
             `blueprint: ${JSON.stringify(blueprintData)}`,
             `writerMap: ${JSON.stringify(writerMap)}`,
+            `bridges: {}`,
             "---",
             "",
             `# ${brief.topic}`,
@@ -176,6 +176,74 @@ export const newCommand = new Command("new")
           if (shouldFill) {
             await FillService.execute(config, client, filePath, true);
             console.log(chalk.bold.cyan("\n🚀 Hub populated successfully!"));
+
+            const { shouldAudit } = await inquirer.prompt([
+              {
+                type: "confirm",
+                name: "shouldAudit",
+                message: "Run a semantic audit on the new content?",
+                default: true,
+              },
+            ]);
+
+            if (shouldAudit) {
+              const auditors = RegistryService.getAgentsByType(
+                agents,
+                "auditor",
+              );
+              if (auditors.length > 0) {
+                const { auditorId } = await inquirer.prompt([
+                  {
+                    type: "list",
+                    name: "auditorId",
+                    message: "Select Auditor Strategy:",
+                    choices: auditors.map((a) => ({
+                      name: `${a.artifact.id}: ${a.artifact.description}`,
+                      value: a.artifact.id,
+                    })),
+                  },
+                ]);
+
+                const selectedAuditor = auditors.find(
+                  (a) => a.artifact.id === auditorId,
+                )!;
+                console.log(
+                  chalk.cyan(
+                    `\n🧠 Running Step 2: Semantic Analysis [${auditorId}]...`,
+                  ),
+                );
+
+                const report = await ValidationService.runAudit(
+                  config,
+                  client,
+                  filePath,
+                  selectedAuditor.agent,
+                );
+
+                if (report.issues.length === 0) {
+                  console.log(
+                    chalk.bold.green("\n✨ Audit passed! No issues found."),
+                  );
+                } else {
+                  console.log(
+                    chalk.yellow(
+                      `\n⚠️  Auditor found ${report.issues.length} potential improvements.`,
+                    ),
+                  );
+                  console.log(
+                    chalk.gray(
+                      "Run 'hub audit' manually to apply verified fixes.",
+                    ),
+                  );
+                }
+              } else {
+                console.log(
+                  chalk.dim(
+                    "\n(No auditors found in registry; skipping audit step)",
+                  ),
+                );
+              }
+            }
           }
 
           isComplete = true;

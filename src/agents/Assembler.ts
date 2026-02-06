@@ -39,17 +39,21 @@ export class Assembler implements IAssembler {
             STRATEGY: ${this.strategyPrompt}
             TOPIC: ${brief.topic} | GOAL: ${brief.goal} | PERSONA: ${brief.personaId}
             
-            TASK: Define sections with catchy, persona-aligned headers. 
+            TASK: Define a sequential narrative flow. Define sections with catchy, persona-aligned headers. 
+            CRITICAL: Every 'intent' must be a clear roadmap for a Writer. 
+            Ensure the sequence moves logically from foundation to advanced application without overlapping concepts.
             If the topic is complex, expand to include all necessary layers.
 
-            WRITER ASSIGNMENT:
-            For each section, assign a 'writerId' from this available list: [${writerConstraint}].
-            
             OUTPUT ONLY RAW JSON matching this schema:
             {
               "hubId": "slugified-topic",
               "components": [
-                { "id": "unique-id", "header": "Contextual Title", "intent": "Writing instructions", "writerId": "${writerConstraint}" }
+                { 
+                  "id": "unique-id", 
+                  "header": "Contextual Title", 
+                  "intent": "SPECIFIC roadmap instruction for this section. Avoid generalities.", 
+                  "writerId": "${writerConstraint}" 
+                }
               ]
             }
           `.trim(),
