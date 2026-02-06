@@ -1,3 +1,4 @@
+// src/cli/commands/audit.ts
 import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import { Command } from "commander";
@@ -8,9 +9,19 @@ import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
 import { getGlobalConfig } from "../utils/config.js";
 
+/**
+ * auditCommand
+ * Leverages the centralized ValidationService to perform a multi-pass
+ * semantic audit and provides an interactive interface for applying fixes.
+ */
 export const auditCommand = new Command("audit")
-  .description("Semantic audit with structural integrity enforcement")
-  .option("-f, --file <path>", "Specific markdown file to audit")
+  .description(
+    "Run a multi-pass semantic audit using the centralized Validation Service",
+  )
+  .option(
+    "-f, --file <path>",
+    "Specific markdown file to audit (defaults to hub.md)",
+  )
   .action(async (options) => {
     try {
       const config = getGlobalConfig();
@@ -25,11 +36,13 @@ export const auditCommand = new Command("audit")
         hubDir = await IoService.findHubRoot(path.dirname(targetFile));
       } else {
         const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
+        if (hubs.length === 0) throw new Error("No hubs found in workspace.");
+
         const { targetHub } = await inquirer.prompt([
           {
             type: "list",
             name: "targetHub",
-            message: "Select Hub to audit:",
+            message: "Select a Hub to audit:",
             choices: hubs,
           },
         ]);
@@ -39,10 +52,10 @@ export const auditCommand = new Command("audit")
 
       const hubMeta = await IoService.readHubMetadata(hubDir);
 
-      // Phase 1: Structural Check (Centralized logic)
+      // 1. Structural Integrity Check
       console.log(
         chalk.blue(
-          `\n🛡️  Step 1: Structural Check [${path.basename(targetFile)}]`,
+          `\n🛡️  Step 1: Integrity Check [${path.basename(targetFile)}]`,
         ),
       );
       const integrity = await ValidationService.checkIntegrity(
@@ -58,13 +71,12 @@ export const auditCommand = new Command("audit")
         );
         return console.log(
           chalk.yellow(
-            "\nAbort: Please fix structural issues or run 'hub fill' first.",
+            "\nAbort: Resolve structural issues before semantic audit.",
           ),
         );
       }
-      console.log(chalk.green("   ✅ Structure is valid."));
 
-      // Phase 2: Semantic Audit
+      // 2. Agent Initialization
       const artifacts = await RegistryService.getAllArtifacts();
       const agents = RegistryService.initializeAgents(
         config,
@@ -74,13 +86,13 @@ export const auditCommand = new Command("audit")
       const auditors = RegistryService.getAgentsByType(agents, "auditor");
 
       if (auditors.length === 0)
-        throw new Error("No auditors found in /agents/auditors.");
+        throw new Error("No auditors found in registry.");
 
       const { auditorId } = await inquirer.prompt([
         {
           type: "list",
           name: "auditorId",
-          message: "Select Auditor Strategy:",
+          message: "Select Auditor:",
           choices: auditors.map((a) => ({
             name: `${a.artifact.id}: ${a.artifact.description}`,
             value: a.artifact.id,
@@ -92,49 +104,52 @@ export const auditCommand = new Command("audit")
         (a) => a.artifact.id === auditorId,
       )!;
 
+      // 3. Centralized Multi-Pass Audit
       console.log(
-        chalk.cyan(`\n🧠 Step 2: Semantic Analysis [${auditorId}]...`),
+        chalk.cyan(`\n🧠 Step 2: Running Orchestrated Audit [${auditorId}]...`),
       );
-      const report = await ValidationService.runAudit(
+
+      const { report, allIssues } = await ValidationService.runFullAudit(
         config,
         client,
         targetFile,
         selectedAuditor.agent,
       );
 
-      if (report.issues.length === 0) {
+      if (allIssues.length === 0) {
         return console.log(
-          chalk.bold.green(
-            "\n✨ No semantic issues found. Content is optimal.",
-          ),
+          chalk.bold.green("\n✨ Audit passed! No semantic issues found."),
         );
       }
 
+      // 4. Interactive Consolidation and Fixes
       console.log(
         chalk.yellow(
-          `\n⚠️  Auditor found ${report.issues.length} potential improvements:`,
+          `\n⚠️  Auditor found ${allIssues.length} potential improvements:`,
         ),
       );
-      report.issues.forEach((i) =>
-        console.log(chalk.bold(`   - [${i.section}] ${i.message}`)),
-      );
+      console.log(chalk.dim(`   Assessment: ${report.summary}\n`));
+
+      allIssues.forEach((issue, index) => {
+        console.log(
+          `${chalk.bold(index + 1 + ".")} [${chalk.cyan(issue.section)}] ${issue.message}`,
+        );
+      });
 
       const { toFix } = await inquirer.prompt([
         {
           type: "checkbox",
           name: "toFix",
-          message: "Apply verified fixes?",
-          choices: report.issues.map((i) => ({
-            name: `${i.section}: ${i.type}`,
+          message: "\nSelect issues to fix surgically:",
+          choices: allIssues.map((i) => ({
+            name: `${i.section}: ${i.type} (${i.severity})`,
             value: i,
           })),
         },
       ]);
 
       for (const issue of toFix) {
-        process.stdout.write(
-          chalk.gray(`   🔧 Verifying fix for "${issue.section}"... `),
-        );
+        process.stdout.write(chalk.gray(`   🔧 Fixing "${issue.section}"... `));
         const result = await ValidationService.verifyAndFix(
           config,
           client,
@@ -144,17 +159,21 @@ export const auditCommand = new Command("audit")
         );
 
         if (result.success) {
-          console.log(chalk.green("Fixed & Verified ✅"));
+          console.log(chalk.green("Verified & Merged ✅"));
         } else {
-          console.log(chalk.red("Failed verification ❌"));
+          console.log(chalk.red("Failed ❌"));
           console.log(chalk.dim(`      Reason: ${result.message}`));
         }
       }
-      console.log(chalk.bold.green("\n🚀 Audit session complete."));
+
+      console.log(
+        chalk.bold.green("\n🚀 Audit and Refactoring session complete."),
+      );
     } catch (error) {
       console.error(
         chalk.red("\n❌ Audit Error:"),
         error instanceof Error ? error.message : String(error),
       );
+      process.exit(1);
     }
   });

@@ -1,10 +1,16 @@
+// src/agents/Auditor.ts
 import { GoogleGenAI } from "@google/genai";
 import { GlobalConfig } from "../utils/config.js";
 import { Persona } from "./Persona.js";
 
 export interface AuditIssue {
   section: string;
-  type: "structure" | "cohesion" | "duplication" | "intent_drift";
+  type:
+    | "structure"
+    | "cohesion"
+    | "duplication"
+    | "intent_drift"
+    | "readability";
   severity: "low" | "medium" | "high";
   message: string;
   suggestion: string;
@@ -29,43 +35,52 @@ export class Auditor {
     content: string,
     context: any,
     persona: Persona,
+    scope: "section" | "global",
+    staticData: any,
   ): Promise<AuditResult> {
-    const modelName = this.config.architectModel || "gemini-2.0-flash";
+    const modelName = this.config.architectModel || "gemini-3-flash";
 
     const systemInstruction = `
-      You are a Senior Content Auditor. 
+      You are a Content Auditor. 
       Strategy: ${this.auditStrategy}
 
       PROJECT CONTEXT:
       Topic: ${context.title} | Goal: ${context.goal}
-      Persona: ${persona.name}
       
       ORIGINAL BLUEPRINT:
       ${JSON.stringify(context.blueprint || {}, null, 2)}
 
+      Persona Context: ${persona.name} (${persona.tone})
+
+      Audit Scope: ${scope.toUpperCase()}
+
+      STATIC ANALYSIS DATA:
+      ${JSON.stringify(staticData, null, 2)}
+
       TASK:
-      Analyze the content against the Goal and original Blueprint. 
-      Flag drift, duplication, or poor cohesion.
+      Analyze the provided content. Flag drift, duplication, or poor cohesion.
+      If scope is "section", focus only on that section's specific intent.
+      If scope is "global", focus on the flow and overall consistency.
 
       OUTPUT FORMAT (RAW JSON ONLY):
       {
         "passed": boolean,
-        "summary": "Overall assessment",
+        "summary": "assessment",
         "issues": [
-          { "section": "Name", "type": "intent_drift", "severity": "high", "message": "...", "suggestion": "..." }
+          { "section": "header", "type": "...", "severity": "...", "message": "...", "suggestion": "..." }
         ]
       }
     `;
 
     const result = await this.client.models.generateContent({
       model: modelName,
-      config: { systemInstruction: { parts: [{ text: systemInstruction }] } },
-      contents: [
-        { role: "user", parts: [{ text: `Audit content:\n\n${content}` }] },
-      ],
+      config: {
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        responseMimeType: "application/json",
+      },
+      contents: [{ role: "user", parts: [{ text: content }] }],
     });
 
-    const rawJson = (result.text ?? "").replace(/```json|```/g, "").trim();
-    return JSON.parse(rawJson) as AuditResult;
+    return JSON.parse(result.text ?? "{}") as AuditResult;
   }
 }
