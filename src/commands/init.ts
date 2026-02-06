@@ -21,14 +21,14 @@ export const initCommand = new Command("init")
       console.log(chalk.green("✅ Workspace structure created."));
       console.log(
         chalk.gray(
-          `   - /posts (Your content hubs)\n   - /agents (Your personas, writers, and assemblers)\n   - /.hub (Workspace configuration)`,
+          `   - /posts (Your content hubs)\n   - /agents (Your personas, auditors, writers, and assemblers)\n   - /.hub (Workspace configuration)`,
         ),
       );
 
       if (type === "starter") {
         console.log(
           chalk.cyan(
-            "\n🚀 Starter agents (Standard Persona, Tutorial Assembler, Prose Writer) deployed to /agents.",
+            "\n🚀 Starter agents (Standard Persona, Tutorial Assembler, Prose Writer, Standard Auditor) deployed to /agents.",
           ),
         );
       }
