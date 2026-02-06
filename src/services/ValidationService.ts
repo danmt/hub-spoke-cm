@@ -1,6 +1,7 @@
 // src/services/ValidationService.ts
 import { GoogleGenAI } from "@google/genai";
 import fs from "fs/promises";
+import path from "path";
 import { AuditIssue, Auditor, AuditResult } from "../agents/Auditor.js";
 import { GlobalConfig } from "../utils/config.js";
 import { IoService } from "./IoService.js";
@@ -38,23 +39,36 @@ export class ValidationService {
   }
 
   /**
-   * Reusable Orchestrator for the Multi-Pass Audit process.
-   * Can be called by 'audit', 'new', or 'spawn' commands.
+   * Orchestrates a multi-pass audit using a working copy in .hub/tmp.
    */
   static async runFullAudit(
     config: GlobalConfig,
     client: GoogleGenAI,
     filePath: string,
     auditor: Auditor,
-  ): Promise<{ report: AuditResult; allIssues: AuditIssue[] }> {
+  ): Promise<{
+    report: AuditResult;
+    allIssues: AuditIssue[];
+    workingFile: string;
+  }> {
+    const workspaceRoot = await IoService.findWorkspaceRoot(
+      path.dirname(filePath),
+    );
+    const workingFile = await IoService.getTempPath(
+      workspaceRoot,
+      path.basename(filePath),
+    );
+
     const rawContent = await fs.readFile(filePath, "utf-8");
+    await fs.writeFile(workingFile, rawContent, "utf-8");
+
     const parsed = ParserService.parseMarkdown(rawContent);
     const artifacts = await RegistryService.getAllArtifacts();
     const agents = RegistryService.initializeAgents(config, client, artifacts);
-
     const persona = RegistryService.getAgentsByType(agents, "persona").find(
       (p) => p.artifact.id === parsed.frontmatter.personaId,
     );
+
     if (!persona) throw new Error("Persona not found.");
 
     const staticReport = StaticAnalysisService.analyze(
@@ -63,123 +77,152 @@ export class ValidationService {
     );
     const allIssues: AuditIssue[] = [];
 
-    // 1. Section Pass (Isolated Contexts)
+    // Section Pass
     for (const sectionData of staticReport.sections) {
-      const sectionContent = parsed.sections[sectionData.header];
       const result = await auditor.analyze(
-        sectionContent,
-        parsed.frontmatter,
+        {
+          title: parsed.frontmatter.title!,
+          goal: parsed.frontmatter.goal!,
+          blueprint: JSON.stringify(
+            parsed.frontmatter.blueprint || {},
+            null,
+            2,
+          ),
+          staticAnalysis: JSON.stringify(sectionData || {}, null, 2),
+        },
+        parsed.sections[sectionData.header],
         persona.agent,
         "section",
-        sectionData,
       );
       allIssues.push(...result.issues);
     }
 
-    // 2. Global Pass (Cohesion)
+    // Global Pass
     const globalResult = await auditor.analyze(
+      {
+        title: parsed.frontmatter.title!,
+        goal: parsed.frontmatter.goal!,
+        blueprint: JSON.stringify(parsed.frontmatter.blueprint || {}, null, 2),
+        staticAnalysis: JSON.stringify(staticReport.global || {}, null, 2),
+      },
       rawContent,
-      parsed.frontmatter,
       persona.agent,
       "global",
-      staticReport.global,
     );
     allIssues.push(...globalResult.issues);
 
-    return {
-      report: globalResult, // Returns the final global consolidation
-      allIssues,
-    };
+    return { report: globalResult, allIssues, workingFile };
   }
 
   /**
-   * Surgical fix and verification loop with bridge preservation.
+   * Surgical fix on the working copy with atomic verification.
    */
   static async verifyAndFix(
     config: GlobalConfig,
     client: GoogleGenAI,
-    filePath: string,
+    workingFilePath: string,
     issue: AuditIssue,
     auditor: Auditor,
   ): Promise<{ success: boolean; message: string }> {
-    const rawContent = await fs.readFile(filePath, "utf-8");
-    const parsed = ParserService.parseMarkdown(rawContent);
-    const artifacts = await RegistryService.getAllArtifacts();
-    const agents = RegistryService.initializeAgents(config, client, artifacts);
-    const sectionHeaders = Object.keys(parsed.sections);
-    const sectionIndex = sectionHeaders.indexOf(issue.section);
-
-    const writerId =
-      (parsed.frontmatter.blueprint as any)?.[issue.section]?.writerId ||
-      "prose";
-    const writerPair = RegistryService.getAgentsByType(agents, "writer").find(
-      (w) => w.artifact.id === writerId,
-    );
-    const personaPair = RegistryService.getAgentsByType(agents, "persona").find(
-      (p) => p.artifact.id === parsed.frontmatter.personaId,
-    );
-
-    if (!writerPair || !personaPair) throw new Error("Missing agents for fix.");
-
-    const bridges = (parsed.frontmatter as any).bridges || {};
-    const prevHeader = sectionHeaders[sectionIndex - 1];
-    const precedingBridge = prevHeader ? bridges[prevHeader] : undefined;
-
-    const upcomingIntents = sectionHeaders
-      .slice(sectionIndex + 1)
-      .map(
-        (h) =>
-          `[${h}]: ${(parsed.frontmatter.blueprint as any)?.[h]?.intent || "Next topic"}`,
+    try {
+      const rawContent = await fs.readFile(workingFilePath, "utf-8");
+      const parsed = ParserService.parseMarkdown(rawContent);
+      const artifacts = await RegistryService.getAllArtifacts();
+      const agents = RegistryService.initializeAgents(
+        config,
+        client,
+        artifacts,
       );
 
-    const response = await writerPair.agent.write({
-      header: issue.section,
-      intent: `FIXING AUDIT ISSUE: ${issue.message}\nSUGGESTION: ${issue.suggestion}`,
-      topic: parsed.frontmatter.title,
-      goal: parsed.frontmatter.goal || "",
-      audience: parsed.frontmatter.audience || "",
-      language: parsed.frontmatter.language,
-      persona: personaPair.agent,
-      precedingBridge,
-      upcomingIntents,
-      isFirst: sectionIndex === 0,
-      isLast: sectionIndex === sectionHeaders.length - 1,
-    });
+      const sectionHeaders = Object.keys(parsed.sections);
+      const sectionIndex = sectionHeaders.indexOf(issue.section);
 
-    const verificationContent = `## ${issue.section}\n\n${response.content}`;
-    const staticReport = StaticAnalysisService.analyze(
-      verificationContent,
-      parsed.frontmatter.language,
-    );
+      const writerId =
+        (parsed.frontmatter.blueprint as any)?.[issue.section]?.writerId ||
+        "prose";
+      const writerPair = RegistryService.getAgentsByType(agents, "writer").find(
+        (w) => w.artifact.id === writerId,
+      );
+      const personaPair = RegistryService.getAgentsByType(
+        agents,
+        "persona",
+      ).find((p) => p.artifact.id === parsed.frontmatter.personaId);
 
-    const verification = await auditor.analyze(
-      verificationContent,
-      parsed.frontmatter,
-      personaPair.agent,
-      "section",
-      staticReport.sections[0],
-    );
+      if (!writerPair || !personaPair) throw new Error("Agents missing.");
 
-    if (
-      verification.issues.find(
-        (i) => i.section === issue.section && i.type === issue.type,
-      )
-    ) {
-      return { success: false, message: "Fix rejected: Issue persists." };
+      const bridges = (parsed.frontmatter as any).bridges || {};
+      const precedingBridge =
+        sectionIndex > 0
+          ? bridges[sectionHeaders[sectionIndex - 1]]
+          : undefined;
+
+      const response = await writerPair.agent.write({
+        header: issue.section,
+        intent: `FIXING: ${issue.message}. SUGGESTION: ${issue.suggestion}`,
+        topic: parsed.frontmatter.title,
+        goal: parsed.frontmatter.goal || "",
+        audience: parsed.frontmatter.audience || "",
+        language: parsed.frontmatter.language,
+        persona: personaPair.agent,
+        precedingBridge,
+        isFirst: sectionIndex === 0,
+        isLast: sectionIndex === sectionHeaders.length - 1,
+      });
+
+      const updatedSections = {
+        ...parsed.sections,
+        [issue.section]: response.content,
+      };
+      const updatedBridges = { ...bridges, [issue.section]: response.bridge };
+      const candidateContent = ParserService.reconstructMarkdown(
+        { ...parsed.frontmatter, bridges: updatedBridges },
+        updatedSections,
+      );
+
+      // Verify the candidate fix
+      const staticReport = StaticAnalysisService.analyze(
+        candidateContent,
+        parsed.frontmatter.language,
+      );
+      const verification = await auditor.analyze(
+        {
+          title: parsed.frontmatter.title!,
+          goal: parsed.frontmatter.goal!,
+          blueprint: JSON.stringify(
+            parsed.frontmatter.blueprint || {},
+            null,
+            2,
+          ),
+          staticAnalysis: JSON.stringify(
+            staticReport.sections.find((s) => s.header === issue.section) || {},
+            null,
+            2,
+          ),
+        },
+        `## ${issue.section}\n\n${response.content}`,
+        personaPair.agent,
+        "section",
+      );
+
+      if (
+        verification.issues.some(
+          (i) => i.section === issue.section && i.type === issue.type,
+        )
+      ) {
+        return { success: false, message: "Fix rejected: Issue persists." };
+      }
+
+      await fs.writeFile(workingFilePath, candidateContent, "utf-8");
+      return { success: true, message: "Working copy updated." };
+    } catch (error) {
+      return { success: false, message: "Surgical fix failed." };
     }
+  }
 
-    const updatedSections = {
-      ...parsed.sections,
-      [issue.section]: response.content,
-    };
-    const updatedBridges = { ...bridges, [issue.section]: response.bridge };
-
-    const finalMarkdown = ParserService.reconstructMarkdown(
-      { ...parsed.frontmatter, bridges: updatedBridges },
-      updatedSections,
-    );
-    await IoService.safeWriteFile(filePath, finalMarkdown);
-
-    return { success: true, message: "Verified and merged." };
+  static async finalize(
+    workingFile: string,
+    originalFile: string,
+  ): Promise<void> {
+    await fs.rename(workingFile, originalFile);
   }
 }

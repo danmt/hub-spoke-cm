@@ -187,4 +187,20 @@ description: "General quality, flow, and duplication check."
       standardAuditor,
     );
   }
+
+  /**
+   * Returns the path for a temporary file inside the .hub/tmp directory.
+   * Ensures the directory exists.
+   */
+  static async getTempPath(
+    workspaceRoot: string,
+    fileName: string,
+  ): Promise<string> {
+    const tempDir = path.join(workspaceRoot, ".hub", "tmp");
+    if (!existsSync(tempDir)) {
+      await fs.mkdir(tempDir, { recursive: true });
+    }
+    // Use a timestamp or unique hash to avoid collisions during concurrent runs
+    return path.join(tempDir, `${Date.now()}-${fileName}.tmp`);
+  }
 }

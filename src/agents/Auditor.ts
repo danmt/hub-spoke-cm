@@ -22,6 +22,13 @@ export interface AuditResult {
   summary: string;
 }
 
+export interface AuditContext {
+  title: string;
+  goal: string;
+  blueprint: string;
+  staticAnalysis: string;
+}
+
 export class Auditor {
   constructor(
     private client: GoogleGenAI,
@@ -32,11 +39,10 @@ export class Auditor {
   ) {}
 
   async analyze(
+    ctx: AuditContext,
     content: string,
-    context: any,
     persona: Persona,
     scope: "section" | "global",
-    staticData: any,
   ): Promise<AuditResult> {
     const modelName = this.config.architectModel || "gemini-3-flash";
 
@@ -45,17 +51,17 @@ export class Auditor {
       Strategy: ${this.auditStrategy}
 
       PROJECT CONTEXT:
-      Topic: ${context.title} | Goal: ${context.goal}
+      Topic: ${ctx.title} | Goal: ${ctx.goal}
       
       ORIGINAL BLUEPRINT:
-      ${JSON.stringify(context.blueprint || {}, null, 2)}
+      ${ctx.blueprint}
 
       Persona Context: ${persona.name} (${persona.tone})
 
       Audit Scope: ${scope.toUpperCase()}
 
       STATIC ANALYSIS DATA:
-      ${JSON.stringify(staticData, null, 2)}
+      ${ctx.staticAnalysis}
 
       TASK:
       Analyze the provided content. Flag drift, duplication, or poor cohesion.
