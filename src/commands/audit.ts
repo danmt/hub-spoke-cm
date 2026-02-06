@@ -1,27 +1,20 @@
-// src/cli/commands/audit.ts
 import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import { Command } from "commander";
+import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
+import { AuditIssue } from "../agents/Auditor.js";
 import { IoService } from "../services/IoService.js";
 import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
 import { getGlobalConfig } from "../utils/config.js";
 
-/**
- * auditCommand
- * Leverages the centralized ValidationService to perform a multi-pass
- * semantic audit and provides an interactive interface for applying fixes.
- */
 export const auditCommand = new Command("audit")
   .description(
-    "Run a multi-pass semantic audit using the centralized Validation Service",
+    "Guided semantic audit with atomic safety and persistent reports",
   )
-  .option(
-    "-f, --file <path>",
-    "Specific markdown file to audit (defaults to hub.md)",
-  )
+  .option("-f, --file <path>", "Specific file to audit")
   .action(async (options) => {
     try {
       const config = getGlobalConfig();
@@ -108,18 +101,33 @@ export const auditCommand = new Command("audit")
       console.log(
         chalk.cyan(`\n🧠 Step 2: Running Orchestrated Audit [${auditorId}]...`),
       );
+      console.log(chalk.blue(`\n🛡️  Auditing: ${path.basename(targetFile)}`));
+      const { allIssues, workingFile, staticReport } =
+        await ValidationService.runFullAudit(
+          config,
+          client,
+          targetFile,
+          selectedAuditor.agent,
+        );
 
-      const { report, allIssues } = await ValidationService.runFullAudit(
-        config,
-        client,
-        targetFile,
-        selectedAuditor.agent,
+      // Save persistent audit trace
+      const reportPath = await IoService.saveAuditReport(
+        workspaceRoot,
+        path.basename(hubDir),
+        {
+          file: targetFile,
+          auditor: auditorId,
+          metrics: staticReport,
+          issues: allIssues,
+        },
+      );
+      console.log(
+        chalk.dim(`📊 History: .hub/audits/${path.basename(reportPath)}`),
       );
 
       if (allIssues.length === 0) {
-        return console.log(
-          chalk.bold.green("\n✨ Audit passed! No semantic issues found."),
-        );
+        await fs.unlink(workingFile);
+        return console.log(chalk.bold.green("\n✨ No issues found."));
       }
 
       // 4. Interactive Consolidation and Fixes
@@ -128,47 +136,99 @@ export const auditCommand = new Command("audit")
           `\n⚠️  Auditor found ${allIssues.length} potential improvements:`,
         ),
       );
-      console.log(chalk.dim(`   Assessment: ${report.summary}\n`));
 
-      allIssues.forEach((issue, index) => {
-        console.log(
-          `${chalk.bold(index + 1 + ".")} [${chalk.cyan(issue.section)}] ${issue.message}`,
-        );
-      });
-
-      const { toFix } = await inquirer.prompt([
-        {
-          type: "checkbox",
-          name: "toFix",
-          message: "\nSelect issues to fix surgically:",
-          choices: allIssues.map((i) => ({
-            name: `${i.section}: ${i.type} (${i.severity})`,
-            value: i,
-          })),
+      const groupedIssues = allIssues.reduce(
+        (acc, issue) => {
+          if (!acc[issue.section]) acc[issue.section] = [];
+          acc[issue.section].push(issue);
+          return acc;
         },
-      ]);
+        {} as Record<string, AuditIssue[]>,
+      );
 
-      for (const issue of toFix) {
-        process.stdout.write(chalk.gray(`   🔧 Fixing "${issue.section}"... `));
-        const result = await ValidationService.verifyAndFix(
-          config,
-          client,
-          targetFile,
-          issue,
-          selectedAuditor.agent,
-        );
+      // SURGICAL LOOP
+      let fixesApplied = 0;
+      for (const sectionName of Object.keys(groupedIssues)) {
+        const issues = groupedIssues[sectionName];
 
-        if (result.success) {
-          console.log(chalk.green("Verified & Merged ✅"));
-        } else {
-          console.log(chalk.red("Failed ❌"));
-          console.log(chalk.dim(`      Reason: ${result.message}`));
+        console.log(`\n📦 ${chalk.bold.underline("Section: " + sectionName)}`);
+        issues.forEach((i) => {
+          const color = i.severity === "high" ? chalk.red : chalk.yellow;
+          console.log(`  ${color("•")} ${i.message}`);
+        });
+
+        const { action } = await inquirer.prompt([
+          {
+            type: "list",
+            name: "action",
+            message: `Fix these ${issues.length} issues?`,
+            choices: [
+              { name: "🚀 Apply Batch Fix", value: "fix" },
+              { name: "⏭️  Skip Section", value: "skip" },
+              { name: "🛑 Abort", value: "abort" },
+            ],
+          },
+        ]);
+
+        if (action === "abort") break;
+        if (action === "skip") continue;
+
+        let isFixed = false;
+        while (!isFixed) {
+          process.stdout.write(chalk.gray(`   🏗️  Re-writing & Verifying... `));
+
+          // Using the new "Clean Slate" verification logic
+          const result = await ValidationService.verifyAndFix(
+            config,
+            client,
+            workingFile,
+            sectionName,
+            issues,
+            selectedAuditor.agent,
+          );
+
+          if (result.success) {
+            console.log(chalk.green("Verified ✅"));
+            fixesApplied++;
+            isFixed = true;
+          } else {
+            console.log(chalk.red("Failed ❌"));
+            console.log(
+              chalk.italic.red(`      Audit Feedback: ${result.message}`),
+            );
+
+            const { retry } = await inquirer.prompt([
+              {
+                type: "confirm",
+                name: "retry",
+                message: "     Retry with different generation?",
+                default: true,
+              },
+            ]);
+            if (!retry) break;
+          }
         }
       }
 
-      console.log(
-        chalk.bold.green("\n🚀 Audit and Refactoring session complete."),
-      );
+      // FINAL COMMIT
+      if (fixesApplied > 0) {
+        const { merge } = await inquirer.prompt([
+          {
+            type: "confirm",
+            name: "merge",
+            message: `Merge ${fixesApplied} verified changes?`,
+            default: true,
+          },
+        ]);
+        if (merge) {
+          await ValidationService.finalize(workingFile, targetFile);
+          console.log(chalk.bold.green("🚀 Atomic merge complete."));
+        } else {
+          await fs.unlink(workingFile);
+        }
+      } else {
+        await fs.unlink(workingFile);
+      }
     } catch (error) {
       console.error(
         chalk.red("\n❌ Audit Error:"),

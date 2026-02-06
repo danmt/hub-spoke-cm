@@ -186,6 +186,8 @@ description: "General quality, flow, and duplication check."
       path.join(rootDir, "agents/auditors/standard.md"),
       standardAuditor,
     );
+    const gitignore = ".hub/tmp/*\n.hub/audits/*.tmp";
+    await fs.writeFile(path.join(rootDir, ".gitignore"), gitignore, "utf-8");
   }
 
   /**
@@ -202,5 +204,22 @@ description: "General quality, flow, and duplication check."
     }
     // Use a timestamp or unique hash to avoid collisions during concurrent runs
     return path.join(tempDir, `${Date.now()}-${fileName}.tmp`);
+  }
+
+  /**
+   * Persists the audit results for future optimization analysis.
+   */
+  static async saveAuditReport(
+    workspaceRoot: string,
+    hubSlug: string,
+    report: any,
+  ): Promise<string> {
+    const auditDir = path.join(workspaceRoot, ".hub", "audits");
+    if (!existsSync(auditDir)) await fs.mkdir(auditDir, { recursive: true });
+    const randomStr = Math.random().toString(36).substring(7);
+    const fileName = `${hubSlug}.${Date.now()}.${randomStr}.json`;
+    const filePath = path.join(auditDir, fileName);
+    await fs.writeFile(filePath, JSON.stringify(report, null, 2), "utf-8");
+    return filePath;
   }
 }
