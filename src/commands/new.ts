@@ -82,6 +82,13 @@ export const newCommand = new Command("new")
 
         if (response.isComplete && response.brief) {
           const brief = response.brief;
+
+          console.log(
+            chalk.cyan(
+              `\n🏗️  Requesting structure from ${chalk.bold(brief.assemblerId)}...`,
+            ),
+          );
+
           const assemblers = RegistryService.getAgentsByType(
             agents,
             "assembler",
@@ -90,15 +97,20 @@ export const newCommand = new Command("new")
             (a) => a.artifact.id === brief.assemblerId,
           );
 
-          if (!assembler)
-            throw new Error(`Assembler "${brief.assemblerId}" not found.`);
+          if (!assembler) {
+            throw new Error(
+              `Assembler "${brief.assemblerId}" not found in workspace. ` +
+                `Available: ${assemblers.map((a) => a.artifact.id).join(", ")}`,
+            );
+          }
 
           const blueprint = await assembler.agent.generateSkeleton(brief);
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
           blueprint.components.forEach((c, i) => {
+            const typeLabel = c.writerId === "code" ? "💻 CODE" : "📝 PROSE";
+
             console.log(
-              chalk.white(`${i + 1}. [${c.writerId.toUpperCase()}] `) +
-                chalk.bold(c.header),
+              chalk.white(`#${i + 1} [${typeLabel}] `) + chalk.bold(c.header),
             );
           });
 
@@ -166,6 +178,7 @@ export const newCommand = new Command("new")
               default: true,
             },
           ]);
+
           if (shouldFill) {
             await FillService.execute(config, client, filePath, true);
             console.log(chalk.bold.cyan("\n🚀 Hub populated successfully!"));
@@ -229,6 +242,12 @@ export const newCommand = new Command("new")
                     ),
                   );
                 }
+              } else {
+                console.log(
+                  chalk.dim(
+                    "\n(No auditors found in registry; skipping audit step)",
+                  ),
+                );
               }
             }
           }
