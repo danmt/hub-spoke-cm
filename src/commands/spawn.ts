@@ -26,6 +26,15 @@ export const spawnCommand = new Command("spawn")
         client,
         rawArtifacts,
       );
+
+      try {
+        RegistryService.validateIntegrity(agents);
+      } catch (error) {
+        console.error(chalk.red("\n❌ Registry Integrity Check Failed:"));
+        console.error(chalk.yellow((error as Error).message));
+        process.exit(1);
+      }
+
       const manifest = RegistryService.toManifest(agents);
 
       const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
