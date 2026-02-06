@@ -2,7 +2,6 @@
 import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import { Command } from "commander";
-import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
 import { ArchitectAgent } from "../agents/Architect.js";
@@ -10,6 +9,7 @@ import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
 import { ParserService } from "../services/ParserService.js";
 import { RegistryService } from "../services/RegistryService.js";
+import { ValidationService } from "../services/ValidationService.js";
 import { getGlobalConfig } from "../utils/config.js";
 
 export const spawnCommand = new Command("spawn")
@@ -18,7 +18,6 @@ export const spawnCommand = new Command("spawn")
     try {
       const config = getGlobalConfig();
       const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
-
       const rawArtifacts = await RegistryService.getAllArtifacts();
       const client = new GoogleGenAI({ apiKey: config.apiKey! });
       const agents = RegistryService.initializeAgents(
@@ -35,49 +34,45 @@ export const spawnCommand = new Command("spawn")
         process.exit(1);
       }
 
-      const manifest = RegistryService.toManifest(agents);
-
       const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
-
-      if (hubs.length === 0)
-        throw new Error("No hubs found in posts/ directory.");
+      if (hubs.length === 0) throw new Error("No hubs found.");
 
       const { targetHub } = await inquirer.prompt([
         {
           type: "list",
           name: "targetHub",
-          message: "Select the parent Hub:",
+          message: "Select parent Hub:",
           choices: hubs,
         },
       ]);
-
       const rootDir = path.join(workspaceRoot, "posts", targetHub);
       const hubMeta = await IoService.readHubMetadata(rootDir);
       const hubRaw = await IoService.readHubFile(rootDir);
       const parsedHub = ParserService.parseMarkdown(hubRaw);
 
       const sections = Object.keys(parsedHub.sections);
-      if (sections.length === 0)
-        throw new Error("No sections found in hub.md.");
-
       const { targetSection } = await inquirer.prompt([
         {
           type: "list",
           name: "targetSection",
-          message: "Select a Hub section to expand into a dedicated Spoke:",
+          message: "Select Hub section to expand:",
           choices: sections,
         },
       ]);
 
-      const architect = new ArchitectAgent(client, manifest, {
-        topic: targetSection,
-        language: hubMeta.language,
-        audience: hubMeta.audience,
-        goal: `Expand on '${targetSection}' from the ${hubMeta.title} hub.`,
-        personaId: hubMeta.personaId,
-      });
+      const architect = new ArchitectAgent(
+        client,
+        RegistryService.toManifest(agents),
+        {
+          topic: targetSection,
+          language: hubMeta.language,
+          audience: hubMeta.audience,
+          goal: `Expand on '${targetSection}' from the ${hubMeta.title} hub.`,
+          personaId: hubMeta.personaId,
+        },
+      );
 
-      let currentInput = `Plan a Spoke for "${targetSection}". Persona: ${hubMeta.personaId}.`;
+      let currentInput = `Plan a Spoke for "${targetSection}".`;
       let isComplete = false;
 
       while (!isComplete) {
@@ -116,7 +111,6 @@ export const spawnCommand = new Command("spawn")
               writerMap[c.header] = c.writerId;
             });
 
-            // Spoke UX: Brief summary of the structure
             console.log(
               chalk.cyan(
                 `\n🏗️  Spoke Structure Generated (${blueprint.components.length} sections)`,
@@ -124,8 +118,7 @@ export const spawnCommand = new Command("spawn")
             );
 
             const fileName = `${blueprint.hubId}.md`;
-            const spokesDir = path.join(rootDir, "spokes");
-            await fs.mkdir(spokesDir, { recursive: true });
+            const filePath = path.join(rootDir, "spokes", fileName);
 
             const fileContent = [
               "---",
@@ -150,7 +143,6 @@ export const spawnCommand = new Command("spawn")
               ),
             ].join("\n");
 
-            const filePath = path.join(spokesDir, fileName);
             await IoService.safeWriteFile(filePath, fileContent);
             console.log(
               chalk.bold.green(`\n✅ Spoke created: spokes/${fileName}`),
@@ -165,8 +157,81 @@ export const spawnCommand = new Command("spawn")
               },
             ]);
 
-            if (shouldFill)
+            if (shouldFill) {
               await FillService.execute(config, client, filePath, true);
+              console.log(
+                chalk.cyan("\n🚀 Spoke populated. Running stepped audit..."),
+              );
+
+              const { shouldAudit } = await inquirer.prompt([
+                {
+                  type: "confirm",
+                  name: "shouldAudit",
+                  message: "Run a semantic audit on the new content?",
+                  default: true,
+                },
+              ]);
+
+              if (shouldAudit) {
+                const auditors = RegistryService.getAgentsByType(
+                  agents,
+                  "auditor",
+                );
+                if (auditors.length > 0) {
+                  const { auditorId } = await inquirer.prompt([
+                    {
+                      type: "list",
+                      name: "auditorId",
+                      message: "Select Auditor Strategy:",
+                      choices: auditors.map((a) => ({
+                        name: `${a.artifact.id}: ${a.artifact.description}`,
+                        value: a.artifact.id,
+                      })),
+                    },
+                  ]);
+                  const selectedAuditor = auditors.find(
+                    (a) => a.artifact.id === auditorId,
+                  )!;
+
+                  console.log(
+                    chalk.cyan(
+                      `\n🧠 Running Step 2: Semantic Analysis [${auditorId}]...`,
+                    ),
+                  );
+
+                  const { allIssues } = await ValidationService.runFullAudit(
+                    config,
+                    client,
+                    filePath,
+                    selectedAuditor.agent,
+                  );
+
+                  if (allIssues.length === 0) {
+                    console.log(
+                      chalk.bold.green("\n✨ Audit passed! No issues found."),
+                    );
+                  } else {
+                    console.log(
+                      chalk.yellow(
+                        `\n⚠️  Auditor found ${allIssues.length} issues. Run 'hub audit' to fix.`,
+                      ),
+                    );
+                    console.log(
+                      chalk.gray(
+                        "Run 'hub audit' manually to apply verified fixes.",
+                      ),
+                    );
+                  }
+                } else {
+                  console.log(
+                    chalk.dim(
+                      "\n(No auditors found in registry; skipping audit step)",
+                    ),
+                  );
+                }
+              }
+            }
+
             isComplete = true;
           } else {
             const { next } = await inquirer.prompt([
@@ -174,7 +239,7 @@ export const spawnCommand = new Command("spawn")
                 type: "input",
                 name: "next",
                 message: chalk.cyan("You:"),
-                validate: (val) => !!val || "Input required.",
+                validate: (v) => !!v,
               },
             ]);
             currentInput = next;

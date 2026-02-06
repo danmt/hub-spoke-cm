@@ -8,7 +8,7 @@ import { ArchitectAgent } from "../agents/Architect.js";
 import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
 import { RegistryService } from "../services/RegistryService.js";
-import { ValidationService } from "../services/ValidationService.js"; // Added for direct audit access
+import { ValidationService } from "../services/ValidationService.js";
 import { getGlobalConfig } from "../utils/config.js";
 
 export const newCommand = new Command("new")
@@ -63,7 +63,6 @@ export const newCommand = new Command("new")
     }
 
     const manifest = RegistryService.toManifest(agents);
-
     const architect = new ArchitectAgent(client, manifest, baseline);
     console.log(chalk.blue("\n🧠 Architect is analyzing project scope..."));
 
@@ -74,7 +73,6 @@ export const newCommand = new Command("new")
     while (!isComplete) {
       try {
         const response = await architect.chatWithUser(currentInput);
-
         if (response.gapFound) {
           console.log(`\n${chalk.red("Architect [GAP]:")} ${response.message}`);
           return;
@@ -90,6 +88,7 @@ export const newCommand = new Command("new")
               `\n🏗️  Requesting structure from ${chalk.bold(brief.assemblerId)}...`,
             ),
           );
+
           const assemblers = RegistryService.getAgentsByType(
             agents,
             "assembler",
@@ -106,14 +105,13 @@ export const newCommand = new Command("new")
           }
 
           const blueprint = await assembler.agent.generateSkeleton(brief);
-
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
           blueprint.components.forEach((c, i) => {
             const typeLabel = c.writerId === "code" ? "💻 CODE" : "📝 PROSE";
+
             console.log(
-              chalk.white(`${i + 1}. [${typeLabel}] `) + chalk.bold(c.header),
+              chalk.white(`#${i + 1} [${typeLabel}] `) + chalk.bold(c.header),
             );
-            console.log(chalk.dim(`   Instruction: ${c.intent}\n`));
           });
 
           const { confirmed } = await inquirer.prompt([
@@ -124,7 +122,6 @@ export const newCommand = new Command("new")
               default: true,
             },
           ]);
-
           if (!confirmed) {
             currentInput =
               "I don't like this structure. Can we try a different approach?";
@@ -212,31 +209,31 @@ export const newCommand = new Command("new")
                     })),
                   },
                 ]);
-
                 const selectedAuditor = auditors.find(
                   (a) => a.artifact.id === auditorId,
                 )!;
+
                 console.log(
                   chalk.cyan(
                     `\n🧠 Running Step 2: Semantic Analysis [${auditorId}]...`,
                   ),
                 );
 
-                const report = await ValidationService.runAudit(
+                const { allIssues } = await ValidationService.runFullAudit(
                   config,
                   client,
                   filePath,
                   selectedAuditor.agent,
                 );
 
-                if (report.issues.length === 0) {
+                if (allIssues.length === 0) {
                   console.log(
                     chalk.bold.green("\n✨ Audit passed! No issues found."),
                   );
                 } else {
                   console.log(
                     chalk.yellow(
-                      `\n⚠️  Auditor found ${report.issues.length} potential improvements.`,
+                      `\n⚠️  Auditor found ${allIssues.length} issues. Run 'hub audit' to fix.`,
                     ),
                   );
                   console.log(
@@ -262,7 +259,7 @@ export const newCommand = new Command("new")
               type: "input",
               name: "next",
               message: chalk.cyan("You:"),
-              validate: (val) => !!val || "Please provide a response.",
+              validate: (val) => !!val,
             },
           ]);
           currentInput = next;
