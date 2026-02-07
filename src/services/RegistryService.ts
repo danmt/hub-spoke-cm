@@ -1,5 +1,4 @@
 // src/core/services/RegistryService.ts
-import { GoogleGenAI } from "@google/genai";
 import { existsSync } from "fs";
 import fs from "fs/promises";
 import matter from "gray-matter";
@@ -8,7 +7,6 @@ import { Assembler } from "../agents/Assembler.js";
 import { Auditor } from "../agents/Auditor.js";
 import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
-import { GlobalConfig } from "../utils/config.js";
 import { IoService } from "./IoService.js";
 
 export type ArtifactType = "persona" | "writer" | "assembler" | "auditor";
@@ -121,11 +119,7 @@ export class RegistryService {
     return allArtifacts;
   }
 
-  static initializeAgents(
-    config: GlobalConfig,
-    client: GoogleGenAI,
-    artifacts: Artifact[],
-  ): AgentPair[] {
+  static initializeAgents(artifacts: Artifact[]): AgentPair[] {
     return artifacts.map((artifact): AgentPair => {
       switch (artifact.type) {
         case "persona":
@@ -147,8 +141,6 @@ export class RegistryService {
             type: "writer",
             artifact: artifact as WriterArtifact,
             agent: new Writer(
-              client,
-              config,
               artifact.id,
               artifact.description,
               artifact.content,
@@ -159,8 +151,6 @@ export class RegistryService {
             type: "assembler",
             artifact: artifact as AssemblerArtifact,
             agent: new Assembler(
-              client,
-              config,
               artifact.id,
               artifact.description,
               artifact.content,
@@ -172,8 +162,6 @@ export class RegistryService {
             type: "auditor",
             artifact: artifact as AuditorArtifact,
             agent: new Auditor(
-              client,
-              config,
               artifact.id,
               artifact.description,
               artifact.content,

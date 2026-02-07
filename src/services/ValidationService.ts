@@ -1,9 +1,7 @@
 // src/services/ValidationService.ts
-import { GoogleGenAI } from "@google/genai";
 import fs from "fs/promises";
 import path from "path";
-import { AuditIssue, Auditor, AuditResult } from "../agents/Auditor.js";
-import { GlobalConfig } from "../utils/config.js";
+import { AuditIssue, Auditor, AuditorResponse } from "../agents/Auditor.js";
 import { IoService } from "./IoService.js";
 import { ParserService } from "./ParserService.js";
 import { RegistryService } from "./RegistryService.js";
@@ -45,12 +43,10 @@ export class ValidationService {
    * Orchestrates a multi-pass audit using a working copy in .hub/tmp.
    */
   static async runFullAudit(
-    config: GlobalConfig,
-    client: GoogleGenAI,
     filePath: string,
     auditor: Auditor,
   ): Promise<{
-    report: AuditResult;
+    report: AuditorResponse;
     allIssues: AuditIssue[];
     workingFile: string;
     staticReport: FullAuditReport;
@@ -68,7 +64,7 @@ export class ValidationService {
 
     const parsed = ParserService.parseMarkdown(rawContent);
     const artifacts = await RegistryService.getAllArtifacts();
-    const agents = RegistryService.initializeAgents(config, client, artifacts);
+    const agents = RegistryService.initializeAgents(artifacts);
     const persona = RegistryService.getAgentsByType(agents, "persona").find(
       (p) => p.artifact.id === parsed.frontmatter.personaId,
     );
@@ -83,36 +79,28 @@ export class ValidationService {
 
     // Section Pass
     for (const sectionData of staticReport.sections) {
-      const result = await auditor.analyze(
-        {
-          title: parsed.frontmatter.title!,
-          goal: parsed.frontmatter.goal!,
-          blueprint: JSON.stringify(
-            parsed.frontmatter.blueprint || {},
-            null,
-            2,
-          ),
-          staticAnalysis: JSON.stringify(sectionData || {}, null, 2),
-        },
-        parsed.sections[sectionData.header],
-        persona.agent,
-        "section",
-      );
+      const result = await auditor.analyze({
+        title: parsed.frontmatter.title!,
+        goal: parsed.frontmatter.goal!,
+        blueprint: JSON.stringify(parsed.frontmatter.blueprint || {}, null, 2),
+        staticAnalysis: JSON.stringify(sectionData || {}, null, 2),
+        content: parsed.sections[sectionData.header],
+        persona: persona.agent,
+        scope: "section",
+      });
       allIssues.push(...result.issues);
     }
 
     // Global Pass
-    const globalResult = await auditor.analyze(
-      {
-        title: parsed.frontmatter.title!,
-        goal: parsed.frontmatter.goal!,
-        blueprint: JSON.stringify(parsed.frontmatter.blueprint || {}, null, 2),
-        staticAnalysis: JSON.stringify(staticReport.global || {}, null, 2),
-      },
-      rawContent,
-      persona.agent,
-      "global",
-    );
+    const globalResult = await auditor.analyze({
+      title: parsed.frontmatter.title!,
+      goal: parsed.frontmatter.goal!,
+      blueprint: JSON.stringify(parsed.frontmatter.blueprint || {}, null, 2),
+      staticAnalysis: JSON.stringify(staticReport.global || {}, null, 2),
+      content: rawContent,
+      persona: persona.agent,
+      scope: "global",
+    });
     allIssues.push(...globalResult.issues);
 
     return { report: globalResult, allIssues, workingFile, staticReport };
@@ -122,8 +110,6 @@ export class ValidationService {
    * Surgical fix on the working copy with atomic verification.
    */
   static async verifyAndFix(
-    config: GlobalConfig,
-    client: GoogleGenAI,
     workingFilePath: string,
     sectionName: string,
     issues: AuditIssue[],
@@ -133,11 +119,7 @@ export class ValidationService {
       const rawContent = await fs.readFile(workingFilePath, "utf-8");
       const parsed = ParserService.parseMarkdown(rawContent);
       const artifacts = await RegistryService.getAllArtifacts();
-      const agents = RegistryService.initializeAgents(
-        config,
-        client,
-        artifacts,
-      );
+      const agents = RegistryService.initializeAgents(artifacts);
 
       const sectionHeaders = Object.keys(parsed.sections);
       const sectionIndex = sectionHeaders.indexOf(sectionName);
@@ -201,25 +183,19 @@ export class ValidationService {
         candidateContent,
         parsed.frontmatter.language,
       );
-      const verification = await auditor.analyze(
-        {
-          title: parsed.frontmatter.title!,
-          goal: parsed.frontmatter.goal!,
-          blueprint: JSON.stringify(
-            parsed.frontmatter.blueprint || {},
-            null,
-            2,
-          ),
-          staticAnalysis: JSON.stringify(
-            staticReport.sections.find((s) => s.header === sectionName) || {},
-            null,
-            2,
-          ),
-        },
-        `## ${sectionName}\n\n${response.content}`,
-        persona.agent,
-        "section",
-      );
+      const verification = await auditor.analyze({
+        title: parsed.frontmatter.title!,
+        goal: parsed.frontmatter.goal!,
+        blueprint: JSON.stringify(parsed.frontmatter.blueprint || {}, null, 2),
+        staticAnalysis: JSON.stringify(
+          staticReport.sections.find((s) => s.header === sectionName) || {},
+          null,
+          2,
+        ),
+        content: `## ${sectionName}\n\n${response.content}`,
+        persona: persona.agent,
+        scope: "section",
+      });
 
       const remainingIssues = verification.issues;
 

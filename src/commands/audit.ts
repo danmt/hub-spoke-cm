@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import { Command } from "commander";
 import fs from "fs/promises";
@@ -8,7 +7,6 @@ import { AuditIssue } from "../agents/Auditor.js";
 import { IoService } from "../services/IoService.js";
 import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
-import { getGlobalConfig } from "../utils/config.js";
 
 export const auditCommand = new Command("audit")
   .description(
@@ -17,8 +15,6 @@ export const auditCommand = new Command("audit")
   .option("-f, --file <path>", "Specific file to audit")
   .action(async (options) => {
     try {
-      const config = getGlobalConfig();
-      const client = new GoogleGenAI({ apiKey: config.apiKey! });
       const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
 
       let targetFile: string;
@@ -71,11 +67,7 @@ export const auditCommand = new Command("audit")
 
       // 2. Agent Initialization
       const artifacts = await RegistryService.getAllArtifacts();
-      const agents = RegistryService.initializeAgents(
-        config,
-        client,
-        artifacts,
-      );
+      const agents = RegistryService.initializeAgents(artifacts);
       const auditors = RegistryService.getAgentsByType(agents, "auditor");
 
       if (auditors.length === 0)
@@ -103,12 +95,7 @@ export const auditCommand = new Command("audit")
       );
       console.log(chalk.blue(`\n🛡️  Auditing: ${path.basename(targetFile)}`));
       const { allIssues, workingFile, staticReport } =
-        await ValidationService.runFullAudit(
-          config,
-          client,
-          targetFile,
-          selectedAuditor.agent,
-        );
+        await ValidationService.runFullAudit(targetFile, selectedAuditor.agent);
 
       // Save persistent audit trace
       const reportPath = await IoService.saveAuditReport(
@@ -179,8 +166,6 @@ export const auditCommand = new Command("audit")
 
           // Using the new "Clean Slate" verification logic
           const result = await ValidationService.verifyAndFix(
-            config,
-            client,
             workingFile,
             sectionName,
             issues,

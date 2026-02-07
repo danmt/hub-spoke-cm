@@ -1,21 +1,18 @@
 // src/cli/commands/new.ts
-import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
-import { ArchitectAgent } from "../agents/Architect.js";
+import { Architect } from "../agents/Architect.js";
 import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
 import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
-import { getGlobalConfig } from "../utils/config.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")
   .action(async () => {
     const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
-    const config = getGlobalConfig();
     console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));
 
     const baseline = await inquirer.prompt([
@@ -47,12 +44,7 @@ export const newCommand = new Command("new")
     ]);
 
     const rawArtifacts = await RegistryService.getAllArtifacts();
-    const client = new GoogleGenAI({ apiKey: config.apiKey! });
-    const agents = RegistryService.initializeAgents(
-      config,
-      client,
-      rawArtifacts,
-    );
+    const agents = RegistryService.initializeAgents(rawArtifacts);
 
     try {
       RegistryService.validateIntegrity(agents);
@@ -63,7 +55,7 @@ export const newCommand = new Command("new")
     }
 
     const manifest = RegistryService.toManifest(agents);
-    const architect = new ArchitectAgent(client, manifest, baseline);
+    const architect = new Architect(manifest, baseline);
     console.log(chalk.blue("\n🧠 Architect is analyzing project scope..."));
 
     let currentInput =
@@ -72,7 +64,7 @@ export const newCommand = new Command("new")
 
     while (!isComplete) {
       try {
-        const response = await architect.chatWithUser(currentInput);
+        const response = await architect.chatWithUser({ input: currentInput });
         if (response.gapFound) {
           console.log(`\n${chalk.red("Architect [GAP]:")} ${response.message}`);
           return;
@@ -104,7 +96,9 @@ export const newCommand = new Command("new")
             );
           }
 
-          const blueprint = await assembler.agent.generateSkeleton(brief);
+          const { blueprint } = await assembler.agent.generateSkeleton({
+            brief,
+          });
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
           blueprint.components.forEach((c, i) => {
             const typeLabel = c.writerId === "code" ? "💻 CODE" : "📝 PROSE";
@@ -180,7 +174,7 @@ export const newCommand = new Command("new")
           ]);
 
           if (shouldFill) {
-            await FillService.execute(config, client, filePath, true);
+            await FillService.execute(filePath, true);
             console.log(chalk.bold.cyan("\n🚀 Hub populated successfully!"));
 
             const { shouldAudit } = await inquirer.prompt([
@@ -220,8 +214,6 @@ export const newCommand = new Command("new")
                 );
 
                 const { allIssues } = await ValidationService.runFullAudit(
-                  config,
-                  client,
                   filePath,
                   selectedAuditor.agent,
                 );
