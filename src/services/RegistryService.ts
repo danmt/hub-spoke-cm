@@ -1,4 +1,4 @@
-// src/core/services/RegistryService.ts
+// src/services/RegistryService.ts
 import { existsSync } from "fs";
 import fs from "fs/promises";
 import matter from "gray-matter";
@@ -8,6 +8,7 @@ import { Auditor } from "../agents/Auditor.js";
 import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
 import { IoService } from "./IoService.js";
+import { LoggerService } from "./LoggerService.js";
 
 export type ArtifactType = "persona" | "writer" | "assembler" | "auditor";
 
@@ -73,6 +74,9 @@ export class RegistryService {
     const allArtifacts: Artifact[] = [];
     try {
       const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
+      await LoggerService.debug("Scanning registry folders in workspace", {
+        workspaceRoot,
+      });
 
       for (const [folder, type] of Object.entries(folders)) {
         const dir = path.join(workspaceRoot, "agents", folder);
@@ -91,6 +95,8 @@ export class RegistryService {
             content: content.trim(),
           };
 
+          await LoggerService.debug(`Loaded artifact: ${type}/${id}`);
+
           if (type === "persona") {
             allArtifacts.push({
               ...base,
@@ -107,20 +113,22 @@ export class RegistryService {
           } else {
             allArtifacts.push({
               ...base,
-              writerIds: data.writerIds,
+              writerIds: data.writerIds || [],
               type: "assembler",
             } as AssemblerArtifact);
           }
         }
       }
-    } catch (e) {
-      /* Fallback to empty if not in workspace */
+    } catch (e: any) {
+      await LoggerService.warn("Registry scanning failed or not in workspace", {
+        error: e.message,
+      });
     }
     return allArtifacts;
   }
 
   static initializeAgents(artifacts: Artifact[]): AgentPair[] {
-    return artifacts.map((artifact): AgentPair => {
+    const agents = artifacts.map((artifact): AgentPair => {
       switch (artifact.type) {
         case "persona":
           return {
@@ -154,7 +162,7 @@ export class RegistryService {
               artifact.id,
               artifact.description,
               artifact.content,
-              artifact.writerIds,
+              (artifact as AssemblerArtifact).writerIds,
             ),
           };
         case "auditor":
@@ -169,6 +177,9 @@ export class RegistryService {
           };
       }
     });
+
+    LoggerService.debug(`Initialized ${agents.length} agents from registry.`);
+    return agents;
   }
 
   static getAgentsByType<T extends AgentPair["type"]>(
@@ -222,12 +233,13 @@ export class RegistryService {
       const missing = assembler.artifact.writerIds.filter(
         (id) => !availableWriterIds.has(id),
       );
-
       if (missing.length > 0) {
-        throw new Error(
-          `Registry Integrity Error: Assembler "${assembler.artifact.id}" requires missing writers: [${missing.join(", ")}]. ` +
-            `Available writers: [${Array.from(availableWriterIds).join(", ")}]`,
-        );
+        const errorMsg = `Assembler "${assembler.artifact.id}" missing writers: [${missing.join(", ")}]`;
+        LoggerService.error("Registry Integrity Error", {
+          assemblerId: assembler.artifact.id,
+          missing,
+        });
+        throw new Error(errorMsg);
       }
     }
   }

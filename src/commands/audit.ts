@@ -1,3 +1,4 @@
+// src/commands/audit.ts
 import chalk from "chalk";
 import { Command } from "commander";
 import fs from "fs/promises";
@@ -5,6 +6,7 @@ import inquirer from "inquirer";
 import path from "path";
 import { AuditIssue } from "../agents/Auditor.js";
 import { IoService } from "../services/IoService.js";
+import { LoggerService } from "../services/LoggerService.js";
 import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
 
@@ -16,7 +18,6 @@ export const auditCommand = new Command("audit")
   .action(async (options) => {
     try {
       const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
-
       let targetFile: string;
       let hubDir: string;
 
@@ -69,15 +70,20 @@ export const auditCommand = new Command("audit")
       const artifacts = await RegistryService.getAllArtifacts();
       const agents = RegistryService.initializeAgents(artifacts);
       const auditors = RegistryService.getAgentsByType(agents, "auditor");
+      const writers = RegistryService.getAgentsByType(agents, "writer");
+      const persona = RegistryService.getAgentsByType(agents, "persona").find(
+        (p) => p.artifact.id === hubMeta.personaId,
+      );
 
       if (auditors.length === 0)
         throw new Error("No auditors found in registry.");
+      if (!persona) throw new Error(`Persona ${hubMeta.personaId} not found.`);
 
       const { auditorId } = await inquirer.prompt([
         {
           type: "list",
           name: "auditorId",
-          message: "Select Auditor:",
+          message: "Select Auditor Strategy:",
           choices: auditors.map((a) => ({
             name: `${a.artifact.id}: ${a.artifact.description}`,
             value: a.artifact.id,
@@ -94,8 +100,13 @@ export const auditCommand = new Command("audit")
         chalk.cyan(`\n🧠 Step 2: Running Orchestrated Audit [${auditorId}]...`),
       );
       console.log(chalk.blue(`\n🛡️  Auditing: ${path.basename(targetFile)}`));
+
       const { allIssues, workingFile, staticReport } =
-        await ValidationService.runFullAudit(targetFile, selectedAuditor.agent);
+        await ValidationService.runFullAudit(
+          targetFile,
+          selectedAuditor.agent,
+          persona,
+        );
 
       // Save persistent audit trace
       const reportPath = await IoService.saveAuditReport(
@@ -133,7 +144,6 @@ export const auditCommand = new Command("audit")
         {} as Record<string, AuditIssue[]>,
       );
 
-      // SURGICAL LOOP
       let fixesApplied = 0;
       for (const sectionName of Object.keys(groupedIssues)) {
         const issues = groupedIssues[sectionName];
@@ -164,12 +174,13 @@ export const auditCommand = new Command("audit")
         while (!isFixed) {
           process.stdout.write(chalk.gray(`   🏗️  Re-writing & Verifying... `));
 
-          // Using the new "Clean Slate" verification logic
           const result = await ValidationService.verifyAndFix(
             workingFile,
             sectionName,
             issues,
             selectedAuditor.agent,
+            persona,
+            writers,
           );
 
           if (result.success) {
@@ -214,11 +225,12 @@ export const auditCommand = new Command("audit")
       } else {
         await fs.unlink(workingFile);
       }
-    } catch (error) {
-      console.error(
-        chalk.red("\n❌ Audit Error:"),
-        error instanceof Error ? error.message : String(error),
-      );
+    } catch (error: any) {
+      await LoggerService.error("Audit Command Fatal Error", {
+        error: error.message,
+        stack: error.stack,
+      });
+      console.error(chalk.red("\n❌ Audit Error:"), error.message);
       process.exit(1);
     }
   });

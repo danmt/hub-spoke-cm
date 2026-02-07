@@ -1,6 +1,7 @@
-// src/core/services/ParserService.ts
+// src/services/ParserService.ts
 import matter from "gray-matter";
 import { ContentFrontmatter, FrontmatterSchema } from "../types/index.js";
+import { LoggerService } from "./LoggerService.js";
 
 export interface ParsedFile {
   frontmatter: ContentFrontmatter;
@@ -12,15 +13,23 @@ export class ParserService {
    * Parses markdown into frontmatter and H2-based sections.
    */
   static parseMarkdown(rawContent: string): ParsedFile {
-    const { data, content } = matter(rawContent);
-    const frontmatter = FrontmatterSchema.passthrough().parse(
-      data,
-    ) as ContentFrontmatter;
+    try {
+      const { data, content } = matter(rawContent);
+      const frontmatter = FrontmatterSchema.passthrough().parse(
+        data,
+      ) as ContentFrontmatter;
+      const sections = this.splitSections(content);
 
-    return {
-      frontmatter,
-      sections: this.splitSections(content),
-    };
+      LoggerService.debug("Markdown parsed successfully", {
+        title: frontmatter.title,
+        sectionCount: Object.keys(sections).length,
+      });
+
+      return { frontmatter, sections };
+    } catch (err: any) {
+      LoggerService.error("Markdown parsing failed", { error: err.message });
+      throw err;
+    }
   }
 
   /**
@@ -30,6 +39,7 @@ export class ParserService {
     frontmatter: Record<string, any>,
     sections: Record<string, string>,
   ): string {
+    LoggerService.debug("Reconstructing markdown content");
     const yamlLines = Object.entries(frontmatter).map(([k, v]) => {
       const value =
         typeof v === "object" ? JSON.stringify(v) : JSON.stringify(v);

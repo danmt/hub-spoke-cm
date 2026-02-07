@@ -1,6 +1,7 @@
 // src/services/AiService.ts
 import { GoogleGenAI } from "@google/genai";
 import { getGlobalConfig } from "../utils/config.js";
+import { LoggerService } from "./LoggerService.js";
 
 export interface AiOptions {
   model?: string;
@@ -30,13 +31,19 @@ export class AiService {
     const ai = this.getClient();
     const modelId = options.model || "gemini-2.0-flash";
 
+    // Trace: Log the outgoing request details
+    await LoggerService.debug("AI Request Initiated", {
+      modelId,
+      promptSnippet: prompt,
+      systemInstructionSnippet: options.systemInstruction,
+      isJson: !!options.isJson,
+      history: !!options.history,
+    });
+
     while (true) {
       try {
         const response = await ai.models.generateContent({
           model: modelId,
-
-          systemInstruction: options.systemInstruction,
-          // Support for both single-turn (prompt) and multi-turn (history)
           contents: options.history
             ? [...options.history, { role: "user", parts: [{ text: prompt }] }]
             : [{ role: "user", parts: [{ text: prompt }] }],
@@ -46,12 +53,31 @@ export class AiService {
           },
         });
 
-        return response.text;
+        const text = response.text;
+
+        // Trace: Log successful response
+        await LoggerService.debug("AI Response Received", {
+          textSnippet: text,
+        });
+
+        return text;
       } catch (error: any) {
+        // Trace: Record failure details
+        await LoggerService.error("AI Execution Error", {
+          message: error.message,
+          stack: error.stack,
+          modelId,
+        });
+
         const isRecoverable =
           error.message?.includes("503") || error.message?.includes("429");
         if (isRecoverable && options.onRetry) {
-          if (await options.onRetry(error)) continue;
+          if (await options.onRetry(error)) {
+            await LoggerService.info(
+              "AI Service retrying after recoverable error.",
+            );
+            continue;
+          }
         }
         throw error;
       }

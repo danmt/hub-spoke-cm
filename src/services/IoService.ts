@@ -111,6 +111,7 @@ export class IoService {
   ): Promise<void> {
     const dirs = [
       ".hub",
+      ".hub/logs",
       "posts",
       "agents/personas",
       "agents/writers",
@@ -186,7 +187,7 @@ description: "General quality, flow, and duplication check."
       path.join(rootDir, "agents/auditors/standard.md"),
       standardAuditor,
     );
-    const gitignore = ".hub/tmp/*\n.hub/audits/*.tmp";
+    const gitignore = ".hub/tmp/*\n.hub/audits/*.tmp\n.hub/logs/*";
     await fs.writeFile(path.join(rootDir, ".gitignore"), gitignore, "utf-8");
   }
 

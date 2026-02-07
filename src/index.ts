@@ -14,6 +14,7 @@ import { mapCommand } from "./commands/map.js";
 import { newCommand } from "./commands/new.js";
 import { registryCommand } from "./commands/registry.js";
 import { spawnCommand } from "./commands/spawn.js";
+import { LoggerService } from "./services/LoggerService.js";
 
 // Load environment variables
 dotenv.config();
@@ -40,13 +41,10 @@ async function main() {
   program.addCommand(auditCommand);
 
   // Global Error Handling
-  program.on("command:*", () => {
-    console.error(
-      chalk.red(
-        "Invalid command: %s\nSee --help for a list of available commands.",
-      ),
-      program.args.join(" "),
-    );
+  program.on("command:*", async () => {
+    const msg = `Invalid command: ${program.args.join(" ")}\nSee --help for a list of available commands.`;
+    await LoggerService.warn(msg);
+    console.error(chalk.red(msg));
     process.exit(1);
   });
 
@@ -58,7 +56,12 @@ async function main() {
   await program.parseAsync(process.argv);
 }
 
-main().catch((err) => {
-  console.error(chalk.red("Fatal Error:"), err);
+main().catch(async (err) => {
+  await LoggerService.error("Fatal Application Error", {
+    message: err.message,
+    stack: err.stack,
+  });
+
+  console.error(chalk.red("\n❌ Fatal Error:"), err.message);
   process.exit(1);
 });

@@ -1,4 +1,4 @@
-// src/cli/commands/new.ts
+// src/commands/new.ts
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
@@ -6,6 +6,7 @@ import path from "path";
 import { Architect } from "../agents/Architect.js";
 import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
+import { LoggerService } from "../services/LoggerService.js";
 import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
 
@@ -66,6 +67,9 @@ export const newCommand = new Command("new")
       try {
         const response = await architect.chatWithUser({ input: currentInput });
         if (response.gapFound) {
+          await LoggerService.warn("Architect detected a gap", {
+            message: response.message,
+          });
           console.log(`\n${chalk.red("Architect [GAP]:")} ${response.message}`);
           return;
         }
@@ -101,10 +105,9 @@ export const newCommand = new Command("new")
           });
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
           blueprint.components.forEach((c, i) => {
-            const typeLabel = c.writerId === "code" ? "💻 CODE" : "📝 PROSE";
-
             console.log(
-              chalk.white(`#${i + 1} [${typeLabel}] `) + chalk.bold(c.header),
+              chalk.white(`#${i + 1} [${c.writerId.toUpperCase()}] `) +
+                chalk.bold(c.header),
             );
           });
 
@@ -172,9 +175,37 @@ export const newCommand = new Command("new")
               default: true,
             },
           ]);
-
           if (shouldFill) {
-            await FillService.execute(filePath, true);
+            const personas = RegistryService.getAgentsByType(agents, "persona");
+            const persona = personas.find(
+              (p) => p.artifact.id === brief.personaId,
+            );
+            const writers = RegistryService.getAgentsByType(agents, "writer");
+
+            if (!persona) {
+              throw new Error(
+                `Persona "${brief.personaId}" not found in workspace. ` +
+                  `Available: ${personas.map((a) => a.artifact.id).join(", ")}`,
+              );
+            }
+
+            await FillService.execute(
+              filePath,
+              blueprint.components.map((c) => c.header),
+              persona,
+              writers,
+              (p) => {
+                if (p.status === "starting")
+                  process.stdout.write(
+                    chalk.gray(
+                      `   Generating [${p.writerId}] "${p.header}"... `,
+                    ),
+                  );
+                else if (p.status === "completed")
+                  process.stdout.write(chalk.green("Done ✅\n"));
+              },
+            );
+
             console.log(chalk.bold.cyan("\n🚀 Hub populated successfully!"));
 
             const { shouldAudit } = await inquirer.prompt([
@@ -216,6 +247,7 @@ export const newCommand = new Command("new")
                 const { allIssues } = await ValidationService.runFullAudit(
                   filePath,
                   selectedAuditor.agent,
+                  persona,
                 );
 
                 if (allIssues.length === 0) {
