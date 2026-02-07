@@ -1,12 +1,10 @@
 // src/cli/commands/fill.ts
-import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
 import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
-import { getGlobalConfig } from "../utils/config.js";
 
 /**
  * fillCommand
@@ -21,8 +19,6 @@ export const fillCommand = new Command("fill")
   )
   .action(async (options) => {
     try {
-      const config = getGlobalConfig();
-      const client = new GoogleGenAI({ apiKey: config.apiKey! });
       const currentDir = process.cwd();
       let targetFile: string;
 
@@ -56,7 +52,7 @@ export const fillCommand = new Command("fill")
 
       // Execute the service. autoAccept is false here to allow
       // the user to pick sections via checkboxes.
-      await FillService.execute(config, client, targetFile, false);
+      await FillService.execute(targetFile, false);
 
       console.log(chalk.bold.green(`\n✨ Generation complete.`));
     } catch (error) {

@@ -1,30 +1,22 @@
 // src/cli/commands/spawn.ts
-import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
-import { ArchitectAgent } from "../agents/Architect.js";
+import { Architect } from "../agents/Architect.js";
 import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
 import { ParserService } from "../services/ParserService.js";
 import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
-import { getGlobalConfig } from "../utils/config.js";
 
 export const spawnCommand = new Command("spawn")
   .description("Create a new Spoke article by expanding a Hub section")
   .action(async () => {
     try {
-      const config = getGlobalConfig();
       const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
       const rawArtifacts = await RegistryService.getAllArtifacts();
-      const client = new GoogleGenAI({ apiKey: config.apiKey! });
-      const agents = RegistryService.initializeAgents(
-        config,
-        client,
-        rawArtifacts,
-      );
+      const agents = RegistryService.initializeAgents(rawArtifacts);
 
       try {
         RegistryService.validateIntegrity(agents);
@@ -60,24 +52,22 @@ export const spawnCommand = new Command("spawn")
         },
       ]);
 
-      const architect = new ArchitectAgent(
-        client,
-        RegistryService.toManifest(agents),
-        {
-          topic: targetSection,
-          language: hubMeta.language,
-          audience: hubMeta.audience,
-          goal: `Expand on '${targetSection}' from the ${hubMeta.title} hub.`,
-          personaId: hubMeta.personaId,
-        },
-      );
+      const architect = new Architect(RegistryService.toManifest(agents), {
+        topic: targetSection,
+        language: hubMeta.language,
+        audience: hubMeta.audience,
+        goal: `Expand on '${targetSection}' from the ${hubMeta.title} hub.`,
+        personaId: hubMeta.personaId,
+      });
 
       let currentInput = `Plan a Spoke for "${targetSection}".`;
       let isComplete = false;
 
       while (!isComplete) {
         try {
-          const response = await architect.chatWithUser(currentInput);
+          const response = await architect.chatWithUser({
+            input: currentInput,
+          });
           if (response.gapFound)
             return console.log(chalk.red("\n[GAP]: ") + response.message);
           console.log(`\n${chalk.green("Architect:")} ${response.message}`);
@@ -99,7 +89,9 @@ export const spawnCommand = new Command("spawn")
               );
             }
 
-            const blueprint = await assembler.agent.generateSkeleton(brief);
+            const { blueprint } = await assembler.agent.generateSkeleton({
+              brief,
+            });
             const blueprintData: Record<string, any> = {};
             const writerMap: Record<string, string> = {};
 
@@ -158,7 +150,7 @@ export const spawnCommand = new Command("spawn")
             ]);
 
             if (shouldFill) {
-              await FillService.execute(config, client, filePath, true);
+              await FillService.execute(filePath, true);
               console.log(
                 chalk.cyan("\n🚀 Spoke populated. Running stepped audit..."),
               );
@@ -200,8 +192,6 @@ export const spawnCommand = new Command("spawn")
                   );
 
                   const { allIssues } = await ValidationService.runFullAudit(
-                    config,
-                    client,
                     filePath,
                     selectedAuditor.agent,
                   );

@@ -1,6 +1,6 @@
 // src/agents/Auditor.ts
-import { GoogleGenAI } from "@google/genai";
-import { GlobalConfig } from "../utils/config.js";
+import { AiService } from "../services/AiService.js";
+import { getGlobalConfig } from "../utils/config.js";
 import { Persona } from "./Persona.js";
 
 export interface AuditIssue {
@@ -16,35 +16,39 @@ export interface AuditIssue {
   suggestion: string;
 }
 
-export interface AuditResult {
+export interface AuditorResponse {
   passed: boolean;
   issues: AuditIssue[];
   summary: string;
 }
 
-export interface AuditContext {
+export interface AuditorContext {
   title: string;
   goal: string;
   blueprint: string;
   staticAnalysis: string;
+  content: string;
+  persona: Persona;
+  scope: "section" | "global";
+  onRetry?: (error: Error) => Promise<boolean>;
+}
+
+export interface IAuditor {
+  id: string;
+  description: string;
+  auditStrategy: string;
+  analyze(ctx: AuditorContext): Promise<AuditorResponse>;
 }
 
 export class Auditor {
   constructor(
-    private client: GoogleGenAI,
-    private config: GlobalConfig,
     public id: string,
     public description: string,
     public auditStrategy: string,
   ) {}
 
-  async analyze(
-    ctx: AuditContext,
-    content: string,
-    persona: Persona,
-    scope: "section" | "global",
-  ): Promise<AuditResult> {
-    const modelName = this.config.architectModel || "gemini-3-flash";
+  async analyze(ctx: AuditorContext): Promise<AuditorResponse> {
+    const modelName = getGlobalConfig().architectModel || "gemini-2.0-flash";
 
     const systemInstruction = `
       You are a Content Auditor. 
@@ -56,9 +60,9 @@ export class Auditor {
       ORIGINAL BLUEPRINT:
       ${ctx.blueprint}
 
-      Persona Context: ${persona.name} (${persona.tone})
+      Persona Context: ${ctx.persona.name} (${ctx.persona.tone})
 
-      Audit Scope: ${scope.toUpperCase()}
+      Audit Scope: ${ctx.scope.toUpperCase()}
 
       STATIC ANALYSIS DATA:
       ${ctx.staticAnalysis}
@@ -78,15 +82,13 @@ export class Auditor {
       }
     `;
 
-    const result = await this.client.models.generateContent({
+    const text = await AiService.execute(ctx.content, {
       model: modelName,
-      config: {
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        responseMimeType: "application/json",
-      },
-      contents: [{ role: "user", parts: [{ text: content }] }],
+      systemInstruction,
+      isJson: true,
+      onRetry: ctx.onRetry,
     });
 
-    return JSON.parse(result.text ?? "{}") as AuditResult;
+    return JSON.parse(text ?? "{}") as AuditorResponse;
   }
 }

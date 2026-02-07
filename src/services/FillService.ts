@@ -1,9 +1,7 @@
 // src/services/FillService.ts
-import { GoogleGenAI } from "@google/genai";
 import chalk from "chalk";
 import fs from "fs/promises";
 import inquirer from "inquirer";
-import { GlobalConfig } from "../utils/config.js";
 import { IoService } from "./IoService.js";
 import { ParserService } from "./ParserService.js";
 import { RegistryService } from "./RegistryService.js";
@@ -11,12 +9,7 @@ import { RegistryService } from "./RegistryService.js";
 const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
 export class FillService {
-  static async execute(
-    config: GlobalConfig,
-    client: GoogleGenAI,
-    filePath: string,
-    autoAccept = false,
-  ) {
+  static async execute(filePath: string, autoAccept = false) {
     const content = await fs.readFile(filePath, "utf-8");
     const parsed = ParserService.parseMarkdown(content);
     const sectionHeaders = Object.keys(parsed.sections);
@@ -42,11 +35,7 @@ export class FillService {
     }
 
     const rawArtifacts = await RegistryService.getAllArtifacts();
-    const agents = RegistryService.initializeAgents(
-      config,
-      client,
-      rawArtifacts,
-    );
+    const agents = RegistryService.initializeAgents(rawArtifacts);
     const personas = RegistryService.getAgentsByType(agents, "persona");
     const writers = RegistryService.getAgentsByType(agents, "writer");
 
