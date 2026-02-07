@@ -1,16 +1,17 @@
-// src/cli/commands/fill.ts
+// src/commands/fill.ts
 import chalk from "chalk";
 import { Command } from "commander";
+import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
 import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
+import { LoggerService } from "../services/LoggerService.js";
+import { ParserService } from "../services/ParserService.js";
+import { RegistryService } from "../services/RegistryService.js";
 
-/**
- * fillCommand
- * Entry point for manual content generation.
- * Locates the target file and triggers the FillService.
- */
+const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
+
 export const fillCommand = new Command("fill")
   .description("Generate content for sections marked with TODO blockquotes")
   .option(
@@ -23,10 +24,8 @@ export const fillCommand = new Command("fill")
       let targetFile: string;
 
       if (options.file) {
-        // If a specific file is provided, resolve its absolute path
         targetFile = path.resolve(currentDir, options.file);
       } else {
-        // Otherwise, find the Hub root and target the main hub.md
         const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
         const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
 
@@ -38,7 +37,7 @@ export const fillCommand = new Command("fill")
           {
             type: "list",
             name: "targetHub",
-            message: "Select a Hub to map:",
+            message: "Select a Hub to fill:",
             choices: hubs,
           },
         ]);
@@ -50,16 +49,85 @@ export const fillCommand = new Command("fill")
         chalk.bold(`\n🔍 Target: ${chalk.cyan(path.basename(targetFile))}`),
       );
 
-      // Execute the service. autoAccept is false here to allow
-      // the user to pick sections via checkboxes.
-      await FillService.execute(targetFile, false);
+      const content = await fs.readFile(targetFile, "utf-8");
+      const parsed = ParserService.parseMarkdown(content);
+
+      const fillableHeaders = Object.entries(parsed.sections)
+        .filter(([_, body]) => TODO_REGEX.test(body))
+        .map(([header]) => header);
+
+      if (fillableHeaders.length === 0) {
+        return console.log(
+          chalk.yellow("✨ No sections marked with TODO found."),
+        );
+      }
+
+      const { selection } = await inquirer.prompt([
+        {
+          type: "checkbox",
+          name: "selection",
+          message: "Select sections to generate (Sequential):",
+          choices: fillableHeaders.map((h) => ({ name: h, checked: true })),
+        },
+      ]);
+
+      const rawArtifacts = await RegistryService.getAllArtifacts();
+      const agents = RegistryService.initializeAgents(rawArtifacts);
+      const persona = RegistryService.getAgentsByType(agents, "persona").find(
+        (p) => p.artifact.id === parsed.frontmatter.personaId,
+      );
+      const writers = RegistryService.getAgentsByType(agents, "writer");
+
+      if (!persona)
+        throw new Error(`Persona "${parsed.frontmatter.personaId}" not found.`);
+
+      console.log(
+        chalk.blue(`\n🚀 Generating ${selection.length} sections...\n`),
+      );
+
+      // Implementation of original retry logic wrapped around the service call
+      for (let i = 0; i < selection.length; i++) {
+        const header = selection[i];
+        try {
+          await FillService.execute(
+            targetFile,
+            [header],
+            persona,
+            writers,
+            (p) => {
+              if (p.status === "starting") {
+                process.stdout.write(
+                  chalk.gray(`   Generating [${p.writerId}] "${p.header}"... `),
+                );
+              } else if (p.status === "completed") {
+                process.stdout.write(chalk.green("Done ✅\n"));
+              }
+            },
+          );
+        } catch (err: any) {
+          process.stdout.write(chalk.red("Failed ❌\n"));
+          const { retry } = await inquirer.prompt([
+            {
+              type: "confirm",
+              name: "retry",
+              message: `Retry section "${header}"?`,
+            },
+          ]);
+          if (retry) {
+            i--; // Decrement index to repeat the same header
+            continue;
+          }
+          break; // Stop sequential generation on failure if not retried
+        }
+      }
 
       console.log(chalk.bold.green(`\n✨ Generation complete.`));
-    } catch (error) {
-      console.error(
-        chalk.red("\n❌ Fill Error:"),
-        error instanceof Error ? error.message : String(error),
-      );
+    } catch (error: any) {
+      await LoggerService.error("Fill Command Failed", {
+        error: error.message,
+        stack: error.stack,
+      });
+      console.error(chalk.red("\n❌ Fill Error:"), error.message);
       process.exit(1);
     }
   });

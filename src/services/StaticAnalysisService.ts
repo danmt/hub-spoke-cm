@@ -1,5 +1,7 @@
+// src/services/StaticAnalysisService.ts
 import { flesch } from "flesch";
 import natural from "natural";
+import { LoggerService } from "./LoggerService.js";
 import { ParserService } from "./ParserService.js";
 
 const { WordTokenizer, SentimentAnalyzer, PorterStemmer, PorterStemmerEs } =
@@ -30,7 +32,7 @@ export class StaticAnalysisService {
 
   /**
    * Performs deep analysis on a per-section and global basis.
-   * Grounded in library-verified metrics for English and Spanish.
+   * Logs calculated metrics for trace observability.
    */
   static analyze(content: string, expectedLanguage: string): FullAuditReport {
     const parsed = ParserService.parseMarkdown(content);
@@ -73,7 +75,7 @@ export class StaticAnalysisService {
         .slice(0, 3)
         .map(([word]) => word);
 
-      return {
+      const analysis = {
         header,
         wordCount: tokens.length,
         readingEase: Math.round(ease),
@@ -81,6 +83,15 @@ export class StaticAnalysisService {
         topKeywords,
         todoCount: (sectionBody.match(/>\s*\*\*?TODO:?\*?/gi) || []).length,
       };
+
+      // Trace: Log granular section metrics
+      LoggerService.debug(`StaticAnalysis: Section "${header}" analyzed`, {
+        wordCount: analysis.wordCount,
+        readingEase: analysis.readingEase,
+        todoCount: analysis.todoCount,
+      });
+
+      return analysis;
     });
 
     const totalWords = sectionResults.reduce((acc, s) => acc + s.wordCount, 0);
@@ -88,7 +99,7 @@ export class StaticAnalysisService {
       sectionResults.reduce((acc, s) => acc + s.readingEase, 0) /
       (sectionResults.length || 1);
 
-    return {
+    const report = {
       sections: sectionResults,
       global: {
         totalWordCount: totalWords,
@@ -98,5 +109,13 @@ export class StaticAnalysisService {
           (sectionResults.length || 1),
       },
     };
+
+    // Trace: Log global document health
+    LoggerService.debug("StaticAnalysis: Global report generated", {
+      totalWords: report.global.totalWordCount,
+      avgReadingEase: report.global.overallReadingEase,
+    });
+
+    return report;
   }
 }

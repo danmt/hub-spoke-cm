@@ -1,4 +1,4 @@
-// src/cli/commands/spawn.ts
+// src/commands/spawn.ts
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
@@ -150,10 +150,40 @@ export const spawnCommand = new Command("spawn")
             ]);
 
             if (shouldFill) {
-              await FillService.execute(filePath, true);
-              console.log(
-                chalk.cyan("\n🚀 Spoke populated. Running stepped audit..."),
+              const personas = RegistryService.getAgentsByType(
+                agents,
+                "persona",
               );
+              const persona = personas.find(
+                (p) => p.artifact.id === brief.personaId,
+              );
+              const writers = RegistryService.getAgentsByType(agents, "writer");
+
+              if (!persona) {
+                throw new Error(
+                  `Persona "${brief.personaId}" not found in workspace. ` +
+                    `Available: ${personas.map((a) => a.artifact.id).join(", ")}`,
+                );
+              }
+
+              await FillService.execute(
+                filePath,
+                blueprint.components.map((c) => c.header),
+                persona as any,
+                writers as any,
+                (p) => {
+                  if (p.status === "starting")
+                    process.stdout.write(
+                      chalk.gray(
+                        `   Generating [${p.writerId}] "${p.header}"... `,
+                      ),
+                    );
+                  else if (p.status === "completed")
+                    process.stdout.write(chalk.green("Done ✅\n"));
+                },
+              );
+
+              console.log(chalk.cyan("\n🚀 Spoke populated."));
 
               const { shouldAudit } = await inquirer.prompt([
                 {
@@ -194,6 +224,7 @@ export const spawnCommand = new Command("spawn")
                   const { allIssues } = await ValidationService.runFullAudit(
                     filePath,
                     selectedAuditor.agent,
+                    persona,
                   );
 
                   if (allIssues.length === 0) {
