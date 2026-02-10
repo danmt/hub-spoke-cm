@@ -11,6 +11,7 @@ import { LoggerService } from "./LoggerService.js";
 export interface ParsedFile {
   frontmatter: ContentFrontmatter;
   sections: Record<string, string>;
+  content: string;
 }
 
 export class ParserService {
@@ -30,7 +31,7 @@ export class ParserService {
         sectionCount: Object.keys(sections).length,
       });
 
-      return { frontmatter, sections };
+      return { frontmatter, sections, content };
     } catch (err: any) {
       LoggerService.error("Markdown parsing failed", { error: err.message });
       throw err;
