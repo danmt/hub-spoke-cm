@@ -89,8 +89,11 @@ export const spawnCommand = new Command("spawn")
               );
             }
 
-            const { blueprint } = await assembler.agent.generateSkeleton({
-              brief,
+            const { blueprint } = await assembler.agent.assemble({
+              audience: brief.audience,
+              goal: brief.goal,
+              language: brief.language,
+              topic: brief.topic,
             });
             const blueprintData: Record<string, any> = {};
             const writerMap: Record<string, string> = {};
