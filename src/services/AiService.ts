@@ -6,7 +6,6 @@ import { LoggerService } from "./LoggerService.js";
 export interface AiOptions {
   model?: string;
   systemInstruction?: string;
-  isJson?: boolean;
   history?: any[]; // For stateful Architect chats
   onRetry?: (error: Error) => Promise<boolean>;
 }
@@ -36,7 +35,6 @@ export class AiService {
       modelId,
       promptSnippet: prompt,
       systemInstructionSnippet: options.systemInstruction,
-      isJson: !!options.isJson,
       history: !!options.history,
     });
 
@@ -49,7 +47,6 @@ export class AiService {
             : [{ role: "user", parts: [{ text: prompt }] }],
           config: {
             systemInstruction: options.systemInstruction,
-            responseMimeType: options.isJson ? "application/json" : undefined,
           },
         });
 

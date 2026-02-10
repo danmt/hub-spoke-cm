@@ -57,7 +57,6 @@ export const newCommand = new Command("new")
 
     const manifest = RegistryService.toManifest(agents);
     const architect = new Architect(manifest, baseline);
-    console.log(chalk.blue("\n🧠 Architect is analyzing project scope..."));
 
     let currentInput =
       "Analyze the baseline and ask me follow-up questions if needed.";
@@ -65,6 +64,8 @@ export const newCommand = new Command("new")
 
     while (!isComplete) {
       try {
+        console.log(chalk.blue("\n🧠 Architect is thinking..."));
+
         const response = await architect.chatWithUser({ input: currentInput });
         if (response.gapFound) {
           await LoggerService.warn("Architect detected a gap", {
@@ -100,8 +101,11 @@ export const newCommand = new Command("new")
             );
           }
 
-          const { blueprint } = await assembler.agent.generateSkeleton({
-            brief,
+          const { blueprint } = await assembler.agent.assemble({
+            audience: brief.audience,
+            goal: brief.goal,
+            language: brief.language,
+            topic: brief.topic,
           });
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
           blueprint.components.forEach((c, i) => {

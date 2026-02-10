@@ -33,13 +33,6 @@ export interface AuditorContext {
   onRetry?: (error: Error) => Promise<boolean>;
 }
 
-export interface IAuditor {
-  id: string;
-  description: string;
-  auditStrategy: string;
-  analyze(ctx: AuditorContext): Promise<AuditorResponse>;
-}
-
 export class Auditor {
   constructor(
     public id: string,
@@ -47,7 +40,7 @@ export class Auditor {
     public auditStrategy: string,
   ) {}
 
-  async analyze(ctx: AuditorContext): Promise<AuditorResponse> {
+  async audit(ctx: AuditorContext): Promise<AuditorResponse> {
     const modelName = getGlobalConfig().architectModel || "gemini-2.0-flash";
 
     const systemInstruction = `
@@ -68,27 +61,63 @@ export class Auditor {
       ${ctx.staticAnalysis}
 
       TASK:
-      Analyze the provided content. Flag drift, duplication, or poor cohesion.
+      Audit the content. Flag drift, duplication, or poor cohesion.
       If scope is "section", focus only on that section's specific intent.
       If scope is "global", focus on the flow and overall consistency.
 
-      OUTPUT FORMAT (RAW JSON ONLY):
-      {
-        "passed": boolean,
-        "summary": "assessment",
-        "issues": [
-          { "section": "header", "type": "...", "severity": "...", "message": "...", "suggestion": "..." }
-        ]
-      }
+      OUTPUT FORMAT (Strict Delimiters):
+      [PASSED]true|false[/PASSED]
+      [SUMMARY]General assessment summary[/SUMMARY]
+      
+      [ISSUE]
+      [SECTION]Header Name[/SECTION]
+      [TYPE]structure|cohesion|duplication|intent_drift|readability[/TYPE]
+      [SEVERITY]low|medium|high[/SEVERITY]
+      [MESSAGE]Description of the issue[/MESSAGE]
+      [SUGGESTION]Specific fix or improvement[/SUGGESTION]
+      [/ISSUE]
     `;
 
     const text = await AiService.execute(ctx.content, {
       model: modelName,
       systemInstruction,
-      isJson: true,
       onRetry: ctx.onRetry,
     });
 
-    return JSON.parse(text ?? "{}") as AuditorResponse;
+    const issues: AuditIssue[] = [];
+    const issueRegex = /\[ISSUE\]([\s\S]*?)\[\/ISSUE\]/gi;
+    let match;
+
+    while ((match = issueRegex.exec(text)) !== null) {
+      const block = match[1];
+      issues.push({
+        section:
+          block.match(/\[SECTION\](.*?)\[\/SECTION\]/i)?.[1].trim() ||
+          "Unknown",
+        type:
+          (block.match(/\[TYPE\](.*?)\[\/TYPE\]/i)?.[1].trim() as any) ||
+          "readability",
+        severity:
+          (block
+            .match(/\[SEVERITY\](.*?)\[\/SEVERITY\]/i)?.[1]
+            .trim() as any) || "low",
+        message:
+          block.match(/\[MESSAGE\](.*?)\[\/MESSAGE\]/i)?.[1].trim() || "",
+        suggestion:
+          block
+            .match(/\[SUGGESTION\]([\s\S]*?)\[\/SUGGESTION\]/i)?.[1]
+            .trim() || "",
+      });
+    }
+
+    return {
+      passed:
+        text
+          .match(/\[PASSED\](.*?)\[\/PASSED\]/i)?.[1]
+          .trim()
+          .toLowerCase() === "true",
+      summary: text.match(/\[SUMMARY\](.*?)\[\/SUMMARY\]/i)?.[1].trim() || "",
+      issues,
+    };
   }
 }

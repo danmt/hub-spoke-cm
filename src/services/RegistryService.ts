@@ -192,30 +192,49 @@ export class RegistryService {
   }
 
   /**
-   * Converts a list of artifacts into a JSON manifest for the AI.
+   * Converts active agents into a detailed Functional Capability Map.
+   * This allows the Architect to see the actual strategies available.
    */
   static toManifest(agents: AgentPair[]): string {
     const manifest = {
       personas: agents
-        .filter((a) => a.type === "persona")
+        .filter(
+          (a): a is Extract<AgentPair, { type: "persona" }> =>
+            a.type === "persona",
+        )
         .map((a) => ({
           id: a.artifact.id,
+          name: a.artifact.name,
           description: a.artifact.description,
+          capabilities: {
+            tone: a.artifact.tone,
+            language: a.artifact.language,
+          },
         })),
       writers: agents
-        .filter((a) => a.type === "writer")
+        .filter(
+          (a): a is Extract<AgentPair, { type: "writer" }> =>
+            a.type === "writer",
+        )
         .map((a) => ({
           id: a.artifact.id,
           description: a.artifact.description,
         })),
       assemblers: agents
-        .filter((a) => a.type === "assembler")
+        .filter(
+          (a): a is Extract<AgentPair, { type: "assembler" }> =>
+            a.type === "assembler",
+        )
         .map((a) => ({
           id: a.artifact.id,
           description: a.artifact.description,
+          supportedWriters: a.artifact.writerIds,
         })),
       auditors: agents
-        .filter((a) => a.type === "auditor")
+        .filter(
+          (a): a is Extract<AgentPair, { type: "auditor" }> =>
+            a.type === "auditor",
+        )
         .map((a) => ({
           id: a.artifact.id,
           description: a.artifact.description,

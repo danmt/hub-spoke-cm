@@ -1,9 +1,9 @@
+// src/agents/Writer.ts
 import { AiService } from "../services/AiService.js";
 import { getGlobalConfig } from "../utils/config.js";
 import { Persona } from "./Persona.js";
 
 export interface WriterContext {
-  header: string;
   intent: string;
   topic: string;
   goal: string;
@@ -11,7 +11,6 @@ export interface WriterContext {
   language: string;
   persona: Persona;
   precedingBridge?: string;
-  upcomingIntents?: string[];
   isFirst: boolean;
   isLast: boolean;
   onRetry?: (error: Error) => Promise<boolean>;
@@ -22,14 +21,7 @@ export interface WriterResponse {
   bridge: string;
 }
 
-export interface IWriter {
-  id: string;
-  description: string;
-  writingStrategy: string;
-  write(ctx: WriterContext): Promise<WriterResponse>;
-}
-
-export class Writer implements IWriter {
+export class Writer {
   constructor(
     public id: string,
     public description: string,
@@ -37,52 +29,50 @@ export class Writer implements IWriter {
   ) {}
 
   async write(ctx: WriterContext): Promise<WriterResponse> {
-    const modelName = getGlobalConfig().writerModel || "gemini-2.0-flash";
+    const modelName = getGlobalConfig().writerModel || "gemini-3-flash";
 
     const systemInstruction = `
       ${ctx.persona.getInstructions(ctx)}
       
-      WRITING STRATEGY: ${this.writingStrategy}
+      WRITING STRATEGY: 
+      ${this.writingStrategy}
               
-      TASK GUIDELINES:
-      1. Generate the section content based on the INTENT.
-      2. Maintain flow by acknowledging the PREVIOUSLY ESTABLISHED context without repeating it.
-      3. Do NOT "steal" content from the REMAINING TOPICS.
-      4. Provide a "BRIDGE": A short summary of what you wrote to help the next writer maintain continuity.
+      CORE EXECUTION RULES:
+      1. Follow the INTENT micro-brief exactly. It defines your scope boundaries.
+      2. Use the PREVIOUS BRIDGE for narrative continuity.
+      3. Do not repeat information or "steal" topics reserved for other sections.
     `.trim();
 
     const prompt = `
-      SECTION HEADER: ${ctx.header}
       INTENT: ${ctx.intent}
-      TOPIC: ${ctx.topic}
-      GOAL: ${ctx.goal}
-      AUDIENCE: ${ctx.audience}
+      
+      CONTEXT:
+      - Goal: ${ctx.goal}
+      - Target Audience: ${ctx.audience}
+      - Previous Context: ${ctx.precedingBridge || "Beginning of document"}
+      - Progress: ${ctx.isFirst ? "Start" : ctx.isLast ? "Conclusion" : "In-Progress"}
 
-      PROGRESS CONTEXT:
-      ${ctx.isFirst ? "- This is the START of the article." : ""}
-      ${ctx.isLast ? "- This is the CONCLUSION of the article." : ""}
-      ${ctx.precedingBridge ? `- PREVIOUSLY ESTABLISHED: ${ctx.precedingBridge}` : ""}
-      ${ctx.upcomingIntents?.length ? `- REMAINING TOPICS TO BE COVERED: ${ctx.upcomingIntents.join(", ")}` : ""}
-
-      OUTPUT FORMAT (JSON ONLY):
-      {
-        "content": "The markdown content (omit the H2 header)",
-        "bridge": "Context for the next agent"
-      }
+      OUTPUT FORMAT:
+      [CONTENT]Generated content[/CONTENT]
+      [BRIDGE]Brief summary for the next agent[/BRIDGE]
     `.trim();
 
     const text = await AiService.execute(prompt, {
       model: modelName,
       systemInstruction,
-      isJson: true,
       onRetry: ctx.onRetry,
     });
 
-    const rawJson = text.replace(/```json|```/g, "").trim();
-    try {
-      return JSON.parse(rawJson) as WriterResponse;
-    } catch (e) {
-      throw new Error(`Writer ${this.id} failed to return valid JSON: ${text}`);
+    const contentMatch = text.match(/\[CONTENT\]([\s\S]*?)\[\/CONTENT\]/i);
+    const bridgeMatch = text.match(/\[BRIDGE\]([\s\S]*?)\[\/BRIDGE\]/i);
+
+    if (!contentMatch || !bridgeMatch) {
+      throw new Error(`Writer ${this.id} failed to return delimited content.`);
     }
+
+    return {
+      content: contentMatch[1].trim(),
+      bridge: bridgeMatch[1].trim(),
+    };
   }
 }

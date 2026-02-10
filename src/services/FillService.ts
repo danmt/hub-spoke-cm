@@ -63,7 +63,6 @@ export class FillService {
 
       try {
         const response = await writer.agent.write({
-          header,
           intent,
           topic: parsed.frontmatter.title,
           goal: parsed.frontmatter.goal || "",
@@ -72,12 +71,6 @@ export class FillService {
           persona: activePersona.agent,
           precedingBridge:
             i > 0 ? updatedBridges[sectionHeaders[i - 1]] : undefined,
-          upcomingIntents: sectionHeaders
-            .slice(i + 1)
-            .map(
-              (h) =>
-                `[${h}]: ${(parsed.frontmatter.blueprint as any)?.[h]?.intent || "Next topic"}`,
-            ),
           isFirst: i === 0,
           isLast: i === sectionHeaders.length - 1,
         });

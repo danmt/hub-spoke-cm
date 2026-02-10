@@ -82,7 +82,7 @@ export class ValidationService {
       await LoggerService.debug(`ValidationService: Auditing section`, {
         header: sectionData.header,
       });
-      const result = await auditor.analyze({
+      const result = await auditor.audit({
         title: parsed.frontmatter.title!,
         goal: parsed.frontmatter.goal!,
         blueprint: JSON.stringify(parsed.frontmatter.blueprint || {}, null, 2),
@@ -125,7 +125,6 @@ export class ValidationService {
       if (!writer) throw new Error(`Writer ${writerId} missing.`);
 
       const response = await writer.agent.write({
-        header: sectionName,
         intent: `FIX ISSUES: ${issues.map((i) => i.message).join(", ")}`,
         topic: parsed.frontmatter.title,
         goal: parsed.frontmatter.goal || "",
@@ -145,7 +144,7 @@ export class ValidationService {
         updatedSections,
       );
 
-      const verification = await auditor.analyze({
+      const verification = await auditor.audit({
         title: parsed.frontmatter.title!,
         goal: parsed.frontmatter.goal!,
         blueprint: JSON.stringify(parsed.frontmatter.blueprint || {}, null, 2),

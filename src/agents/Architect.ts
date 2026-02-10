@@ -47,32 +47,30 @@ export class Architect {
       ${this.manifest}
 
       PROTOCOL:
-      1. Review the baseline. If it's too vague to produce high-quality content, ask follow-up questions.
-      2. If you have enough info, propose the specific Assembler and Persona from the AVAILABLE TOOLS and ask if the user agrees.
-      3. **CRITICAL**: You are NOT allowed to output the [FINALIZE] tag until the user explicitly says "Proceed", "Apply", "Yes", or "Sounds good".
-      4. If the user's requirements cannot be met by available tools, use the [GAP_DETECTED] tag and explain why.
-      5. Only when the user confirms, output [FINALIZE] followed by a RAW JSON object matching the BRIEF SCHEMA.
+      1. Review the baseline. Ask follow-up questions if it's too vague.
+      2. If you have enough info, propose the specific Assembler and Persona and ask if the user agrees.
+      3. CRITICAL: You are NOT allowed to output the [FINALIZE] tag until the user explicitly confirms (e.g., "Proceed").
+      4. If requirements cannot be met, use the [GAP_DETECTED] tag.
+      5. Only when confirmed, output [FINALIZE] followed by the BRIEF block.
 
-      BRIEF SCHEMA:
-      {
-        "topic": "The final refined topic",
-        "goal": "The final refined goal",
-        "audience": "Target audience",
-        "language": "Target language",
-        "assemblerId": "The ID of the chosen assembler",
-        "personaId": "The ID of the chosen persona"
-      }
+      OUTPUT FORMAT FOR [FINALIZE]:
+      [BRIEF]
+      [TOPIC]Refined Topic[/TOPIC]
+      [GOAL]Refined Goal[/GOAL]
+      [AUDIENCE]Target Audience[/AUDIENCE]
+      [LANGUAGE]Target Language[/LANGUAGE]
+      [ASSEMBLER_ID]id[/ASSEMBLER_ID]
+      [PERSONA_ID]id[/PERSONA_ID]
+      [/BRIEF]
     `.trim();
 
-      // Use AiService instead of internal client
       const text = await AiService.execute(ctx.input, {
         model: modelName,
         systemInstruction,
-        history: this.history, // Pass history to maintain state
+        history: this.history,
         onRetry: ctx.onRetry,
       });
 
-      // Update history for the next turn
       this.history.push({ role: "user", parts: [{ text: ctx.input }] });
       this.history.push({ role: "model", parts: [{ text }] });
 
@@ -87,8 +85,22 @@ export class Architect {
       if (text.includes("[FINALIZE]")) {
         const parts = text.split("[FINALIZE]");
         try {
-          const rawJson = parts[1].replace(/```json|```/g, "").trim();
-          const brief = JSON.parse(rawJson) as Brief;
+          const brief: Brief = {
+            topic: text.match(/\[TOPIC\](.*?)\[\/TOPIC\]/i)?.[1].trim() || "",
+            goal: text.match(/\[GOAL\](.*?)\[\/GOAL\]/i)?.[1].trim() || "",
+            audience:
+              text.match(/\[AUDIENCE\](.*?)\[\/AUDIENCE\]/i)?.[1].trim() || "",
+            language:
+              text.match(/\[LANGUAGE\](.*?)\[\/LANGUAGE\]/i)?.[1].trim() ||
+              "English",
+            assemblerId:
+              text
+                .match(/\[ASSEMBLER_ID\](.*?)\[\/ASSEMBLER_ID\]/i)?.[1]
+                .trim() || "",
+            personaId:
+              text.match(/\[PERSONA_ID\](.*?)\[\/PERSONA_ID\]/i)?.[1].trim() ||
+              "",
+          };
           return { message: parts[0].trim(), isComplete: true, brief };
         } catch (e) {
           return {
