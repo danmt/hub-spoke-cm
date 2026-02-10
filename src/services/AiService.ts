@@ -6,7 +6,7 @@ import { LoggerService } from "./LoggerService.js";
 export interface AiOptions {
   model?: string;
   systemInstruction?: string;
-  history?: any[]; // For stateful Architect chats
+  history?: any[];
   onRetry?: (error: Error) => Promise<boolean>;
 }
 
@@ -17,7 +17,6 @@ export class AiService {
     if (!this.client) {
       const config = getGlobalConfig();
       if (!config.apiKey) throw new Error("API Key not found.");
-      // New Unified SDK initialization
       this.client = new GoogleGenAI({ apiKey: config.apiKey });
     }
     return this.client;
@@ -61,21 +60,23 @@ export class AiService {
       } catch (error: any) {
         // Trace: Record failure details
         await LoggerService.error("AI Execution Error", {
+          code: error.error?.code,
           message: error.message,
           stack: error.stack,
           modelId,
         });
 
-        const isRecoverable =
-          error.message?.includes("503") || error.message?.includes("429");
-        if (isRecoverable && options.onRetry) {
-          if (await options.onRetry(error)) {
+        if (options.onRetry) {
+          const shouldRetry = await options.onRetry(error);
+          if (shouldRetry) {
             await LoggerService.info(
-              "AI Service retrying after recoverable error.",
+              "AI Service retrying based on user/handler decision.",
             );
             continue;
           }
         }
+
+        // If no handler or handler returns false, propagate the error
         throw error;
       }
     }

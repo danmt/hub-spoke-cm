@@ -69,7 +69,7 @@ export const registryCommand = new Command("registry")
       console.log(chalk.dim(`Total Artifacts: ${artifacts.length}\n`));
     } catch (error) {
       console.error(
-        chalk.red("\n❌ Registry Error:"),
+        chalk.red("\n❌ Command `registry` Error:"),
         error instanceof Error ? error.message : String(error),
       );
     }

@@ -34,7 +34,7 @@ export const initCommand = new Command("init")
       }
     } catch (error) {
       console.error(
-        chalk.red("\n❌ Init Error:"),
+        chalk.red("\n❌ Command `init` Error:"),
         error instanceof Error ? error.message : String(error),
       );
     }

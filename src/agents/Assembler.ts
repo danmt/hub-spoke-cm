@@ -8,7 +8,11 @@ export interface AssemblerContext {
   goal: string;
   audience: string;
   language: string;
+  feedback?: string;
   onRetry?: (error: Error) => Promise<boolean>;
+  validator?: (
+    blueprint: HubBlueprint,
+  ) => Promise<{ confirmed: boolean; feedback?: string }>;
 }
 
 export interface AssemblerResponse {
@@ -29,6 +33,28 @@ export class Assembler {
   }
 
   async assemble(ctx: AssemblerContext): Promise<AssemblerResponse> {
+    let feedback: string | undefined;
+    const runValidator =
+      ctx.validator || (async () => ({ confirmed: true, feedback: undefined }));
+
+    while (true) {
+      const response = await this.generate(ctx);
+
+      const { confirmed, feedback: nextFeedback } = await runValidator(
+        response.blueprint,
+      );
+
+      if (confirmed) {
+        return response;
+      }
+
+      feedback =
+        nextFeedback ||
+        "The previous structure was rejected. Please try a different decomposition.";
+    }
+  }
+
+  async generate(ctx: AssemblerContext): Promise<AssemblerResponse> {
     const model = getGlobalConfig().architectModel || "gemini-3-flash";
     const writerConstraint = this.writerIds.join("|");
 
@@ -42,6 +68,8 @@ export class Assembler {
       - LANGUAGE: "${ctx.language}"
       
       STRATEGY: ${this.strategyPrompt}
+
+      ${ctx.feedback ? `CRITICAL - USER FEEDBACK ON PREVIOUS ATTEMPT: ${ctx.feedback}` : ""}
       
       CRITICAL REQUIREMENT: "FUTURE-AWARE INTENTS"
       Every section's 'intent' must be a detailed micro-brief (50-100 words) that includes:

@@ -4,11 +4,13 @@ import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
 import { Architect } from "../agents/Architect.js";
+import { ContextService } from "../services/ContextService.js";
 import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
 import { ParserService } from "../services/ParserService.js";
 import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
+import { cliRetryHandler } from "../utils/cliRetryHandler.js";
 
 export const spawnCommand = new Command("spawn")
   .description("Create a new Spoke article by expanding a Hub section")
@@ -26,262 +28,250 @@ export const spawnCommand = new Command("spawn")
         process.exit(1);
       }
 
-      const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
-      if (hubs.length === 0) throw new Error("No hubs found.");
+      const assemblers = RegistryService.getAgentsByType(agents, "assembler");
+      const personas = RegistryService.getAgentsByType(agents, "persona");
+      const writers = RegistryService.getAgentsByType(agents, "writer");
+      const auditors = RegistryService.getAgentsByType(agents, "auditor");
 
-      const { targetHub } = await inquirer.prompt([
-        {
-          type: "list",
-          name: "targetHub",
-          message: "Select parent Hub:",
-          choices: hubs,
+      const manifest = RegistryService.toManifest(agents);
+
+      const { rootDir } = await ContextService.resolveHubContext(
+        workspaceRoot,
+        async (hubs) => {
+          const { targetHub } = await inquirer.prompt([
+            {
+              type: "list",
+              name: "targetHub",
+              message: "Select Hub:",
+              choices: hubs,
+            },
+          ]);
+          return targetHub;
         },
-      ]);
-      const rootDir = path.join(workspaceRoot, "posts", targetHub);
+      );
       const hubMeta = await IoService.readHubMetadata(rootDir);
       const hubRaw = await IoService.readHubFile(rootDir);
       const parsedHub = ParserService.parseMarkdown(hubRaw);
 
       const sections = Object.keys(parsedHub.sections);
-      const { targetSection } = await inquirer.prompt([
+      const { section } = await inquirer.prompt([
         {
           type: "list",
-          name: "targetSection",
+          name: "section",
           message: "Select Hub section to expand:",
           choices: sections,
         },
       ]);
 
-      const architect = new Architect(RegistryService.toManifest(agents), {
-        topic: targetSection,
+      const architect = new Architect(manifest, {
+        topic: section,
         language: hubMeta.language,
         audience: hubMeta.audience,
-        goal: `Expand on '${targetSection}' from the ${hubMeta.title} hub.`,
+        goal: `Expand on '${section}' from the ${hubMeta.title} hub.`,
         personaId: hubMeta.personaId,
       });
 
-      let currentInput = `Plan a Spoke for "${targetSection}".`;
-      let isComplete = false;
+      const brief = await architect.architect({
+        input: `Plan a Spoke for "${section}".`,
+        interact: async (message, proposal) => {
+          console.log(`\n${chalk.green("Architect:")} ${message}`);
+          console.log(chalk.dim(`\n--- Current Proposal ---`));
+          console.log(`${chalk.yellow("Assembler:")} ${proposal.assemblerId}`);
+          console.log(`${chalk.yellow("Persona:")}   ${proposal.personaId}\n`);
 
-      while (!isComplete) {
-        try {
-          const response = await architect.chatWithUser({
-            input: currentInput,
+          const { action } = await inquirer.prompt([
+            {
+              type: "list",
+              name: "action",
+              message: "Action:",
+              choices: [
+                { name: "🚀 Proceed", value: "proceed" },
+                { name: "💬 Feedback", value: "feedback" },
+              ],
+            },
+          ]);
+
+          if (action === "proceed") return { action: "proceed" };
+
+          const { feed } = await inquirer.prompt([
+            {
+              type: "input",
+              name: "feed",
+              message: chalk.cyan("You:"),
+              validate: (v) => !!v,
+            },
+          ]);
+
+          return { action: "feedback", content: feed };
+        },
+        onRetry: cliRetryHandler,
+        onThinking: () =>
+          console.log(chalk.blue("\n🧠 Architect is thinking...")),
+      });
+
+      if (!brief) {
+        return;
+      }
+
+      const assembler = assemblers.find(
+        (a) => a.artifact.id === brief.assemblerId,
+      );
+
+      if (!assembler) {
+        throw new Error(
+          `Assembler "${brief.assemblerId}" not found in /agents/assemblers. ` +
+            `Available: ${assemblers.map((a) => a.artifact.id).join(", ")}`,
+        );
+      }
+
+      const persona = personas.find((p) => p.artifact.id === brief.personaId);
+
+      if (!persona) {
+        throw new Error(
+          `Persona "${brief.personaId}" not found in workspace. ` +
+            `Available: ${personas.map((a) => a.artifact.id).join(", ")}`,
+        );
+      }
+
+      const { blueprint } = await assembler.agent.assemble({
+        audience: brief.audience,
+        goal: brief.goal,
+        language: brief.language,
+        topic: brief.topic,
+        validator: async (blueprint) => {
+          console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
+          blueprint.components.forEach((c, i) => {
+            console.log(
+              chalk.white(`#${i + 1} [${c.writerId.toUpperCase()}] `) +
+                chalk.bold(c.header),
+            );
           });
-          if (response.gapFound)
-            return console.log(chalk.red("\n[GAP]: ") + response.message);
-          console.log(`\n${chalk.green("Architect:")} ${response.message}`);
 
-          if (response.isComplete && response.brief) {
-            const brief = response.brief;
-            const assemblers = RegistryService.getAgentsByType(
-              agents,
-              "assembler",
-            );
-            const assembler = assemblers.find(
-              (a) => a.artifact.id === brief.assemblerId,
-            );
-
-            if (!assembler) {
-              throw new Error(
-                `Assembler "${brief.assemblerId}" not found in /agents/assemblers. ` +
-                  `Available: ${assemblers.map((a) => a.artifact.id).join(", ")}`,
-              );
-            }
-
-            const { blueprint } = await assembler.agent.assemble({
-              audience: brief.audience,
-              goal: brief.goal,
-              language: brief.language,
-              topic: brief.topic,
-            });
-            const blueprintData: Record<string, any> = {};
-            const writerMap: Record<string, string> = {};
-
-            blueprint.components.forEach((c) => {
-              blueprintData[c.header] = {
-                intent: c.intent,
-                writerId: c.writerId,
-              };
-              writerMap[c.header] = c.writerId;
-            });
-
-            console.log(
-              chalk.cyan(
-                `\n🏗️  Spoke Structure Generated (${blueprint.components.length} sections)`,
-              ),
-            );
-
-            const fileName = `${blueprint.hubId}.md`;
-            const filePath = path.join(rootDir, "spokes", fileName);
-
-            const fileContent = [
-              "---",
-              `title: ${JSON.stringify(targetSection)}`,
-              'type: "spoke"',
-              `hubId: ${JSON.stringify(hubMeta.hubId)}`,
-              `componentId: ${JSON.stringify(blueprint.hubId)}`,
-              `goal: ${JSON.stringify(brief.goal)}`,
-              `audience: ${JSON.stringify(hubMeta.audience)}`,
-              `language: ${JSON.stringify(hubMeta.language)}`,
-              `date: ${JSON.stringify(new Date().toISOString().split("T")[0])}`,
-              `personaId: ${JSON.stringify(hubMeta.personaId)}`,
-              `blueprint: ${JSON.stringify(blueprintData)}`,
-              `writerMap: ${JSON.stringify(writerMap)}`,
-              "---",
-              "",
-              `# ${targetSection}`,
-              "",
-              ...blueprint.components.map(
-                (c) =>
-                  `## ${c.header}\n\n> **TODO:** ${c.intent}\n\n*Pending generation...*\n`,
-              ),
-            ].join("\n");
-
-            await IoService.safeWriteFile(filePath, fileContent);
-            console.log(
-              chalk.bold.green(`\n✅ Spoke created: spokes/${fileName}`),
-            );
-
-            const { shouldFill } = await inquirer.prompt([
-              {
-                type: "confirm",
-                name: "shouldFill",
-                message: "Generate content now?",
-                default: true,
-              },
-            ]);
-
-            if (shouldFill) {
-              const personas = RegistryService.getAgentsByType(
-                agents,
-                "persona",
-              );
-              const persona = personas.find(
-                (p) => p.artifact.id === brief.personaId,
-              );
-              const writers = RegistryService.getAgentsByType(agents, "writer");
-
-              if (!persona) {
-                throw new Error(
-                  `Persona "${brief.personaId}" not found in workspace. ` +
-                    `Available: ${personas.map((a) => a.artifact.id).join(", ")}`,
-                );
-              }
-
-              await FillService.execute(
-                filePath,
-                blueprint.components.map((c) => c.header),
-                persona as any,
-                writers as any,
-                (p) => {
-                  if (p.status === "starting")
-                    process.stdout.write(
-                      chalk.gray(
-                        `   Generating [${p.writerId}] "${p.header}"... `,
-                      ),
-                    );
-                  else if (p.status === "completed")
-                    process.stdout.write(chalk.green("Done ✅\n"));
-                },
-              );
-
-              console.log(chalk.cyan("\n🚀 Spoke populated."));
-
-              const { shouldAudit } = await inquirer.prompt([
-                {
-                  type: "confirm",
-                  name: "shouldAudit",
-                  message: "Run a semantic audit on the new content?",
-                  default: true,
-                },
-              ]);
-
-              if (shouldAudit) {
-                const auditors = RegistryService.getAgentsByType(
-                  agents,
-                  "auditor",
-                );
-                if (auditors.length > 0) {
-                  const { auditorId } = await inquirer.prompt([
-                    {
-                      type: "list",
-                      name: "auditorId",
-                      message: "Select Auditor Strategy:",
-                      choices: auditors.map((a) => ({
-                        name: `${a.artifact.id}: ${a.artifact.description}`,
-                        value: a.artifact.id,
-                      })),
-                    },
-                  ]);
-                  const selectedAuditor = auditors.find(
-                    (a) => a.artifact.id === auditorId,
-                  )!;
-
-                  console.log(
-                    chalk.cyan(
-                      `\n🧠 Running Step 2: Semantic Analysis [${auditorId}]...`,
-                    ),
-                  );
-
-                  const { allIssues } = await ValidationService.runFullAudit(
-                    filePath,
-                    selectedAuditor.agent,
-                    persona,
-                  );
-
-                  if (allIssues.length === 0) {
-                    console.log(
-                      chalk.bold.green("\n✨ Audit passed! No issues found."),
-                    );
-                  } else {
-                    console.log(
-                      chalk.yellow(
-                        `\n⚠️  Auditor found ${allIssues.length} issues. Run 'hub audit' to fix.`,
-                      ),
-                    );
-                    console.log(
-                      chalk.gray(
-                        "Run 'hub audit' manually to apply verified fixes.",
-                      ),
-                    );
-                  }
-                } else {
-                  console.log(
-                    chalk.dim(
-                      "\n(No auditors found in registry; skipping audit step)",
-                    ),
-                  );
-                }
-              }
-            }
-
-            isComplete = true;
-          } else {
-            const { next } = await inquirer.prompt([
-              {
-                type: "input",
-                name: "next",
-                message: chalk.cyan("You:"),
-                validate: (v) => !!v,
-              },
-            ]);
-            currentInput = next;
-          }
-        } catch (error) {
-          console.error(chalk.red("\n❌ Architect/Assembler Error:"), error);
-          const { retry } = await inquirer.prompt([
+          const { confirmed } = await inquirer.prompt([
             {
               type: "confirm",
-              name: "retry",
-              message: "Operation failed. Retry last step?",
+              name: "confirmed",
+              message: "Does this structure look good?",
               default: true,
             },
           ]);
-          if (!retry) return;
-        }
+
+          if (confirmed) {
+            return { confirmed };
+          }
+
+          const { feedback } = await inquirer.prompt([
+            {
+              type: "input",
+              name: "feedback",
+              message: chalk.cyan("You:"),
+              validate: (v) => !!v,
+            },
+          ]);
+
+          return { confirmed: false, feedback };
+        },
+      });
+
+      console.log(
+        chalk.cyan(
+          `\n🏗️  Spoke Structure Generated (${blueprint.components.length} sections)`,
+        ),
+      );
+
+      const fileContent = ParserService.generateScaffold(
+        "spoke",
+        brief,
+        blueprint,
+        hubMeta.hubId,
+      );
+      const filePath = path.join(rootDir, "spokes", `${blueprint.hubId}.md`);
+      await IoService.safeWriteFile(filePath, fileContent);
+
+      console.log(chalk.bold.green(`\n✅ Spoke created: spokes/${filePath}`));
+
+      const { shouldFill } = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "shouldFill",
+          message: "Generate content now?",
+          default: true,
+        },
+      ]);
+
+      if (!shouldFill) return;
+
+      await FillService.execute(
+        filePath,
+        blueprint.components.map((c) => c.header),
+        persona,
+        writers,
+        ({ header, writerId }) =>
+          console.log(
+            chalk.gray(`   🔧  Generating [${writerId}] "${header}"...`),
+          ),
+        () => console.log(chalk.green("      Done ✅")),
+        cliRetryHandler,
+      );
+
+      console.log(chalk.cyan("\n🚀 Spoke populated."));
+
+      const { shouldAudit } = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "shouldAudit",
+          message: "Run a semantic audit on the new content?",
+          default: true,
+        },
+      ]);
+
+      if (!shouldAudit) return;
+
+      if (auditors.length === 0) {
+        throw new Error("No auditors found in workspace. ");
+      }
+
+      const { auditorId } = await inquirer.prompt([
+        {
+          type: "list",
+          name: "auditorId",
+          message: "Select Auditor Strategy:",
+          choices: auditors.map((a) => ({
+            name: `${a.artifact.id}: ${a.artifact.description}`,
+            value: a.artifact.id,
+          })),
+        },
+      ]);
+      const selectedAuditor = auditors.find(
+        (a) => a.artifact.id === auditorId,
+      )!;
+
+      console.log(
+        chalk.cyan(`\n🧠 Running Step 2: Semantic Analysis [${auditorId}]...`),
+      );
+
+      const { allIssues } = await ValidationService.runFullAudit(
+        filePath,
+        selectedAuditor.agent,
+        persona,
+        (header) => console.log(chalk.gray(`   🔎  Auditing "${header}"... `)),
+        () => console.log(chalk.green("      Done ✅")),
+        cliRetryHandler,
+      );
+
+      if (allIssues.length === 0) {
+        console.log(chalk.bold.green("\n✨ Audit passed! No issues found."));
+      } else {
+        console.log(
+          chalk.yellow(
+            `\n⚠️  Auditor found ${allIssues.length} issues. Run 'hub audit' to fix.`,
+          ),
+        );
+        console.log(
+          chalk.gray("Run 'hub audit' manually to apply verified fixes."),
+        );
       }
     } catch (error) {
-      console.error(chalk.red("\n❌ Spawn Error:"), error);
+      console.error(chalk.red("\n❌ Command `spawn` Error:"), error);
     }
   });

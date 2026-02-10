@@ -1,6 +1,11 @@
 // src/services/ParserService.ts
 import matter from "gray-matter";
-import { ContentFrontmatter, FrontmatterSchema } from "../types/index.js";
+import { Brief } from "../agents/Architect.js";
+import {
+  ContentFrontmatter,
+  FrontmatterSchema,
+  HubBlueprint,
+} from "../types/index.js";
 import { LoggerService } from "./LoggerService.js";
 
 export interface ParsedFile {
@@ -51,6 +56,66 @@ export class ParserService {
       .join("\n\n");
 
     return `---\n${yamlLines.join("\n")}\n---\n\n${body}`;
+  }
+
+  /**
+   * Encapsulates the creation of a new Hub or Spoke scaffold.
+   * Centralizes the template for TODO blocks and frontmatter mapping.
+   */
+  static generateScaffold(
+    type: "hub" | "spoke",
+    brief: Brief,
+    blueprint: HubBlueprint,
+    parentHubId?: string,
+  ): string {
+    const blueprintData: Record<string, any> = {};
+    const writerMap: Record<string, string> = {};
+
+    blueprint.components.forEach((c) => {
+      blueprintData[c.header] = {
+        intent: c.intent,
+        writerId: c.writerId,
+      };
+      writerMap[c.header] = c.writerId;
+    });
+
+    const frontmatter: Partial<ContentFrontmatter> = {
+      title: brief.topic,
+      type: type,
+      hubId: parentHubId || blueprint.hubId,
+      goal: brief.goal,
+      audience: brief.audience,
+      language: brief.language,
+      date: new Date().toISOString().split("T")[0],
+      personaId: brief.personaId,
+      blueprint: blueprintData,
+      writerMap: writerMap,
+      bridges: {},
+    };
+
+    // Add Spoke-specific metadata if applicable
+    if (type === "spoke") {
+      (frontmatter as any).componentId = blueprint.hubId;
+    } else {
+      (frontmatter as any).assemblerId = brief.assemblerId;
+    }
+
+    const sections: Record<string, string> = {};
+    blueprint.components.forEach((c) => {
+      sections[c.header] = `> **TODO:** ${c.intent}\n\n*Pending generation...*`;
+    });
+
+    // Reuse reconstruction logic for consistent YAML formatting
+    const body = Object.entries(sections)
+      .map(([header, content]) => `## ${header}\n\n${content}`)
+      .join("\n\n");
+
+    // Standardize YAML stringification
+    const yaml = Object.entries(frontmatter)
+      .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+      .join("\n");
+
+    return `---\n${yaml}\n---\n\n# ${brief.topic}\n\n${body}`;
   }
 
   private static splitSections(markdownBody: string): Record<string, string> {

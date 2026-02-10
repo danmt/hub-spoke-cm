@@ -4,11 +4,13 @@ import { Command } from "commander";
 import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
+import { ContextService } from "../services/ContextService.js";
 import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { ParserService } from "../services/ParserService.js";
 import { RegistryService } from "../services/RegistryService.js";
+import { cliRetryHandler } from "../utils/cliRetryHandler.js";
 
 const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
@@ -27,22 +29,22 @@ export const fillCommand = new Command("fill")
         targetFile = path.resolve(currentDir, options.file);
       } else {
         const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
-        const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
-
-        if (hubs.length === 0) {
-          throw new Error("No hubs found in the workspace posts/ directory.");
-        }
-
-        const { targetHub } = await inquirer.prompt([
-          {
-            type: "list",
-            name: "targetHub",
-            message: "Select a Hub to fill:",
-            choices: hubs,
+        const { rootDir } = await ContextService.resolveHubContext(
+          workspaceRoot,
+          async (hubs) => {
+            const { targetHub } = await inquirer.prompt([
+              {
+                type: "list",
+                name: "targetHub",
+                message: "Select Hub:",
+                choices: hubs,
+              },
+            ]);
+            return targetHub;
           },
-        ]);
-
-        targetFile = path.join(workspaceRoot, "posts", targetHub, "hub.md");
+        );
+        const hubMeta = await IoService.readHubMetadata(rootDir);
+        targetFile = path.join(workspaceRoot, "posts", hubMeta.hubId, "hub.md");
       }
 
       console.log(
@@ -88,37 +90,19 @@ export const fillCommand = new Command("fill")
       // Implementation of original retry logic wrapped around the service call
       for (let i = 0; i < selection.length; i++) {
         const header = selection[i];
-        try {
-          await FillService.execute(
-            targetFile,
-            [header],
-            persona,
-            writers,
-            (p) => {
-              if (p.status === "starting") {
-                process.stdout.write(
-                  chalk.gray(`   Generating [${p.writerId}] "${p.header}"... `),
-                );
-              } else if (p.status === "completed") {
-                process.stdout.write(chalk.green("Done ✅\n"));
-              }
-            },
-          );
-        } catch (err: any) {
-          process.stdout.write(chalk.red("Failed ❌\n"));
-          const { retry } = await inquirer.prompt([
-            {
-              type: "confirm",
-              name: "retry",
-              message: `Retry section "${header}"?`,
-            },
-          ]);
-          if (retry) {
-            i--; // Decrement index to repeat the same header
-            continue;
-          }
-          break; // Stop sequential generation on failure if not retried
-        }
+
+        await FillService.execute(
+          targetFile,
+          [header],
+          persona,
+          writers,
+          ({ header, writerId }) =>
+            console.log(
+              chalk.gray(`   Generating [${writerId}] "${header}"... `),
+            ),
+          () => console.log(chalk.green("      Done ✅\n")),
+          cliRetryHandler,
+        );
       }
 
       console.log(chalk.bold.green(`\n✨ Generation complete.`));
@@ -127,7 +111,7 @@ export const fillCommand = new Command("fill")
         error: error.message,
         stack: error.stack,
       });
-      console.error(chalk.red("\n❌ Fill Error:"), error.message);
+      console.error(chalk.red("\n❌ Command `fill` Error:"), error.message);
       process.exit(1);
     }
   });

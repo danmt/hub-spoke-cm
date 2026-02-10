@@ -7,6 +7,13 @@ import { ContentFrontmatter, FrontmatterSchema } from "../types/index.js";
 
 export class IoService {
   /**
+   * Checks if a specific directory is the root of a Hub (contains hub.md).
+   */
+  static async isHubDirectory(dir: string): Promise<boolean> {
+    return existsSync(path.join(dir, "hub.md"));
+  }
+
+  /**
    * Searches up the tree to find the Workspace Root (.hub folder).
    */
   static async findWorkspaceRoot(startDir: string): Promise<string> {

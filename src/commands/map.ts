@@ -128,7 +128,7 @@ export const mapCommand = new Command("map")
       console.log(chalk.gray("\nLegend: ● Done  ○ Pending\n"));
     } catch (error) {
       console.error(
-        chalk.red("Map failed:"),
+        chalk.red("\n❌ Command `map` Error:"),
         error instanceof Error ? error.message : String(error),
       );
     }

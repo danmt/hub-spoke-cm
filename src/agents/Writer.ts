@@ -39,8 +39,16 @@ export class Writer {
               
       CORE EXECUTION RULES:
       1. Follow the INTENT micro-brief exactly. It defines your scope boundaries.
-      2. Use the PREVIOUS BRIDGE for narrative continuity.
-      3. Do not repeat information or "steal" topics reserved for other sections.
+      2. Do not repeat information or "steal" topics reserved for other sections.
+
+      PROTOCOL:
+      1. The content provided belongs to a section (h2) of a longer markdown file.
+      1. Provide a [CONTENT] block with markdown.
+      2. Provide a [BRIDGE] block with a brief summary for the next agent.
+
+      OUTPUT FORMAT:
+      [CONTENT]Generated content[/CONTENT]
+      [BRIDGE]Brief summary for the next agent[/BRIDGE]
     `.trim();
 
     const prompt = `
@@ -51,10 +59,6 @@ export class Writer {
       - Target Audience: ${ctx.audience}
       - Previous Context: ${ctx.precedingBridge || "Beginning of document"}
       - Progress: ${ctx.isFirst ? "Start" : ctx.isLast ? "Conclusion" : "In-Progress"}
-
-      OUTPUT FORMAT:
-      [CONTENT]Generated content[/CONTENT]
-      [BRIDGE]Brief summary for the next agent[/BRIDGE]
     `.trim();
 
     const text = await AiService.execute(prompt, {

@@ -54,6 +54,9 @@ export class ValidationService {
     filePath: string,
     auditor: Auditor,
     activePersona: AgentPair & { type: "persona" },
+    onStart?: (data: string) => void,
+    onComplete?: () => void,
+    onRetry?: (err: Error) => Promise<boolean>,
   ) {
     await LoggerService.info(`ValidationService: Full audit start`, {
       file: path.basename(filePath),
@@ -82,6 +85,8 @@ export class ValidationService {
       await LoggerService.debug(`ValidationService: Auditing section`, {
         header: sectionData.header,
       });
+      onStart?.(sectionData.header);
+
       const result = await auditor.audit({
         title: parsed.frontmatter.title!,
         goal: parsed.frontmatter.goal!,
@@ -90,7 +95,10 @@ export class ValidationService {
         content: parsed.sections[sectionData.header],
         persona: activePersona.agent,
         scope: "section",
+        onRetry,
       });
+
+      onComplete?.();
       allIssues.push(...result.issues);
     }
 
@@ -107,22 +115,29 @@ export class ValidationService {
     auditor: Auditor,
     activePersona: AgentPair & { type: "persona" },
     writers: (AgentPair & { type: "writer" })[],
+    onStart?: (data: { header: string; writerId: string }) => void,
+    onComplete?: () => void,
+    onRetry?: (err: Error) => Promise<boolean>,
   ) {
+    await LoggerService.debug(`ValidationService: Surgical fix`, {
+      section: sectionName,
+    });
+    const rawContent = await fs.readFile(workingFilePath, "utf-8");
+    const parsed = ParserService.parseMarkdown(rawContent);
+
+    const sectionHeaders = Object.keys(parsed.sections);
+    const sectionIndex = sectionHeaders.indexOf(sectionName);
+    const writerId =
+      (parsed.frontmatter.blueprint as any)?.[sectionName]?.writerId || "prose";
+    const writer = writers.find((w) => w.artifact.id === writerId);
+
+    if (!writer) {
+      const error = `Writer ${writerId} missing.`;
+      throw new Error(error);
+    }
+
     try {
-      await LoggerService.debug(`ValidationService: Surgical fix`, {
-        section: sectionName,
-      });
-      const rawContent = await fs.readFile(workingFilePath, "utf-8");
-      const parsed = ParserService.parseMarkdown(rawContent);
-
-      const sectionHeaders = Object.keys(parsed.sections);
-      const sectionIndex = sectionHeaders.indexOf(sectionName);
-      const writerId =
-        (parsed.frontmatter.blueprint as any)?.[sectionName]?.writerId ||
-        "prose";
-      const writer = writers.find((w) => w.artifact.id === writerId);
-
-      if (!writer) throw new Error(`Writer ${writerId} missing.`);
+      onStart?.({ header: sectionName, writerId });
 
       const response = await writer.agent.write({
         intent: `FIX ISSUES: ${issues.map((i) => i.message).join(", ")}`,
@@ -133,6 +148,7 @@ export class ValidationService {
         persona: activePersona.agent,
         isFirst: sectionIndex === 0,
         isLast: sectionIndex === sectionHeaders.length - 1,
+        onRetry,
       });
 
       const updatedSections = {
@@ -152,11 +168,14 @@ export class ValidationService {
         content: `## ${sectionName}\n\n${response.content}`,
         persona: activePersona.agent,
         scope: "section",
+        onRetry,
       });
 
       const success = verification.issues.length === 0;
       if (success)
         await fs.writeFile(workingFilePath, candidateContent, "utf-8");
+
+      onComplete?.();
 
       return {
         success,
