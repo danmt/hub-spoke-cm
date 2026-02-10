@@ -42,13 +42,21 @@ export class Writer {
       2. Do not repeat information or "steal" topics reserved for other sections.
 
       PROTOCOL:
-      1. The content provided belongs to a section (h2) of a longer markdown file.
       1. Provide a [CONTENT] block with markdown.
       2. Provide a [BRIDGE] block with a brief summary for the next agent.
+      3. FORMATTING: You are writing a SECTION of a document. 
+         - NEVER use H1 (#) or H2 (##) tags.
+         - Use H3 (###) or H4 (####) for sub-sections if needed.
+         - Do not repeat the section title provided in the intent.
+      4. Do not repeat information reserved for other sections.
 
       OUTPUT FORMAT:
-      [CONTENT]Generated content[/CONTENT]
-      [BRIDGE]Brief summary for the next agent[/BRIDGE]
+      [CONTENT]
+      (Your markdown content here, starting directly with text)
+      [/CONTENT]
+      [BRIDGE]
+      (Brief summary)
+      [/BRIDGE]
     `.trim();
 
     const prompt = `
@@ -67,8 +75,8 @@ export class Writer {
       onRetry: ctx.onRetry,
     });
 
-    const contentMatch = text.match(/\[CONTENT\]([\s\S]*?)\[\/CONTENT\]/i);
-    const bridgeMatch = text.match(/\[BRIDGE\]([\s\S]*?)\[\/BRIDGE\]/i);
+    const contentMatch = text.match(/\[CONTENT\]([\s\S]*?)(\[\/CONTENT\]|$)/i);
+    const bridgeMatch = text.match(/\[BRIDGE\]([\s\S]*?)(\[\/BRIDGE\]|$)/i);
 
     if (!contentMatch || !bridgeMatch) {
       throw new Error(`Writer ${this.id} failed to return delimited content.`);
