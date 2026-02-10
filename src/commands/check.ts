@@ -43,6 +43,6 @@ export const checkCommand = new Command("check")
         }
       }
     } catch (error) {
-      console.error(chalk.red("\n❌ Check Error:"), error);
+      console.error(chalk.red("\n❌ Command `check` Error:"), error);
     }
   });

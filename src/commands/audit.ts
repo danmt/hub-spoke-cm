@@ -9,6 +9,7 @@ import { IoService } from "../services/IoService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
+import { cliRetryHandler } from "../utils/cliRetryHandler.js";
 
 export const auditCommand = new Command("audit")
   .description(
@@ -106,6 +107,10 @@ export const auditCommand = new Command("audit")
           targetFile,
           selectedAuditor.agent,
           persona,
+          (header) =>
+            console.log(chalk.gray(`   🔎  Auditing "${header}"... `)),
+          () => console.log(chalk.green("      Done ✅")),
+          cliRetryHandler,
         );
 
       // Save persistent audit trace
@@ -172,8 +177,6 @@ export const auditCommand = new Command("audit")
 
         let isFixed = false;
         while (!isFixed) {
-          process.stdout.write(chalk.gray(`   🏗️  Re-writing & Verifying... `));
-
           const result = await ValidationService.verifyAndFix(
             workingFile,
             sectionName,
@@ -181,6 +184,14 @@ export const auditCommand = new Command("audit")
             selectedAuditor.agent,
             persona,
             writers,
+            ({ header, writerId }) =>
+              console.log(
+                chalk.gray(
+                  `   🏗️  Fixing & Verifying [${writerId}] "${header}"... `,
+                ),
+              ),
+            () => console.log(chalk.green("Done ✅")),
+            cliRetryHandler,
           );
 
           if (result.success) {
@@ -230,7 +241,7 @@ export const auditCommand = new Command("audit")
         error: error.message,
         stack: error.stack,
       });
-      console.error(chalk.red("\n❌ Audit Error:"), error.message);
+      console.error(chalk.red("\n❌ Command `audit` Error:"), error.message);
       process.exit(1);
     }
   });

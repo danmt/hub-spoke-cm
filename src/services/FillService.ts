@@ -24,7 +24,9 @@ export class FillService {
     headersToFill: string[],
     activePersona: AgentPair & { type: "persona" },
     writers: (AgentPair & { type: "writer" })[],
-    onProgress?: (progress: FillProgress) => void,
+    onStart?: (data: { header: string; writerId: string }) => void,
+    onComplete?: () => void,
+    onRetry?: (err: Error) => Promise<boolean>,
   ) {
     await LoggerService.info(`FillService: Starting execution`, {
       filePath,
@@ -51,46 +53,28 @@ export class FillService {
       if (!writer) {
         const error = `Writer "${writerId}" not found for section "${header}".`;
         await LoggerService.error(`FillService: ${error}`);
-        onProgress?.({ header, writerId, status: "failed", error });
         throw new Error(error);
       }
 
-      onProgress?.({ header, writerId, status: "starting" });
-      await LoggerService.debug(`FillService: Generating section`, {
-        header,
-        writerId,
+      onStart?.({ header, writerId });
+
+      const response = await writer.agent.write({
+        intent,
+        topic: parsed.frontmatter.title,
+        goal: parsed.frontmatter.goal || "",
+        audience: parsed.frontmatter.audience || "",
+        language: parsed.frontmatter.language,
+        persona: activePersona.agent,
+        precedingBridge:
+          i > 0 ? updatedBridges[sectionHeaders[i - 1]] : undefined,
+        isFirst: i === 0,
+        isLast: i === sectionHeaders.length - 1,
+        onRetry,
       });
 
-      try {
-        const response = await writer.agent.write({
-          intent,
-          topic: parsed.frontmatter.title,
-          goal: parsed.frontmatter.goal || "",
-          audience: parsed.frontmatter.audience || "",
-          language: parsed.frontmatter.language,
-          persona: activePersona.agent,
-          precedingBridge:
-            i > 0 ? updatedBridges[sectionHeaders[i - 1]] : undefined,
-          isFirst: i === 0,
-          isLast: i === sectionHeaders.length - 1,
-        });
-
-        updatedSections[header] = response.content;
-        updatedBridges[header] = response.bridge;
-        onProgress?.({ header, writerId, status: "completed" });
-      } catch (err: any) {
-        await LoggerService.error(`FillService: Section generation failed`, {
-          header,
-          error: err.message,
-        });
-        onProgress?.({
-          header,
-          writerId,
-          status: "failed",
-          error: err.message,
-        });
-        throw err;
-      }
+      updatedSections[header] = response.content;
+      updatedBridges[header] = response.bridge;
+      onComplete?.();
     }
 
     const finalMarkdown = ParserService.reconstructMarkdown(
