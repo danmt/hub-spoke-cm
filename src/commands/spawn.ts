@@ -138,6 +138,7 @@ export const spawnCommand = new Command("spawn")
         goal: brief.goal,
         language: brief.language,
         topic: brief.topic,
+        persona: persona.agent,
         validator: async (blueprint) => {
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
           blueprint.components.forEach((c, i) => {

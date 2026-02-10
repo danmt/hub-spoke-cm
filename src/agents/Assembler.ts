@@ -2,12 +2,14 @@
 import { AiService } from "../services/AiService.js";
 import { HubBlueprint } from "../types/index.js";
 import { getGlobalConfig } from "../utils/config.js";
+import { Persona } from "./Persona.js";
 
 export interface AssemblerContext {
   topic: string;
   goal: string;
   audience: string;
   language: string;
+  persona: Persona;
   feedback?: string;
   onRetry?: (error: Error) => Promise<boolean>;
   validator?: (
@@ -60,6 +62,9 @@ export class Assembler {
 
     const systemInstruction = `
       You are a Lead Technical Content Architect. Your mission is to decompose a high-level project into a surgical, sequential execution blueprint.
+
+      PERSONA:
+      ${ctx.persona.getInstructions(ctx)}
       
       PROJECT CONTEXT:
       - TOPIC: "${ctx.topic}"
@@ -76,6 +81,10 @@ export class Assembler {
       1. PRIMARY FOCUS: The specific technical or narrative goal of THIS section.
       2. SCOPE BOUNDARY: Explicitly list what NOT to mention because it belongs in a later section.
       3. THE HAND-OFF: How this section should end to prime the reader for the next specific header.
+
+      WRITER SELECTION:
+      For each [COMPONENT], you MUST select exactly ONE Writer ID from this allowed list: [${writerConstraint}].
+      Choose the writer that best fits the specific nature of that section.
 
       OUTPUT FORMAT (Use these exact delimiters):
       [HUB_ID]slugified-topic-id[/HUB_ID]
