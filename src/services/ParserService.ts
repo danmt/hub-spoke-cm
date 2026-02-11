@@ -73,11 +73,12 @@ export class ParserService {
     const writerMap: Record<string, string> = {};
 
     blueprint.components.forEach((c) => {
-      blueprintData[c.header] = {
+      blueprintData[c.id] = {
+        header: c.header,
         intent: c.intent,
         writerId: c.writerId,
       };
-      writerMap[c.header] = c.writerId;
+      writerMap[c.id] = c.writerId;
     });
 
     const frontmatter: Partial<ContentFrontmatter> = {

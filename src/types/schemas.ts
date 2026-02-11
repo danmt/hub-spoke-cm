@@ -5,6 +5,7 @@ import { z } from "zod";
  * Used by Assemblers to define the requirements for each part of the article.
  */
 export const SectionBlueprintSchema = z.object({
+  id: z.string(),
   header: z.string(),
   intent: z.string(),
   // Routes the section to a specific specialized Writer class (e.g., 'code', 'prose')
@@ -53,6 +54,7 @@ export const FrontmatterSchema = z.object({
     .record(
       z.string(),
       z.object({
+        header: z.string(),
         intent: z.string(),
         writerId: z.string(),
       }),

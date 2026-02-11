@@ -90,6 +90,7 @@ export class Assembler {
       [HUB_ID]slugified-topic-id[/HUB_ID]
       
       [COMPONENT]
+      [ID]unique-section-id[/ID]
       [HEADER]Section Title[/HEADER]
       [INTENT]Detailed micro-brief focusing on ${ctx.topic} for ${ctx.audience}...[/INTENT]
       [WRITER_ID]${writerConstraint}[/WRITER_ID]
@@ -117,18 +118,21 @@ export class Assembler {
 
     while ((match = componentRegex.exec(text)) !== null) {
       const block = match[1];
-      const header =
-        block.match(/\[HEADER\](.*?)\[\/HEADER\]/i)?.[1].trim() ||
-        "Untitled Section";
-      const intent =
-        block.match(/\[INTENT\]([\s\S]*?)\[\/INTENT\]/i)?.[1].trim() ||
-        "No intent provided.";
-      const writerId =
-        block.match(/\[WRITER_ID\](.*?)\[\/WRITER_ID\]/i)?.[1].trim() ||
-        "prose";
+      const id = block.match(/\[ID\]([\s\S]*?)\[\/ID\]/i)?.[1].trim();
+      const header = block.match(/\[HEADER\](.*?)\[\/HEADER\]/i)?.[1].trim();
+      const intent = block
+        .match(/\[INTENT\]([\s\S]*?)\[\/INTENT\]/i)?.[1]
+        .trim();
+      const writerId = block
+        .match(/\[WRITER_ID\](.*?)\[\/WRITER_ID\]/i)?.[1]
+        .trim();
+
+      if (!id || !header || !intent || !writerId) {
+        throw new Error("Assembler failed to produce a valid [COMPONENT].");
+      }
 
       components.push({
-        id: header.toLowerCase().replace(/[^a-z0-h]/g, "-"),
+        id,
         header,
         intent,
         writerId,
