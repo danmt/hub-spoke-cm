@@ -8,7 +8,7 @@ const { WordTokenizer, SentimentAnalyzer, PorterStemmer, PorterStemmerEs } =
   natural;
 
 export interface SectionAnalysis {
-  header: string;
+  sectionId: string;
   wordCount: number;
   readingEase: number;
   sentiment: number;
@@ -44,55 +44,57 @@ export class StaticAnalysisService {
     const langVocab = isSpanish ? "Spanish" : "English";
     const analyzer = new SentimentAnalyzer(langVocab, stemmer, "afinn");
 
-    const sectionResults: SectionAnalysis[] = sectionHeaders.map((header) => {
-      const sectionBody = parsed.sections[header];
-      const tokens = this.tokenizer.tokenize(sectionBody) || [];
+    const sectionResults: SectionAnalysis[] = Object.keys(parsed.sections).map(
+      (sectionId) => {
+        const sectionBody = parsed.sections[sectionId];
+        const tokens = this.tokenizer.tokenize(sectionBody) || [];
 
-      // Calculate Flesch Reading Ease
-      const sentenceCount =
-        sectionBody.split(/[.!?]+/).filter((s) => s.trim().length > 0).length ||
-        1;
-      const syllableCount =
-        (sectionBody.match(/[aeiouy]{1,2}/g) || []).length || 1;
-      const ease = flesch({
-        sentence: sentenceCount,
-        word: tokens.length,
-        syllable: syllableCount,
-      });
+        // Calculate Flesch Reading Ease
+        const sentenceCount =
+          sectionBody.split(/[.!?]+/).filter((s) => s.trim().length > 0)
+            .length || 1;
+        const syllableCount =
+          (sectionBody.match(/[aeiouy]{1,2}/g) || []).length || 1;
+        const ease = flesch({
+          sentence: sentenceCount,
+          word: tokens.length,
+          syllable: syllableCount,
+        });
 
-      const sentiment = analyzer.getSentiment(tokens);
+        const sentiment = analyzer.getSentiment(tokens);
 
-      const freq: Record<string, number> = {};
-      tokens.forEach((t) => {
-        const w = t.toLowerCase();
-        if (w.length > 4) {
-          freq[w] = (freq[w] || 0) + 1;
-        }
-      });
+        const freq: Record<string, number> = {};
+        tokens.forEach((t) => {
+          const w = t.toLowerCase();
+          if (w.length > 4) {
+            freq[w] = (freq[w] || 0) + 1;
+          }
+        });
 
-      const topKeywords = Object.entries(freq)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([word]) => word);
+        const topKeywords = Object.entries(freq)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([word]) => word);
 
-      const analysis = {
-        header,
-        wordCount: tokens.length,
-        readingEase: Math.round(ease),
-        sentiment: parseFloat(sentiment.toFixed(2)),
-        topKeywords,
-        todoCount: (sectionBody.match(/>\s*\*\*?TODO:?\*?/gi) || []).length,
-      };
+        const analysis = {
+          sectionId,
+          wordCount: tokens.length,
+          readingEase: Math.round(ease),
+          sentiment: parseFloat(sentiment.toFixed(2)),
+          topKeywords,
+          todoCount: (sectionBody.match(/>\s*\*\*?TODO:?\*?/gi) || []).length,
+        };
 
-      // Trace: Log granular section metrics
-      LoggerService.debug(`StaticAnalysis: Section "${header}" analyzed`, {
-        wordCount: analysis.wordCount,
-        readingEase: analysis.readingEase,
-        todoCount: analysis.todoCount,
-      });
+        // Trace: Log granular section metrics
+        LoggerService.debug(`StaticAnalysis: Section "${sectionId}" analyzed`, {
+          wordCount: analysis.wordCount,
+          readingEase: analysis.readingEase,
+          todoCount: analysis.todoCount,
+        });
 
-      return analysis;
-    });
+        return analysis;
+      },
+    );
 
     const totalWords = sectionResults.reduce((acc, s) => acc + s.wordCount, 0);
     const avgEase =

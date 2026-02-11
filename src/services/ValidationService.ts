@@ -34,7 +34,7 @@ export class ValidationService {
 
     const pending = report.sections.filter((s) => s.todoCount > 0);
     pending.forEach((s) =>
-      issues.push(`Pending Content: Section "${s.header}" has TODOs.`),
+      issues.push(`Pending Content: Section "${s.sectionId}" has TODOs.`),
     );
 
     if (issues.length > 0) {
@@ -83,16 +83,16 @@ export class ValidationService {
 
     for (const sectionData of staticReport.sections) {
       await LoggerService.debug(`ValidationService: Auditing section`, {
-        header: sectionData.header,
+        sectionId: sectionData.sectionId,
       });
-      onStart?.(sectionData.header);
+      onStart?.(sectionData.sectionId);
 
       const result = await auditor.audit({
         title: parsed.frontmatter.title!,
         goal: parsed.frontmatter.goal!,
         blueprint: JSON.stringify(parsed.frontmatter.blueprint || {}, null, 2),
         staticAnalysis: JSON.stringify(sectionData || {}, null, 2),
-        content: parsed.sections[sectionData.header],
+        content: parsed.sections[sectionData.sectionId],
         persona: activePersona.agent,
         scope: "section",
         onRetry,

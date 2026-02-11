@@ -21,28 +21,28 @@ export class FillService {
    */
   static async execute(
     filePath: string,
-    headersToFill: string[],
+    sectionIdsToFill: string[],
     activePersona: AgentPair & { type: "persona" },
     writers: (AgentPair & { type: "writer" })[],
-    onStart?: (data: { header: string; writerId: string }) => void,
+    onStart?: (data: { id: string; writerId: string }) => void,
     onComplete?: () => void,
     onRetry?: (err: Error) => Promise<boolean>,
   ) {
     await LoggerService.info(`FillService: Starting execution`, {
       filePath,
-      sections: headersToFill.length,
+      sections: sectionIdsToFill.length,
     });
 
     const content = await fs.readFile(filePath, "utf-8");
     const parsed = ParserService.parseMarkdown(content);
-    const sectionHeaders = Object.keys(parsed.sections);
+    const sectionIds = Object.keys(parsed.sections);
 
     const updatedSections = { ...parsed.sections };
     const updatedBridges = { ...(parsed.frontmatter.bridges || {}) };
 
-    for (let i = 0; i < sectionHeaders.length; i++) {
-      const header = sectionHeaders[i];
-      if (!headersToFill.includes(header)) continue;
+    for (let i = 0; i < sectionIds.length; i++) {
+      const header = sectionIds[i];
+      if (!sectionIdsToFill.includes(header)) continue;
 
       const body = updatedSections[header];
       const intent = body.match(TODO_REGEX)?.[1]?.trim() || "Expand details.";
@@ -56,7 +56,7 @@ export class FillService {
         throw new Error(error);
       }
 
-      onStart?.({ header, writerId });
+      onStart?.({ id: sectionIds[i], writerId });
 
       const response = await writer.agent.write({
         intent,
@@ -65,14 +65,13 @@ export class FillService {
         audience: parsed.frontmatter.audience || "",
         language: parsed.frontmatter.language,
         persona: activePersona.agent,
-        precedingBridge:
-          i > 0 ? updatedBridges[sectionHeaders[i - 1]] : undefined,
+        precedingBridge: i > 0 ? updatedBridges[sectionIds[i - 1]] : undefined,
         isFirst: i === 0,
-        isLast: i === sectionHeaders.length - 1,
+        isLast: i === sectionIds.length - 1,
         onRetry,
       });
 
-      updatedSections[header] = response.content;
+      updatedSections[header] = `${response.header}\n${response.content}`;
       updatedBridges[header] = response.bridge;
       onComplete?.();
     }

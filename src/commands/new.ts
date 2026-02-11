@@ -170,6 +170,7 @@ export const newCommand = new Command("new")
 
           return { confirmed: false, feedback };
         },
+        onRetry: cliRetryHandler,
       });
 
       const hubDir = await IoService.createHubDirectory(blueprint.hubId);
@@ -200,12 +201,12 @@ export const newCommand = new Command("new")
 
       await FillService.execute(
         filePath,
-        blueprint.components.map((c) => c.header),
+        blueprint.components.map((c) => c.id),
         persona,
         writers,
-        ({ header, writerId }) =>
+        ({ id, writerId }) =>
           console.log(
-            chalk.gray(`   Generating [${writerId}] "${header}"... `),
+            chalk.gray(`   Generating section [${writerId}]: "${id}"... `),
           ),
         () => console.log(chalk.green("      Done ✅")),
         cliRetryHandler,

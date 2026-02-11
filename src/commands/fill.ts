@@ -54,22 +54,25 @@ export const fillCommand = new Command("fill")
       const content = await fs.readFile(targetFile, "utf-8");
       const parsed = ParserService.parseMarkdown(content);
 
-      const fillableHeaders = Object.entries(parsed.sections)
+      const fillableSectionIds = Object.entries(parsed.sections)
         .filter(([_, body]) => TODO_REGEX.test(body))
         .map(([header]) => header);
 
-      if (fillableHeaders.length === 0) {
+      if (fillableSectionIds.length === 0) {
         return console.log(
           chalk.yellow("✨ No sections marked with TODO found."),
         );
       }
 
-      const { selection } = await inquirer.prompt([
+      const { sectionIdsToFill } = await inquirer.prompt([
         {
           type: "checkbox",
           name: "selection",
           message: "Select sections to generate (Sequential):",
-          choices: fillableHeaders.map((h) => ({ name: h, checked: true })),
+          choices: fillableSectionIds.map((sectionId) => ({
+            name: sectionId,
+            checked: true,
+          })),
         },
       ]);
 
@@ -84,26 +87,21 @@ export const fillCommand = new Command("fill")
         throw new Error(`Persona "${parsed.frontmatter.personaId}" not found.`);
 
       console.log(
-        chalk.blue(`\n🚀 Generating ${selection.length} sections...\n`),
+        chalk.blue(`\n🚀 Generating ${sectionIdsToFill.length} sections...\n`),
       );
 
-      // Implementation of original retry logic wrapped around the service call
-      for (let i = 0; i < selection.length; i++) {
-        const header = selection[i];
-
-        await FillService.execute(
-          targetFile,
-          [header],
-          persona,
-          writers,
-          ({ header, writerId }) =>
-            console.log(
-              chalk.gray(`   Generating [${writerId}] "${header}"... `),
-            ),
-          () => console.log(chalk.green("      Done ✅\n")),
-          cliRetryHandler,
-        );
-      }
+      await FillService.execute(
+        targetFile,
+        sectionIdsToFill,
+        persona,
+        writers,
+        ({ id, writerId }) =>
+          console.log(
+            chalk.gray(`   Generating section [${writerId}]: "${id}"... `),
+          ),
+        () => console.log(chalk.green("      Done ✅\n")),
+        cliRetryHandler,
+      );
 
       console.log(chalk.bold.green(`\n✨ Generation complete.`));
     } catch (error: any) {

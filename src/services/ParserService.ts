@@ -24,9 +24,9 @@ export class ParserService {
       const frontmatter = FrontmatterSchema.passthrough().parse(
         data,
       ) as ContentFrontmatter;
-      const sections = this.splitSections(content);
+      const sections = this.extractSections(content);
 
-      LoggerService.debug("Markdown parsed successfully", {
+      LoggerService.debug("Markdown parsed successfully via Bracket Sections", {
         title: frontmatter.title,
         sectionCount: Object.keys(sections).length,
       });
@@ -45,15 +45,23 @@ export class ParserService {
     frontmatter: Record<string, any>,
     sections: Record<string, string>,
   ): string {
-    LoggerService.debug("Reconstructing markdown content");
+    LoggerService.debug(
+      "Reconstructing markdown content with bracket delimiters",
+    );
+
     const yamlLines = Object.entries(frontmatter).map(([k, v]) => {
-      const value =
-        typeof v === "object" ? JSON.stringify(v) : JSON.stringify(v);
+      const value = JSON.stringify(v);
       return `${k}: ${value}`;
     });
 
-    const body = Object.entries(sections)
-      .map(([header, content]) => `## ${header}\n\n${content}`)
+    const blueprint = frontmatter.blueprint || {};
+    const sectionIds = Object.keys(blueprint);
+
+    const body = sectionIds
+      .map((id) => {
+        const content = sections[id] || "";
+        return `[SECTION id="${id}"]\n${content}\n[/SECTION]`;
+      })
       .join("\n\n");
 
     return `---\n${yamlLines.join("\n")}\n---\n\n${body}`;
@@ -95,24 +103,19 @@ export class ParserService {
       bridges: {},
     };
 
-    // Add Spoke-specific metadata if applicable
     if (type === "spoke") {
-      (frontmatter as any).componentId = blueprint.hubId;
+      frontmatter.componentId = blueprint.hubId;
     } else {
-      (frontmatter as any).assemblerId = brief.assemblerId;
+      frontmatter.assemblerId = brief.assemblerId;
     }
 
-    const sections: Record<string, string> = {};
-    blueprint.components.forEach((c) => {
-      sections[c.header] = `> **TODO:** ${c.intent}\n\n*Pending generation...*`;
-    });
-
-    // Reuse reconstruction logic for consistent YAML formatting
-    const body = Object.entries(sections)
-      .map(([header, content]) => `## ${header}\n\n${content}`)
+    const body = blueprint.components
+      .map((c) => {
+        const content = `## ${c.header}\n\n> **TODO:** ${c.intent}\n\n*Pending generation...*`;
+        return `[SECTION id="${c.id}"]\n${content}\n[/SECTION]`;
+      })
       .join("\n\n");
 
-    // Standardize YAML stringification
     const yaml = Object.entries(frontmatter)
       .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
       .join("\n");
@@ -120,26 +123,16 @@ export class ParserService {
     return `---\n${yaml}\n---\n\n# ${brief.topic}\n\n${body}`;
   }
 
-  private static splitSections(markdownBody: string): Record<string, string> {
+  private static extractSections(markdownBody: string): Record<string, string> {
     const sections: Record<string, string> = {};
-    const headerRegex = /^(#{2})\s+(.*?)\s*$/gm;
+    // Matches [SECTION id="..."]...[/SECTION] across multiple lines
+    const sectionRegex = /\[SECTION id="(.*?)"\]([\s\S]*?)\[\/SECTION\]/gi;
+
     let match;
-    const matches: { key: string; index: number; end: number }[] = [];
-
-    while ((match = headerRegex.exec(markdownBody)) !== null) {
-      matches.push({
-        key: match[2].trim(),
-        index: match.index,
-        end: match.index + match[0].length,
-      });
-    }
-
-    for (let i = 0; i < matches.length; i++) {
-      const current = matches[i];
-      const next = matches[i + 1];
-      const startSlice = current.end;
-      const endSlice = next ? next.index : markdownBody.length;
-      sections[current.key] = markdownBody.slice(startSlice, endSlice).trim();
+    while ((match = sectionRegex.exec(markdownBody)) !== null) {
+      const id = match[1].trim();
+      const content = match[2].trim();
+      sections[id] = content;
     }
 
     return sections;

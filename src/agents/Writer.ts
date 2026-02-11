@@ -17,6 +17,7 @@ export interface WriterContext {
 }
 
 export interface WriterResponse {
+  header: string;
   content: string;
   bridge: string;
 }
@@ -42,15 +43,18 @@ export class Writer {
       2. Do not repeat information or "steal" topics reserved for other sections.
 
       PROTOCOL:
-      1. Provide a [CONTENT] block with markdown.
-      2. Provide a [BRIDGE] block with a brief summary for the next agent.
-      3. FORMATTING: You are writing a SECTION of a document. 
-         - NEVER use H1 (#) or H2 (##) tags.
+      1. Provide a [HEADER] block with a compelling H2 title for this section.
+      2. Provide a [CONTENT] block with markdown.
+      3. Provide a [BRIDGE] block with a brief summary for the next agent.
+      4. FORMATTING: You are writing a SECTION of a document. 
+         - NEVER use H1 (#) or H2 (##) tags inside the [CONTENT] block.
          - Use H3 (###) or H4 (####) for sub-sections if needed.
-         - Do not repeat the section title provided in the intent.
-      4. Do not repeat information reserved for other sections.
+      5. Do not repeat information reserved for other sections.
 
       OUTPUT FORMAT:
+      [HEADER]
+      (Engaging H2 Title)
+      [/HEADER]
       [CONTENT]
       (Your markdown content here, starting directly with text)
       [/CONTENT]
@@ -75,14 +79,16 @@ export class Writer {
       onRetry: ctx.onRetry,
     });
 
+    const headerMatch = text.match(/\[HEADER\]([\s\S]*?)(\[\/HEADER\]|$)/i);
     const contentMatch = text.match(/\[CONTENT\]([\s\S]*?)(\[\/CONTENT\]|$)/i);
     const bridgeMatch = text.match(/\[BRIDGE\]([\s\S]*?)(\[\/BRIDGE\]|$)/i);
 
-    if (!contentMatch || !bridgeMatch) {
+    if (!headerMatch || !contentMatch || !bridgeMatch) {
       throw new Error(`Writer ${this.id} failed to return delimited content.`);
     }
 
     return {
+      header: headerMatch[1].trim(),
       content: contentMatch[1].trim(),
       bridge: bridgeMatch[1].trim(),
     };
