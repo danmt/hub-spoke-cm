@@ -8,7 +8,6 @@ import { executeCliFillAction } from "../presets/executeCliFillAction.js";
 import { IoService } from "../services/IoService.js";
 import { ParserService } from "../services/ParserService.js";
 import { RegistryService } from "../services/RegistryService.js";
-import { ValidationService } from "../services/ValidationService.js";
 import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
 import { cliRetryHandler } from "../utils/cliRetryHandler.js";
 import { indentText } from "../utils/identText.js";
@@ -29,7 +28,6 @@ export const newCommand = new Command("new")
         process.exit(1);
       }
 
-      const auditors = RegistryService.getAgentsByType(agents, "auditor");
       const personas = RegistryService.getAgentsByType(agents, "persona");
       const writers = RegistryService.getAgentsByType(agents, "writer");
       const assemblers = RegistryService.getAgentsByType(agents, "assembler");
@@ -177,69 +175,6 @@ export const newCommand = new Command("new")
         fileContent,
         assembly.blueprint.components.map((c) => c.id),
       );
-
-      const { shouldAudit } = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "shouldAudit",
-          message: "Run a semantic audit on the new content?",
-          default: true,
-        },
-      ]);
-
-      if (!shouldAudit) {
-        return;
-      }
-
-      if (auditors.length === 0) {
-        throw new Error("No auditors found in workspace. ");
-      }
-
-      const { auditorId } = await inquirer.prompt([
-        {
-          type: "list",
-          name: "auditorId",
-          message: "Select Auditor Strategy:",
-          choices: auditors.map((a) => ({
-            name: `${a.artifact.id}: ${a.artifact.description}`,
-            value: a.artifact.id,
-          })),
-        },
-      ]);
-      const auditor = auditors.find((a) => a.artifact.id === auditorId)!;
-
-      if (!auditor) {
-        throw new Error(
-          `Auditor "${auditorId}" not found in workspace. ` +
-            `Available: ${auditors.map((a) => a.artifact.id).join(", ")}`,
-        );
-      }
-
-      console.log(
-        chalk.cyan(`\n🧠 Running Step 2: Semantic Analysis [${auditorId}]...`),
-      );
-
-      const { allIssues } = await ValidationService.runFullAudit(
-        filePath,
-        auditor.agent,
-        persona,
-        (header) => console.log(chalk.gray(`   🔎  Auditing "${header}"... `)),
-        () => console.log(chalk.green("      Done ✅")),
-        cliRetryHandler,
-      );
-
-      if (allIssues.length === 0) {
-        console.log(chalk.bold.green("\n✨ Audit passed! No issues found."));
-      } else {
-        console.log(
-          chalk.yellow(
-            `\n⚠️  Auditor found ${allIssues.length} issues. Run 'hub audit' to fix.`,
-          ),
-        );
-        console.log(
-          chalk.gray("Run 'hub audit' manually to apply verified fixes."),
-        );
-      }
     } catch (error) {
       console.error(chalk.red("\n❌ Command `new` Error:"), error);
     }

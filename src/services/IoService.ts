@@ -123,7 +123,6 @@ export class IoService {
       "agents/personas",
       "agents/writers",
       "agents/assemblers",
-      "agents/auditors",
     ];
 
     for (const d of dirs) {
@@ -163,21 +162,6 @@ description: "General narrative writing strategy."
 ---
 Focus on narrative flow, clarity, and transitions. Avoid code blocks unless absolutely necessary to illustrate a point. Ensure the tone remains consistent with the chosen Persona.`;
 
-    const standardAuditor = `---
-id: "standard"
-type: "auditor"
-description: "General quality, flow, and duplication check."
----
-1. Check for logical flow between paragraphs.
-2. Identify any repetitive phrases or redundant information.
-3. Ensure the tone is consistent and not overly "robotic".
-4. Verify that the conclusion actually summarizes the points made.`;
-
-    await this.safeWriteFile(
-      path.join(rootDir, "agents/auditors/standard.md"),
-      standardAuditor,
-    );
-
     await this.safeWriteFile(
       path.join(rootDir, "agents/personas/standard.md"),
       standardPersona,
@@ -190,11 +174,7 @@ description: "General quality, flow, and duplication check."
       path.join(rootDir, "agents/writers/prose.md"),
       proseWriter,
     );
-    await this.safeWriteFile(
-      path.join(rootDir, "agents/auditors/standard.md"),
-      standardAuditor,
-    );
-    const gitignore = ".hub/tmp/*\n.hub/audits/*.tmp\n.hub/logs/*";
+    const gitignore = ".hub/tmp/*\n.hub/logs/*";
     await fs.writeFile(path.join(rootDir, ".gitignore"), gitignore, "utf-8");
   }
 

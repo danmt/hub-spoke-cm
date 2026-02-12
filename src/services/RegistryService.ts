@@ -4,7 +4,6 @@ import fs from "fs/promises";
 import matter from "gray-matter";
 import path from "path";
 import { Assembler } from "../agents/Assembler.js";
-import { Auditor } from "../agents/Auditor.js";
 import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
 import { IoService } from "./IoService.js";
@@ -36,21 +35,12 @@ export interface AssemblerArtifact extends BaseArtifact {
   writerIds: string[];
 }
 
-export interface AuditorArtifact extends BaseArtifact {
-  type: "auditor";
-}
-
-export type Artifact =
-  | PersonaArtifact
-  | WriterArtifact
-  | AssemblerArtifact
-  | AuditorArtifact;
+export type Artifact = PersonaArtifact | WriterArtifact | AssemblerArtifact;
 
 export type AgentPair =
   | { type: "persona"; artifact: PersonaArtifact; agent: Persona }
   | { type: "writer"; artifact: WriterArtifact; agent: Writer }
-  | { type: "assembler"; artifact: AssemblerArtifact; agent: Assembler }
-  | { type: "auditor"; artifact: AuditorArtifact; agent: Auditor };
+  | { type: "assembler"; artifact: AssemblerArtifact; agent: Assembler };
 
 export function isAgentType<T extends AgentPair["type"]>(
   pair: AgentPair,
@@ -106,8 +96,6 @@ export class RegistryService {
               tone: data.tone || "Neutral",
               accent: data.accent || "Standard",
             } as PersonaArtifact);
-          } else if (type === "auditor") {
-            allArtifacts.push({ ...base, type: "auditor" } as AuditorArtifact);
           } else if (type === "writer") {
             allArtifacts.push({ ...base, type: "writer" } as WriterArtifact);
           } else {
@@ -165,16 +153,6 @@ export class RegistryService {
               (artifact as AssemblerArtifact).writerIds,
             ),
           };
-        case "auditor":
-          return {
-            type: "auditor",
-            artifact: artifact as AuditorArtifact,
-            agent: new Auditor(
-              artifact.id,
-              artifact.description,
-              artifact.content,
-            ),
-          };
       }
     });
 
@@ -229,15 +207,6 @@ export class RegistryService {
           id: a.artifact.id,
           description: a.artifact.description,
           supportedWriters: a.artifact.writerIds,
-        })),
-      auditors: agents
-        .filter(
-          (a): a is Extract<AgentPair, { type: "auditor" }> =>
-            a.type === "auditor",
-        )
-        .map((a) => ({
-          id: a.artifact.id,
-          description: a.artifact.description,
         })),
     };
     return JSON.stringify(manifest, null, 2);

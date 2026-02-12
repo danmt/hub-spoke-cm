@@ -34,7 +34,6 @@ export const registryCommand = new Command("registry")
         { label: "👤 PERSONAS", type: "persona" },
         { label: "🏗️  ASSEMBLERS", type: "assembler" },
         { label: "🖋️  WRITERS", type: "writer" },
-        { label: "🕵️  AUDITORS", type: "auditor" },
       ] as const;
 
       for (const cat of categories) {
