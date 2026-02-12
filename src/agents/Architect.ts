@@ -101,6 +101,8 @@ export class Architect {
       2. Provide a [MESSAGE] block with explanation/questions.
       3. Provide a [PROPOSAL] block with the current structured Brief.
       4. If tools are missing, explain in [MESSAGE] and propose the closest match in [PROPOSAL].
+      5. The [MESSAGE] should be in the user's language.
+      6. The [TOPIC], [GOAL] and [AUDIENCE] should be ALWAYS in English.
 
       OUTPUT FORMAT:
       [MESSAGE]Your message to the user.[/MESSAGE]

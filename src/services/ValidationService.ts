@@ -145,7 +145,6 @@ export class ValidationService {
         goal: parsed.frontmatter.goal || "",
         audience: parsed.frontmatter.audience || "",
         language: parsed.frontmatter.language,
-        persona: activePersona.agent,
         isFirst: sectionIndex === 0,
         isLast: sectionIndex === sectionHeaders.length - 1,
         onRetry,

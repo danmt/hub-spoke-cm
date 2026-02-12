@@ -58,21 +58,33 @@ export class FillService {
 
       onStart?.({ id: sectionIds[i], writerId });
 
-      const response = await writer.agent.write({
+      const neutralResult = await writer.agent.write({
         intent,
         topic: parsed.frontmatter.title,
         goal: parsed.frontmatter.goal || "",
         audience: parsed.frontmatter.audience || "",
         language: parsed.frontmatter.language,
-        persona: activePersona.agent,
         precedingBridge: i > 0 ? updatedBridges[sectionIds[i - 1]] : undefined,
         isFirst: i === 0,
         isLast: i === sectionIds.length - 1,
         onRetry,
       });
 
-      updatedSections[header] = `${response.header}\n${response.content}`;
-      updatedBridges[header] = response.bridge;
+      const personaResult = await activePersona.agent.rephrase(
+        neutralResult.header,
+        neutralResult.content,
+        {
+          topic: parsed.frontmatter.title,
+          goal: parsed.frontmatter.goal || "",
+          audience: parsed.frontmatter.audience || "",
+          language: parsed.frontmatter.language,
+        },
+        onRetry,
+      );
+
+      updatedSections[header] =
+        `${personaResult.header}\n\n${personaResult.content}`;
+      updatedBridges[header] = neutralResult.bridge;
       onComplete?.();
     }
 

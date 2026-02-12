@@ -69,6 +69,9 @@ export const newCommand = new Command("new")
         interact: async (message, proposal) => {
           console.log(`\n${chalk.green("Architect:")} ${message}`);
           console.log(chalk.dim(`\n--- Current Proposal ---`));
+          console.log(`${chalk.yellow("Topic:")} ${proposal.topic}`);
+          console.log(`${chalk.yellow("Goal:")} ${proposal.goal}`);
+          console.log(`${chalk.yellow("Audience:")} ${proposal.audience}`);
           console.log(`${chalk.yellow("Assembler:")} ${proposal.assemblerId}`);
           console.log(`${chalk.yellow("Persona:")}   ${proposal.personaId}\n`);
 
@@ -105,15 +108,6 @@ export const newCommand = new Command("new")
 
       if (!brief) return;
 
-      const persona = personas.find((p) => p.artifact.id === brief.personaId);
-
-      if (!persona) {
-        throw new Error(
-          `Persona "${brief.personaId}" not found in workspace. ` +
-            `Available: ${personas.map((a) => a.artifact.id).join(", ")}`,
-        );
-      }
-
       const assembler = assemblers.find(
         (a) => a.artifact.id === brief.assemblerId,
       );
@@ -134,16 +128,18 @@ export const newCommand = new Command("new")
       const { blueprint } = await assembler.agent.assemble({
         audience: brief.audience,
         goal: brief.goal,
-        language: brief.language,
         topic: brief.topic,
-        persona: persona.agent,
         validator: async (blueprint) => {
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
+          console.log(chalk.white(`\nTITLE: ${brief.topic}`));
+          console.log(chalk.white(`HUB ID: ${blueprint.hubId}\n`));
+
           blueprint.components.forEach((c, i) => {
             console.log(
               chalk.white(`#${i + 1} [${c.writerId.toUpperCase()}] `) +
                 chalk.bold(c.header),
             );
+            console.log(chalk.gray(`  INTENT: ${c.intent}`));
           });
 
           const { confirmed } = await inquirer.prompt([
@@ -197,6 +193,15 @@ export const newCommand = new Command("new")
 
       if (!shouldFill) {
         return;
+      }
+
+      const persona = personas.find((p) => p.artifact.id === brief.personaId);
+
+      if (!persona) {
+        throw new Error(
+          `Persona "${brief.personaId}" not found in workspace. ` +
+            `Available: ${personas.map((a) => a.artifact.id).join(", ")}`,
+        );
       }
 
       await FillService.execute(

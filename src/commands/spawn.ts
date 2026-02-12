@@ -124,21 +124,10 @@ export const spawnCommand = new Command("spawn")
         );
       }
 
-      const persona = personas.find((p) => p.artifact.id === brief.personaId);
-
-      if (!persona) {
-        throw new Error(
-          `Persona "${brief.personaId}" not found in workspace. ` +
-            `Available: ${personas.map((a) => a.artifact.id).join(", ")}`,
-        );
-      }
-
       const { blueprint } = await assembler.agent.assemble({
         audience: brief.audience,
         goal: brief.goal,
-        language: brief.language,
         topic: brief.topic,
-        persona: persona.agent,
         validator: async (blueprint) => {
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
           blueprint.components.forEach((c, i) => {
@@ -201,6 +190,15 @@ export const spawnCommand = new Command("spawn")
       ]);
 
       if (!shouldFill) return;
+
+      const persona = personas.find((p) => p.artifact.id === brief.personaId);
+
+      if (!persona) {
+        throw new Error(
+          `Persona "${brief.personaId}" not found in workspace. ` +
+            `Available: ${personas.map((a) => a.artifact.id).join(", ")}`,
+        );
+      }
 
       await FillService.execute(
         filePath,

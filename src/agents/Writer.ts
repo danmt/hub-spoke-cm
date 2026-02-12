@@ -1,7 +1,6 @@
 // src/agents/Writer.ts
 import { AiService } from "../services/AiService.js";
 import { getGlobalConfig } from "../utils/config.js";
-import { Persona } from "./Persona.js";
 
 export interface WriterContext {
   intent: string;
@@ -9,7 +8,6 @@ export interface WriterContext {
   goal: string;
   audience: string;
   language: string;
-  persona: Persona;
   precedingBridge?: string;
   isFirst: boolean;
   isLast: boolean;
@@ -33,7 +31,7 @@ export class Writer {
     const modelName = getGlobalConfig().writerModel || "gemini-3-flash";
 
     const systemInstruction = `
-      ${ctx.persona.getInstructions(ctx)}
+      ROLE: You are a Neutral Content Writer.
       
       WRITING STRATEGY: 
       ${this.writingStrategy}
