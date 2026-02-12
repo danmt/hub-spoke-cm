@@ -2,15 +2,11 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
-import path from "path";
 import { Architect } from "../agents/Architect.js";
+import { executeCliCreateHubAction } from "../presets/executeCliCreateHubAction.js";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
 import { IoService } from "../services/IoService.js";
-import { ParserService } from "../services/ParserService.js";
 import { RegistryService } from "../services/RegistryService.js";
-import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
-import { cliRetryHandler } from "../utils/cliRetryHandler.js";
-import { indentText } from "../utils/identText.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")
@@ -65,84 +61,11 @@ export const newCommand = new Command("new")
 
       const architect = new Architect(manifest, baseline);
 
-      const architecture = await architect.architect({
-        interact: async ({ message, brief }) => {
-          console.log(`\n${chalk.green("Architect:")} ${message}`);
-          console.log(chalk.dim(`\n--- Current Proposal ---`));
-          console.log(`${chalk.yellow("Topic:")} ${brief.topic}`);
-          console.log(`${chalk.yellow("Goal:")} ${brief.goal}`);
-          console.log(`${chalk.yellow("Audience:")} ${brief.audience}`);
-          console.log(`${chalk.yellow("Assembler:")} ${brief.assemblerId}`);
-          console.log(`${chalk.yellow("Persona:")}   ${brief.personaId}\n`);
-
-          return cliConfirmOrFeedback();
-        },
-
-        onRetry: cliRetryHandler,
-        onThinking: () =>
-          console.log(chalk.blue("\n🧠 Architect is thinking...")),
-      });
-
-      const assembler = assemblers.find(
-        (a) => a.artifact.id === architecture.brief.assemblerId,
-      );
-
-      if (!assembler) {
-        throw new Error(
-          `Assembler "${architecture.brief.assemblerId}" not found in workspace. ` +
-            `Available: ${assemblers.map((a) => a.artifact.id).join(", ")}`,
+      const { architecture, assembly, filePath, fileContent } =
+        await executeCliCreateHubAction(
+          architect,
+          assemblers.map((a) => a.agent),
         );
-      }
-
-      console.log(
-        chalk.cyan(
-          `\n🏗️  Requesting structure from ${chalk.bold(architecture.brief.assemblerId)}...`,
-        ),
-      );
-
-      const assembly = await assembler.agent.assemble({
-        audience: architecture.brief.audience,
-        goal: architecture.brief.goal,
-        topic: architecture.brief.topic,
-        interact: async ({ blueprint }) => {
-          console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
-          console.log(`${chalk.yellow("Title:")} ${architecture.brief.topic}`);
-          console.log(`${chalk.yellow("Hub ID:")} ${blueprint.hubId}`);
-
-          blueprint.components.forEach((c, i) => {
-            console.log(
-              chalk.white(`#${i + 1} [${c.writerId.toUpperCase()}] `) +
-                chalk.bold(c.header),
-            );
-            console.log(
-              indentText(`${chalk.yellow("Bridge:")} ${c.bridge}`, 4),
-            );
-            console.log(
-              indentText(`${chalk.yellow("Intent:")} ${c.intent}`, 4),
-            );
-          });
-
-          return cliConfirmOrFeedback();
-        },
-        onRetry: cliRetryHandler,
-      });
-
-      const hubDir = await IoService.createHubDirectory(
-        assembly.blueprint.hubId,
-      );
-      const filePath = path.join(hubDir, "hub.md");
-      const fileContent = ParserService.generateScaffold(
-        "hub",
-        architecture.brief,
-        assembly.blueprint,
-      );
-      await IoService.safeWriteFile(filePath, fileContent);
-
-      console.log(
-        chalk.bold.green(
-          `✅ Hub scaffolded at posts/${assembly.blueprint.hubId}\n`,
-        ),
-      );
 
       const { shouldFill } = await inquirer.prompt([
         {

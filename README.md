@@ -33,7 +33,7 @@ Using the **Strategy Pattern**, the system routes sections to specialized Writer
 
 ## 🛠️ CLI Commands
 
-- **`hub init`**: Scaffolds a new workspace and seeds starter agents (Persona, Auditor, Writer, Assembler) into `/agents`.
+- **`hub init`**: Scaffolds a new workspace and seeds starter agents (Persona, Writer, Assembler) into `/agents`.
 - **`hub new`**: Conducts an Architect interview to plan a Hub. It saves the structural intent as a `blueprint` in the frontmatter.
 - **`hub fill`**: The generation engine that executes the `writerMap` strategy to replace `> **TODO:**` blocks with prose or code.
 - **`hub check`**: A fast, static audit to identify pending content or metadata inconsistencies.
@@ -45,7 +45,7 @@ Using the **Strategy Pattern**, the system routes sections to specialized Writer
 A Hub Workspace is defined by its directory structure, allowing for decentralized content management:
 
 - **`.hub/`**: Internal workspace marker.
-- **`agents/`**: Your local Intelligence Layer. Dropping a file into `agents/writers/` creates a new auditing strategy.
+- **`agents/`**: Your local Intelligence Layer. Dropping a file into `agents/writers/` creates a new writing strategy.
 - **`posts/`**: The content database. Every Hub folder contains a `hub.md`.
 
 ### Setup

@@ -9,7 +9,7 @@ import { Writer } from "../agents/Writer.js";
 import { IoService } from "./IoService.js";
 import { LoggerService } from "./LoggerService.js";
 
-export type ArtifactType = "persona" | "writer" | "assembler" | "auditor";
+export type ArtifactType = "persona" | "writer" | "assembler";
 
 export interface BaseArtifact {
   id: string;
@@ -58,7 +58,6 @@ export class RegistryService {
       personas: "persona",
       writers: "writer",
       assemblers: "assembler",
-      auditors: "auditor",
     };
 
     const allArtifacts: Artifact[] = [];
