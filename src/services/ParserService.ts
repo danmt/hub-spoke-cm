@@ -82,9 +82,11 @@ export class ParserService {
 
     blueprint.components.forEach((c) => {
       blueprintData[c.id] = {
+        id: c.id,
         header: c.header,
         intent: c.intent,
         writerId: c.writerId,
+        bridge: c.bridge,
       };
       writerMap[c.id] = c.writerId;
     });
@@ -99,8 +101,6 @@ export class ParserService {
       date: new Date().toISOString().split("T")[0],
       personaId: brief.personaId,
       blueprint: blueprintData,
-      writerMap: writerMap,
-      bridges: {},
     };
 
     if (type === "spoke") {

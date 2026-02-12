@@ -36,22 +36,22 @@ export class FillService {
     const content = await fs.readFile(filePath, "utf-8");
     const parsed = ParserService.parseMarkdown(content);
     const sectionIds = Object.keys(parsed.sections);
+    const blueprint = parsed.frontmatter.blueprint || {};
 
     const updatedSections = { ...parsed.sections };
-    const updatedBridges = { ...(parsed.frontmatter.bridges || {}) };
 
     for (let i = 0; i < sectionIds.length; i++) {
-      const header = sectionIds[i];
-      if (!sectionIdsToFill.includes(header)) continue;
+      const sectionId = sectionIds[i];
+      if (!sectionIdsToFill.includes(sectionId)) continue;
 
-      const body = updatedSections[header];
+      const body = updatedSections[sectionId];
       const intent = body.match(TODO_REGEX)?.[1]?.trim() || "Expand details.";
-      const writerId =
-        (parsed.frontmatter.writerMap as any)?.[header] || "prose";
+      const writerId = blueprint[sectionId].writerId;
+
       const writer = writers.find((w) => w.artifact.id === writerId);
 
       if (!writer) {
-        const error = `Writer "${writerId}" not found for section "${header}".`;
+        const error = `Writer "${writerId}" not found for section "${sectionId}".`;
         await LoggerService.error(`FillService: ${error}`);
         throw new Error(error);
       }
@@ -61,10 +61,9 @@ export class FillService {
       const neutralResult = await writer.agent.write({
         intent,
         topic: parsed.frontmatter.title,
-        goal: parsed.frontmatter.goal || "",
-        audience: parsed.frontmatter.audience || "",
-        language: parsed.frontmatter.language,
-        precedingBridge: i > 0 ? updatedBridges[sectionIds[i - 1]] : undefined,
+        goal: parsed.frontmatter.goal,
+        audience: parsed.frontmatter.audience,
+        bridge: blueprint[sectionId].bridge,
         isFirst: i === 0,
         isLast: i === sectionIds.length - 1,
         onRetry,
@@ -75,21 +74,20 @@ export class FillService {
         neutralResult.content,
         {
           topic: parsed.frontmatter.title,
-          goal: parsed.frontmatter.goal || "",
-          audience: parsed.frontmatter.audience || "",
+          goal: parsed.frontmatter.goal,
+          audience: parsed.frontmatter.audience,
           language: parsed.frontmatter.language,
         },
         onRetry,
       );
 
-      updatedSections[header] =
+      updatedSections[sectionId] =
         `${personaResult.header}\n\n${personaResult.content}`;
-      updatedBridges[header] = neutralResult.bridge;
       onComplete?.();
     }
 
     const finalMarkdown = ParserService.reconstructMarkdown(
-      { ...parsed.frontmatter, bridges: updatedBridges },
+      parsed.frontmatter,
       updatedSections,
     );
 

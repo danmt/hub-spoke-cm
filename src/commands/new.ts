@@ -11,6 +11,7 @@ import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
 import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
 import { cliRetryHandler } from "../utils/cliRetryHandler.js";
+import { indentText } from "../utils/identText.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")
@@ -115,7 +116,8 @@ export const newCommand = new Command("new")
               chalk.white(`#${i + 1} [${c.writerId.toUpperCase()}] `) +
                 chalk.bold(c.header),
             );
-            console.log(chalk.gray(`  INTENT: ${c.intent}`));
+            console.log(chalk.gray(indentText(`INTENT: ${c.intent}`, 5)));
+            console.log(chalk.gray(indentText(`BRIDGE: ${c.bridge}`, 5)));
           });
 
           return cliConfirmOrFeedback();

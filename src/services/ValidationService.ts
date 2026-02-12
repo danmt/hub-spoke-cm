@@ -110,7 +110,7 @@ export class ValidationService {
    */
   static async verifyAndFix(
     workingFilePath: string,
-    sectionName: string,
+    sectionId: string,
     issues: AuditIssue[],
     auditor: Auditor,
     activePersona: AgentPair & { type: "persona" },
@@ -120,15 +120,16 @@ export class ValidationService {
     onRetry?: (err: Error) => Promise<boolean>,
   ) {
     await LoggerService.debug(`ValidationService: Surgical fix`, {
-      section: sectionName,
+      sectionId,
     });
     const rawContent = await fs.readFile(workingFilePath, "utf-8");
     const parsed = ParserService.parseMarkdown(rawContent);
 
     const sectionHeaders = Object.keys(parsed.sections);
-    const sectionIndex = sectionHeaders.indexOf(sectionName);
-    const writerId =
-      (parsed.frontmatter.blueprint as any)?.[sectionName]?.writerId || "prose";
+    const sectionIndex = sectionHeaders.indexOf(sectionId);
+    const blueprint = parsed.frontmatter.blueprint;
+    const bridge = blueprint[sectionId].bridge;
+    const writerId = blueprint[sectionId].writerId;
     const writer = writers.find((w) => w.artifact.id === writerId);
 
     if (!writer) {
@@ -137,14 +138,14 @@ export class ValidationService {
     }
 
     try {
-      onStart?.({ header: sectionName, writerId });
+      onStart?.({ header: sectionId, writerId });
 
       const response = await writer.agent.write({
         intent: `FIX ISSUES: ${issues.map((i) => i.message).join(", ")}`,
         topic: parsed.frontmatter.title,
         goal: parsed.frontmatter.goal || "",
         audience: parsed.frontmatter.audience || "",
-        language: parsed.frontmatter.language,
+        bridge,
         isFirst: sectionIndex === 0,
         isLast: sectionIndex === sectionHeaders.length - 1,
         onRetry,
@@ -152,7 +153,7 @@ export class ValidationService {
 
       const updatedSections = {
         ...parsed.sections,
-        [sectionName]: response.content,
+        [sectionId]: response.content,
       };
       const candidateContent = ParserService.reconstructMarkdown(
         parsed.frontmatter,
@@ -164,7 +165,7 @@ export class ValidationService {
         goal: parsed.frontmatter.goal!,
         blueprint: JSON.stringify(parsed.frontmatter.blueprint || {}, null, 2),
         staticAnalysis: "{}",
-        content: `## ${sectionName}\n\n${response.content}`,
+        content: `## ${sectionId}\n\n${response.content}`,
         persona: activePersona.agent,
         scope: "section",
         onRetry,
@@ -183,7 +184,7 @@ export class ValidationService {
     } catch (error: any) {
       await LoggerService.error(
         `ValidationService: verifyAndFix critical failure`,
-        { section: sectionName, error: error.message },
+        { section: sectionId, error: error.message },
       );
       return { success: false, message: "Surgical fix failed." };
     }

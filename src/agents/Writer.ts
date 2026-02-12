@@ -7,8 +7,7 @@ export interface WriterContext {
   topic: string;
   goal: string;
   audience: string;
-  language: string;
-  precedingBridge?: string;
+  bridge: string;
   isFirst: boolean;
   isLast: boolean;
   onRetry?: (error: Error) => Promise<boolean>;
@@ -17,7 +16,6 @@ export interface WriterContext {
 export interface WriterResponse {
   header: string;
   content: string;
-  bridge: string;
 }
 
 export class Writer {
@@ -62,9 +60,6 @@ export class Writer {
       [CONTENT]
       (Your markdown content here, starting directly with text)
       [/CONTENT]
-      [BRIDGE]
-      (Brief summary)
-      [/BRIDGE]
     `.trim();
   }
 
@@ -76,7 +71,7 @@ export class Writer {
       [TOPIC]${ctx.topic}[/TOPIC]
       [GOAL]${ctx.goal}[/GOAL]
       [AUDIENCE]${ctx.audience}[/AUDIENCE]
-      [BRIDGE]${ctx.precedingBridge || "Beginning of document"}[/BRIDGE]
+      [BRIDGE]${ctx.bridge}[/BRIDGE]
       [PROGRESS]${ctx.isFirst ? "Start" : ctx.isLast ? "Conclusion" : "In-Progress"}[/PROGRESS]
     `.trim();
 
@@ -92,16 +87,14 @@ export class Writer {
   private parse(text: string): WriterResponse {
     const headerMatch = text.match(/\[HEADER\]([\s\S]*?)(\[\/HEADER\]|$)/i);
     const contentMatch = text.match(/\[CONTENT\]([\s\S]*?)(\[\/CONTENT\]|$)/i);
-    const bridgeMatch = text.match(/\[BRIDGE\]([\s\S]*?)(\[\/BRIDGE\]|$)/i);
 
-    if (!headerMatch || !contentMatch || !bridgeMatch) {
+    if (!headerMatch || !contentMatch) {
       throw new Error(`Writer ${this.id} failed to return delimited content.`);
     }
 
     return {
       header: headerMatch[1].trim(),
       content: contentMatch[1].trim(),
-      bridge: bridgeMatch[1].trim(),
     };
   }
 }

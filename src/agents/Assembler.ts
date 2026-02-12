@@ -72,6 +72,11 @@ export class Assembler {
       2. SCOPE BOUNDARY: Explicitly list what NOT to mention because it belongs in a later section.
       3. THE HAND-OFF: How this section should end to prime the reader for the next specific header.
 
+      CRITICAL REQUIREMENT: "NARRATIVE CONNECTIVITY"
+      For every component, you must define a [BRIDGE]. 
+      This is one paragraph instruction for the writer on how to transition into the current section. 
+      It must mentions all the concepts that have been covered so far.
+
       EXECUTION RULES:
       1. WRITER SELECTION: Select exactly ONE Writer ID from: [${writerConstraint}]. Choose the writer that best fits the specific nature of that section.
       2. LANGUAGE ENFORCEMENT: Write the blueprint 'header' and 'intent' blocks in English for clarity.
@@ -89,6 +94,7 @@ export class Assembler {
       [HEADER]Section Title[/HEADER]
       [INTENT]Detailed micro-brief focusing on the [TOPIC] for the [AUDIENCE][/INTENT]
       [WRITER_ID]prose, code or custom writer IDs[/WRITER_ID]
+      [BRIDGE]Context of the concepts already covered so far[/BRIDGE]
       [/COMPONENT]
     `.trim();
   }
@@ -158,8 +164,9 @@ export class Assembler {
       const writerId = block
         .match(/\[WRITER_ID\](.*?)\[\/WRITER_ID\]/i)?.[1]
         .trim();
+      const bridge = block.match(/\[BRIDGE\](.*?)\[\/BRIDGE\]/i)?.[1].trim();
 
-      if (!id || !header || !intent || !writerId) {
+      if (!id || !header || !intent || !writerId || !bridge) {
         throw new Error("Assembler failed to produce a valid [COMPONENT].");
       }
 
@@ -168,6 +175,7 @@ export class Assembler {
         header,
         intent,
         writerId,
+        bridge,
       });
     }
 

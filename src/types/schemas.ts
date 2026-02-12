@@ -8,8 +8,8 @@ export const SectionBlueprintSchema = z.object({
   id: z.string(),
   header: z.string(),
   intent: z.string(),
-  // Routes the section to a specific specialized Writer class (e.g., 'code', 'prose')
-  writerId: z.string().default("prose"),
+  writerId: z.string(),
+  bridge: z.string(),
 });
 
 /**
@@ -30,8 +30,8 @@ export const FrontmatterSchema = z.object({
 
   // Identity Metadata
   hubId: z.string(),
-  goal: z.string().optional(),
-  audience: z.string().optional(),
+  goal: z.string(),
+  audience: z.string(),
   language: z.string().default("English"),
 
   // Spoke Metadata
@@ -43,30 +43,14 @@ export const FrontmatterSchema = z.object({
   // Agentic Hierarchy Metadata ---
 
   // Tracks which Assembler class was used to generate the structure
-  assemblerId: z.string().optional(),
+  assemblerId: z.string(),
 
   // Tracks which Persona class provides the 'voice' for this article
   personaId: z.string().default("standard"),
 
   // Persists the structural plan to provide context for Auditors
   // Maps Header -> { intent, writerId }
-  blueprint: z
-    .record(
-      z.string(),
-      z.object({
-        header: z.string(),
-        intent: z.string(),
-        writerId: z.string(),
-      }),
-    )
-    .optional(),
-
-  // A lookup map of "Header Text" -> "WriterId"
-  // This allows the 'fill' command to know which Writer strategy to use for each section
-  writerMap: z.record(z.string(), z.string()).optional(),
-
-  // Persists the bridge generated for each section to maintain flow state
-  bridges: z.record(z.string(), z.string()).default({}),
+  blueprint: z.record(z.string(), SectionBlueprintSchema),
 });
 
 /**
