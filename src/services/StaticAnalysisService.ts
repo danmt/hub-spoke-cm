@@ -36,7 +36,6 @@ export class StaticAnalysisService {
    */
   static analyze(content: string, expectedLanguage: string): FullAuditReport {
     const parsed = ParserService.parseMarkdown(content);
-    const sectionHeaders = Object.keys(parsed.sections);
     const isSpanish = expectedLanguage.toLowerCase() === "spanish";
 
     // Select stemmer and vocabulary based on prioritized language
