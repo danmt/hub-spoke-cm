@@ -119,6 +119,19 @@ export class ParserService {
     return `---\n${yaml}\n---\n\n# ${brief.topic}\n\n${body}`;
   }
 
+  static stripInternalMetadata(rawContent: string): string {
+    const { data, content } = matter(rawContent);
+
+    const cleanContent = content
+      .replace(/\[SECTION id=".*?"\]\n?/gi, "")
+      .replace(/\n?\[\/SECTION\]/gi, "")
+      .trim();
+
+    const title = data.title ? `# ${data.title}\n\n` : "";
+
+    return `${title}${cleanContent}`;
+  }
+
   private static extractSections(markdownBody: string): Record<string, string> {
     const sections: Record<string, string> = {};
     // Matches [SECTION id="..."]...[/SECTION] across multiple lines

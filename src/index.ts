@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 // Explicit .js extension is required for NodeNext module resolution
 import { checkCommand } from "./commands/check.js";
 import { configCommand } from "./commands/config.js";
+import { exportCommand } from "./commands/export.js";
 import { fillCommand } from "./commands/fill.js";
 import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
@@ -33,6 +34,7 @@ async function main() {
   program.addCommand(checkCommand);
   program.addCommand(fillCommand);
   program.addCommand(configCommand);
+  program.addCommand(exportCommand);
 
   // Global Error Handling
   program.on("command:*", async () => {

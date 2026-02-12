@@ -114,11 +114,14 @@ export class IoService {
       "agents/personas",
       "agents/writers",
       "agents/assemblers",
+      "output",
     ];
 
     for (const d of dirs) {
       await fs.mkdir(path.join(rootDir, d), { recursive: true });
     }
+
+    await fs.writeFile(path.join(rootDir, "output/.keep"), "", "utf-8");
 
     if (type === "starter") {
       await this.seedStarterArtifacts(rootDir);
@@ -210,7 +213,7 @@ Focus on narrative flow, clarity, and transitions. Avoid code blocks unless abso
       path.join(rootDir, "agents/writers/prose.md"),
       proseWriter,
     );
-    const gitignore = ".hub/tmp/*\n.hub/logs/*";
+    const gitignore = ".hub/tmp/*\n.hub/logs/*\noutput/*\n!output/.keep";
     await fs.writeFile(path.join(rootDir, ".gitignore"), gitignore, "utf-8");
   }
 
