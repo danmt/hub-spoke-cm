@@ -9,10 +9,8 @@ import { checkCommand } from "./commands/check.js";
 import { configCommand } from "./commands/config.js";
 import { fillCommand } from "./commands/fill.js";
 import { initCommand } from "./commands/init.js";
-import { mapCommand } from "./commands/map.js";
 import { newCommand } from "./commands/new.js";
 import { registryCommand } from "./commands/registry.js";
-import { spawnCommand } from "./commands/spawn.js";
 import { LoggerService } from "./services/LoggerService.js";
 
 // Load environment variables
@@ -34,8 +32,6 @@ async function main() {
   program.addCommand(newCommand);
   program.addCommand(checkCommand);
   program.addCommand(fillCommand);
-  program.addCommand(spawnCommand);
-  program.addCommand(mapCommand);
   program.addCommand(configCommand);
 
   // Global Error Handling

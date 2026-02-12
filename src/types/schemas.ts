@@ -26,30 +26,22 @@ export const HubComponentSchema = SectionBlueprintSchema.extend({
  */
 export const FrontmatterSchema = z.object({
   title: z.string(),
-  type: z.enum(["hub", "spoke"]),
+  type: z.literal("hub"),
 
   // Identity Metadata
   hubId: z.string(),
   goal: z.string(),
   audience: z.string(),
-  language: z.string().default("English"),
-
-  // Spoke Metadata
-  componentId: z.string().optional(),
+  language: z.string(),
 
   // Generation Metadata
   date: z.string(),
 
-  // Agentic Hierarchy Metadata ---
-
-  // Tracks which Assembler class was used to generate the structure
+  // Agentic Hierarchy Metadata
   assemblerId: z.string(),
+  personaId: z.string(),
 
-  // Tracks which Persona class provides the 'voice' for this article
-  personaId: z.string().default("standard"),
-
-  // Persists the structural plan to provide context for Auditors
-  // Maps Header -> { intent, writerId }
+  // Persists the structural plan
   blueprint: z.record(z.string(), SectionBlueprintSchema),
 });
 

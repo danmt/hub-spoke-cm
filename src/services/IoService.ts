@@ -79,24 +79,10 @@ export class IoService {
     await fs.writeFile(filePath, content, "utf-8");
   }
 
-  static async getSpokeFiles(rootDir: string): Promise<string[]> {
-    const spokesDir = path.join(rootDir, "spokes");
-    try {
-      const files = await fs.readdir(spokesDir);
-      return files.filter((f) => f.endsWith(".md"));
-    } catch {
-      return [];
-    }
-  }
-
   static async createHubDirectory(hubId: string): Promise<string> {
     const dirPath = path.join(process.cwd(), "posts", hubId);
-    const spokesPath = path.join(dirPath, "spokes");
 
     await fs.mkdir(dirPath, { recursive: true });
-    await fs.mkdir(spokesPath, { recursive: true });
-
-    await IoService.safeWriteFile(path.join(spokesPath, ".keep"), "");
 
     return dirPath;
   }
@@ -192,22 +178,5 @@ Focus on narrative flow, clarity, and transitions. Avoid code blocks unless abso
     }
     // Use a timestamp or unique hash to avoid collisions during concurrent runs
     return path.join(tempDir, `${Date.now()}-${fileName}.tmp`);
-  }
-
-  /**
-   * Persists the audit results for future optimization analysis.
-   */
-  static async saveAuditReport(
-    workspaceRoot: string,
-    hubSlug: string,
-    report: any,
-  ): Promise<string> {
-    const auditDir = path.join(workspaceRoot, ".hub", "audits");
-    if (!existsSync(auditDir)) await fs.mkdir(auditDir, { recursive: true });
-    const randomStr = Math.random().toString(36).substring(7);
-    const fileName = `${hubSlug}.${Date.now()}.${randomStr}.json`;
-    const filePath = path.join(auditDir, fileName);
-    await fs.writeFile(filePath, JSON.stringify(report, null, 2), "utf-8");
-    return filePath;
   }
 }

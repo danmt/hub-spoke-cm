@@ -93,7 +93,7 @@ export class ParserService {
 
     const frontmatter: Partial<ContentFrontmatter> = {
       title: brief.topic,
-      type: type,
+      type: "hub",
       hubId: parentHubId || blueprint.hubId,
       goal: brief.goal,
       audience: brief.audience,
@@ -103,11 +103,7 @@ export class ParserService {
       blueprint: blueprintData,
     };
 
-    if (type === "spoke") {
-      frontmatter.componentId = blueprint.hubId;
-    } else {
-      frontmatter.assemblerId = brief.assemblerId;
-    }
+    frontmatter.assemblerId = brief.assemblerId;
 
     const body = blueprint.components
       .map((c) => {

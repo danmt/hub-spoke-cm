@@ -28,8 +28,6 @@ Using the **Strategy Pattern**, the system routes sections to specialized Writer
 ### 3. The Validation Layer (Verification-First)
 
 - **Structural Integrity**: The `check` logic ensures consistency in persona, language, and completion (no TODOs).
-- **Semantic Audit**: Pluggable **Auditors** compare the generated content against the original **Blueprint** stored in the frontmatter to detect "Intent Drift".
-- **Verification Loop**: The system refactors problematic sections and uses an Auditor to verify the fix in a "candidate" state before merging it surgically into your file.
 
 ---
 
@@ -37,9 +35,7 @@ Using the **Strategy Pattern**, the system routes sections to specialized Writer
 
 - **`hub init`**: Scaffolds a new workspace and seeds starter agents (Persona, Auditor, Writer, Assembler) into `/agents`.
 - **`hub new`**: Conducts an Architect interview to plan a Hub. It saves the structural intent as a `blueprint` in the frontmatter.
-- **`hub spawn`**: Creates a satellite "Spoke" article that inherits context and personas from its parent Hub.
 - **`hub fill`**: The generation engine that executes the `writerMap` strategy to replace `> **TODO:**` blocks with prose or code.
-- **`hub audit`**: Runs a multi-phase validation. It first enforces structural integrity, then performs a semantic audit with a verification loop to refactor and verify fixes.
 - **`hub check`**: A fast, static audit to identify pending content or metadata inconsistencies.
 
 ---
@@ -49,8 +45,8 @@ Using the **Strategy Pattern**, the system routes sections to specialized Writer
 A Hub Workspace is defined by its directory structure, allowing for decentralized content management:
 
 - **`.hub/`**: Internal workspace marker.
-- **`agents/`**: Your local Intelligence Layer. Dropping a file into `agents/auditors/` creates a new auditing strategy.
-- **`posts/`**: The content database. Every Hub folder contains a `hub.md` and a `/spokes` directory.
+- **`agents/`**: Your local Intelligence Layer. Dropping a file into `agents/writers/` creates a new auditing strategy.
+- **`posts/`**: The content database. Every Hub folder contains a `hub.md`.
 
 ### Setup
 

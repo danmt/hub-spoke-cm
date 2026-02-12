@@ -14,32 +14,25 @@ export const checkCommand = new Command("check")
       for (const hubId of hubs) {
         const rootDir = path.join(workspaceRoot, "posts", hubId);
         const hubMeta = await IoService.readHubMetadata(rootDir);
-        const files = await IoService.getSpokeFiles(rootDir);
-        const allFiles = [
-          "hub.md",
-          ...files.map((f) => path.join("spokes", f)),
-        ];
 
         console.log(
           chalk.bold(`\n🔍 Checking Hub: ${chalk.cyan(hubMeta.title)}`),
         );
 
-        for (const file of allFiles) {
-          const filePath = path.join(rootDir, file);
-          const report = await ValidationService.checkIntegrity(
-            filePath,
-            hubMeta.personaId,
-            hubMeta.language,
-          );
+        const filePath = path.join(rootDir, "hub.md");
+        const report = await ValidationService.checkIntegrity(
+          filePath,
+          hubMeta.personaId,
+          hubMeta.language,
+        );
 
-          if (report.isValid) {
-            console.log(chalk.green(`   ✅ ${file}: Valid`));
-          } else {
-            console.log(chalk.red(`   ❌ ${file}: Issues found`));
-            report.issues.forEach((issue) =>
-              console.log(chalk.gray(`      - ${issue}`)),
-            );
-          }
+        if (report.isValid) {
+          console.log(chalk.green(`   ✅ "hub.md": Valid`));
+        } else {
+          console.log(chalk.red(`   ❌ "hub.md": Issues found`));
+          report.issues.forEach((issue) =>
+            console.log(chalk.gray(`      - ${issue}`)),
+          );
         }
       }
     } catch (error) {
