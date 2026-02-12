@@ -81,7 +81,6 @@ export class Auditor {
     const text = await AiService.execute(ctx.content, {
       model: modelName,
       systemInstruction,
-      onRetry: ctx.onRetry,
     });
 
     const issues: AuditIssue[] = [];

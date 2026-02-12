@@ -7,7 +7,6 @@ export interface AiOptions {
   model?: string;
   systemInstruction?: string;
   history?: any[];
-  onRetry?: (error: Error) => Promise<boolean>;
 }
 
 export class AiService {
@@ -37,48 +36,36 @@ export class AiService {
       history: !!options.history,
     });
 
-    while (true) {
-      try {
-        const response = await ai.models.generateContent({
-          model: modelId,
-          contents: options.history
-            ? [...options.history, { role: "user", parts: [{ text: prompt }] }]
-            : [{ role: "user", parts: [{ text: prompt }] }],
-          config: {
-            systemInstruction: options.systemInstruction,
-          },
-        });
+    try {
+      const response = await ai.models.generateContent({
+        model: modelId,
+        contents: options.history
+          ? [...options.history, { role: "user", parts: [{ text: prompt }] }]
+          : [{ role: "user", parts: [{ text: prompt }] }],
+        config: {
+          systemInstruction: options.systemInstruction,
+        },
+      });
 
-        const text = response.text;
+      const text = response.text;
 
-        // Trace: Log successful response
-        await LoggerService.debug("AI Response Received", {
-          textSnippet: text,
-        });
+      // Trace: Log successful response
+      await LoggerService.debug("AI Response Received", {
+        textSnippet: text,
+      });
 
-        return text;
-      } catch (error: any) {
-        // Trace: Record failure details
-        await LoggerService.error("AI Execution Error", {
-          code: error.error?.code,
-          message: error.message,
-          stack: error.stack,
-          modelId,
-        });
+      return text;
+    } catch (error: any) {
+      // Trace: Record failure details
+      await LoggerService.error("AI Execution Error", {
+        code: error.error?.code,
+        message: error.message,
+        stack: error.stack,
+        modelId,
+      });
 
-        if (options.onRetry) {
-          const shouldRetry = await options.onRetry(error);
-          if (shouldRetry) {
-            await LoggerService.info(
-              "AI Service retrying based on user/handler decision.",
-            );
-            continue;
-          }
-        }
-
-        // If no handler or handler returns false, propagate the error
-        throw error;
-      }
+      // If no handler or handler returns false, propagate the error
+      throw error;
     }
   }
 }

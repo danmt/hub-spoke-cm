@@ -4,8 +4,8 @@ import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
 import { Architect } from "../agents/Architect.js";
+import { executeCliFillAction } from "../presets/executeCliFillAction.js";
 import { ContextService } from "../services/ContextService.js";
-import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
 import { ParserService } from "../services/ParserService.js";
 import { RegistryService } from "../services/RegistryService.js";
@@ -102,22 +102,26 @@ export const spawnCommand = new Command("spawn")
         );
       }
 
-      const { blueprint } = await assembler.agent.assemble({
+      const assembly = await assembler.agent.assemble({
         audience: architecture.brief.audience,
         goal: architecture.brief.goal,
         topic: architecture.brief.topic,
         interact: async ({ blueprint }) => {
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
-          console.log(chalk.white(`\nTITLE: ${architecture.brief.topic}`));
-          console.log(chalk.white(`HUB ID: ${blueprint.hubId}\n`));
+          console.log(`${chalk.yellow("Title:")} ${architecture.brief.topic}`);
+          console.log(`${chalk.yellow("Hub ID:")} ${blueprint.hubId}`);
 
           blueprint.components.forEach((c, i) => {
             console.log(
               chalk.white(`#${i + 1} [${c.writerId.toUpperCase()}] `) +
                 chalk.bold(c.header),
             );
-            console.log(chalk.gray(indentText(`INTENT: ${c.intent}`, 5)));
-            console.log(chalk.gray(indentText(`BRIDGE: ${c.bridge}`, 5)));
+            console.log(
+              indentText(`${chalk.yellow("Bridge:")} ${c.bridge}`, 4),
+            );
+            console.log(
+              indentText(`${chalk.yellow("Intent:")} ${c.intent}`, 4),
+            );
           });
 
           return cliConfirmOrFeedback();
@@ -126,17 +130,21 @@ export const spawnCommand = new Command("spawn")
 
       console.log(
         chalk.cyan(
-          `\n🏗️  Spoke Structure Generated (${blueprint.components.length} sections)`,
+          `\n🏗️  Spoke Structure Generated (${assembly.blueprint.components.length} sections)`,
         ),
       );
 
       const fileContent = ParserService.generateScaffold(
         "spoke",
         architecture.brief,
-        blueprint,
+        assembly.blueprint,
         hubMeta.hubId,
       );
-      const filePath = path.join(rootDir, "spokes", `${blueprint.hubId}.md`);
+      const filePath = path.join(
+        rootDir,
+        "spokes",
+        `${assembly.blueprint.hubId}.md`,
+      );
       await IoService.safeWriteFile(filePath, fileContent);
 
       console.log(chalk.bold.green(`\n✅ Spoke created: spokes/${filePath}`));
@@ -163,20 +171,13 @@ export const spawnCommand = new Command("spawn")
         );
       }
 
-      await FillService.execute(
+      await executeCliFillAction(
+        persona.agent,
+        writers.map((writer) => writer.agent),
         filePath,
-        blueprint.components.map((c) => c.id),
-        persona,
-        writers,
-        ({ id, writerId }) =>
-          console.log(
-            chalk.gray(`   🔧  Generating section [${writerId}]: "${id}"...`),
-          ),
-        () => console.log(chalk.green("      Done ✅")),
-        cliRetryHandler,
+        fileContent,
+        assembly.blueprint.components.map((c) => c.id),
       );
-
-      console.log(chalk.cyan("\n🚀 Spoke populated."));
 
       const { shouldAudit } = await inquirer.prompt([
         {

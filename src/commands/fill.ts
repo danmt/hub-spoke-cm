@@ -4,13 +4,12 @@ import { Command } from "commander";
 import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
+import { executeCliFillAction } from "../presets/executeCliFillAction.js";
 import { ContextService } from "../services/ContextService.js";
-import { FillService } from "../services/FillService.js";
 import { IoService } from "../services/IoService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { ParserService } from "../services/ParserService.js";
 import { RegistryService } from "../services/RegistryService.js";
-import { cliRetryHandler } from "../utils/cliRetryHandler.js";
 
 const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
@@ -86,24 +85,13 @@ export const fillCommand = new Command("fill")
       if (!persona)
         throw new Error(`Persona "${parsed.frontmatter.personaId}" not found.`);
 
-      console.log(
-        chalk.blue(`\n🚀 Generating ${sectionIdsToFill.length} sections...\n`),
-      );
-
-      await FillService.execute(
+      await executeCliFillAction(
+        persona.agent,
+        writers.map((writer) => writer.agent),
         targetFile,
+        content,
         sectionIdsToFill,
-        persona,
-        writers,
-        ({ id, writerId }) =>
-          console.log(
-            chalk.gray(`   Generating section [${writerId}]: "${id}"... `),
-          ),
-        () => console.log(chalk.green("      Done ✅\n")),
-        cliRetryHandler,
       );
-
-      console.log(chalk.bold.green(`\n✨ Generation complete.`));
     } catch (error: any) {
       await LoggerService.error("Fill Command Failed", {
         error: error.message,

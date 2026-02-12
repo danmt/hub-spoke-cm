@@ -1,6 +1,20 @@
 // src/agents/Writer.ts
 import { AiService } from "../services/AiService.js";
+import { LoggerService } from "../services/LoggerService.js";
 import { getGlobalConfig } from "../utils/config.js";
+
+export type WriterInteractionResponse =
+  | {
+      action: "proceed";
+    }
+  | {
+      action: "feedback";
+      feedback: string;
+    };
+
+export type WriterInteractionHandler = (
+  params: WriterResponse,
+) => Promise<WriterInteractionResponse>;
 
 export interface WriterContext {
   intent: string;
@@ -10,7 +24,20 @@ export interface WriterContext {
   bridge: string;
   isFirst: boolean;
   isLast: boolean;
+  interact?: WriterInteractionHandler;
+  onThinking?: () => void;
   onRetry?: (error: Error) => Promise<boolean>;
+}
+
+export interface WriterGenerateContext {
+  intent: string;
+  topic: string;
+  goal: string;
+  audience: string;
+  bridge: string;
+  isFirst: boolean;
+  isLast: boolean;
+  feedback?: string;
 }
 
 export interface WriterResponse {
@@ -20,6 +47,7 @@ export interface WriterResponse {
 
 export class Writer {
   private readonly systemInstruction: string;
+  private history: any[] = [];
 
   constructor(
     public id: string,
@@ -64,22 +92,76 @@ export class Writer {
   }
 
   async write(ctx: WriterContext): Promise<WriterResponse> {
+    let currentFeedback: string | undefined = undefined;
+
+    while (true) {
+      try {
+        if (ctx.onThinking) ctx.onThinking();
+
+        const generated = await this.generate({
+          audience: ctx.audience,
+          goal: ctx.goal,
+          topic: ctx.topic,
+          feedback: currentFeedback,
+          bridge: ctx.bridge,
+          intent: ctx.intent,
+          isFirst: ctx.isFirst,
+          isLast: ctx.isLast,
+        });
+
+        if (!ctx.interact) {
+          return generated;
+        }
+
+        const interaction = await ctx.interact(generated);
+
+        if (interaction.action === "proceed") {
+          return generated;
+        }
+
+        currentFeedback = interaction.feedback || "Continue refinement.";
+      } catch (error: any) {
+        if (ctx.onRetry) {
+          const shouldRetry = await ctx.onRetry?.(error);
+
+          if (shouldRetry) {
+            await LoggerService.info(
+              "Write retrying based on user/handler decision.",
+            );
+            continue;
+          }
+        }
+
+        throw new Error(`Writer failed: ${error.message}`);
+      }
+    }
+  }
+
+  private async generate(ctx: WriterGenerateContext): Promise<WriterResponse> {
     const modelName = getGlobalConfig().writerModel || "gemini-3-flash";
 
-    const prompt = `
+    const basePrompt = `
       [INTENT]${ctx.intent}[/INTENT]
       [TOPIC]${ctx.topic}[/TOPIC]
       [GOAL]${ctx.goal}[/GOAL]
       [AUDIENCE]${ctx.audience}[/AUDIENCE]
       [BRIDGE]${ctx.bridge}[/BRIDGE]
       [PROGRESS]${ctx.isFirst ? "Start" : ctx.isLast ? "Conclusion" : "In-Progress"}[/PROGRESS]
-    `.trim();
+    `;
 
-    const text = await AiService.execute(prompt, {
+    const prompt = ctx.feedback
+      ? `${basePrompt}\n\nUSER FEEDBACK: ${ctx.feedback}`
+      : basePrompt;
+
+    const text = await AiService.execute(prompt.trim(), {
       model: modelName,
       systemInstruction: this.systemInstruction,
-      onRetry: ctx.onRetry,
     });
+
+    this.history.push(
+      { role: "user", parts: [{ text: prompt }] },
+      { role: "model", parts: [{ text }] },
+    );
 
     return this.parse(text);
   }

@@ -1,12 +1,33 @@
 // src/agents/Persona.ts
 import { AiService } from "../services/AiService.js";
+import { LoggerService } from "../services/LoggerService.js";
 import { getGlobalConfig } from "../utils/config.js";
 
+export type PersonaInteractionResponse =
+  | {
+      action: "proceed";
+    }
+  | {
+      action: "feedback";
+      feedback: string;
+    };
+
+export type PersonaInteractionHandler = (
+  params: PersonaResponse,
+) => Promise<PersonaInteractionResponse>;
+
 export interface PersonaContext {
-  goal: string;
-  audience: string;
-  topic: string;
-  language: string;
+  header: string;
+  content: string;
+  interact?: PersonaInteractionHandler;
+  onThinking?: () => void;
+  onRetry?: (error: Error) => Promise<boolean>;
+}
+
+export interface PersonaGenerateContext {
+  header: string;
+  content: string;
+  feedback?: string;
 }
 
 export interface PersonaResponse {
@@ -16,6 +37,7 @@ export interface PersonaResponse {
 
 export class Persona {
   private readonly systemInstruction: string;
+  private history: any[] = [];
 
   constructor(
     public id: string,
@@ -48,9 +70,6 @@ export class Persona {
         4. Do not change the technical intent, only the "vibe" and phrasing.
 
       INPUT FORMAT:
-      [TOPIC]Topic of the content[/TOPIC]
-      [GOAL]Goal of the content[/GOAL]
-      [AUDIENCE]Audience of the content[/AUDIENCE]
       [NEUTRAL_HEADER]Neutral header[/NEUTRAL_HEADER]
       [NEUTRAL_CONTENT]Neutral content[/NEUTRAL_CONTENT]
 
@@ -62,32 +81,72 @@ export class Persona {
     `.trim();
   }
 
-  /**
-   * Action: Rephrase neutral content into the Persona's voice.
-   */
-  async rephrase(
-    header: string,
-    content: string,
-    ctx: PersonaContext,
-    onRetry?: (err: Error) => Promise<boolean>,
+  async rephrase(ctx: PersonaContext): Promise<PersonaResponse> {
+    let currentFeedback: string | undefined = undefined;
+
+    while (true) {
+      try {
+        if (ctx.onThinking) ctx.onThinking();
+
+        const generated = await this.generate({
+          header: ctx.header,
+          content: ctx.content,
+          feedback: currentFeedback,
+        });
+
+        if (!ctx.interact) {
+          return generated;
+        }
+
+        const interaction = await ctx.interact(generated);
+
+        if (interaction.action === "proceed") {
+          return generated;
+        }
+
+        currentFeedback = interaction.feedback;
+      } catch (error: any) {
+        if (ctx.onRetry) {
+          const shouldRetry = await ctx.onRetry?.(error);
+
+          if (shouldRetry) {
+            await LoggerService.info(
+              "Rephrase retrying based on user/handler decision.",
+            );
+            continue;
+          }
+        }
+
+        throw new Error(`Persona failed: ${error.message}`);
+      }
+    }
+  }
+
+  private async generate(
+    ctx: PersonaGenerateContext,
   ): Promise<PersonaResponse> {
     const modelName = getGlobalConfig().architectModel || "gemini-2-flash";
 
-    const prompt = `
-      [TOPIC]${ctx.topic}[/TOPIC]
-      [GOAL]${ctx.goal}[/GOAL]
-      [AUDIENCE]${ctx.audience}[/AUDIENCE]
-      [NEUTRAL_HEADER]${header}[/NEUTRAL_HEADER]
+    const basePrompt = `
+      [NEUTRAL_HEADER]${ctx.header}[/NEUTRAL_HEADER]
       [NEUTRAL_CONTENT]
-      ${content}
+      ${ctx.content}
       [/NEUTRAL_CONTENT]
-    `.trim();
+    `;
 
-    const text = await AiService.execute(prompt, {
+    const prompt = ctx.feedback
+      ? `${basePrompt}\n\nUSER FEEDBACK: ${ctx.feedback}`
+      : basePrompt;
+
+    const text = await AiService.execute(prompt.trim(), {
       model: modelName,
       systemInstruction: this.systemInstruction,
-      onRetry,
     });
+
+    this.history.push(
+      { role: "user", parts: [{ text: prompt }] },
+      { role: "model", parts: [{ text }] },
+    );
 
     return this.parse(text);
   }

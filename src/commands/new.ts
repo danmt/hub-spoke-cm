@@ -4,7 +4,7 @@ import { Command } from "commander";
 import inquirer from "inquirer";
 import path from "path";
 import { Architect } from "../agents/Architect.js";
-import { FillService } from "../services/FillService.js";
+import { executeCliFillAction } from "../presets/executeCliFillAction.js";
 import { IoService } from "../services/IoService.js";
 import { ParserService } from "../services/ParserService.js";
 import { RegistryService } from "../services/RegistryService.js";
@@ -108,16 +108,20 @@ export const newCommand = new Command("new")
         topic: architecture.brief.topic,
         interact: async ({ blueprint }) => {
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
-          console.log(chalk.white(`\nTITLE: ${architecture.brief.topic}`));
-          console.log(chalk.white(`HUB ID: ${blueprint.hubId}\n`));
+          console.log(`${chalk.yellow("Title:")} ${architecture.brief.topic}`);
+          console.log(`${chalk.yellow("Hub ID:")} ${blueprint.hubId}`);
 
           blueprint.components.forEach((c, i) => {
             console.log(
               chalk.white(`#${i + 1} [${c.writerId.toUpperCase()}] `) +
                 chalk.bold(c.header),
             );
-            console.log(chalk.gray(indentText(`INTENT: ${c.intent}`, 5)));
-            console.log(chalk.gray(indentText(`BRIDGE: ${c.bridge}`, 5)));
+            console.log(
+              indentText(`${chalk.yellow("Bridge:")} ${c.bridge}`, 4),
+            );
+            console.log(
+              indentText(`${chalk.yellow("Intent:")} ${c.intent}`, 4),
+            );
           });
 
           return cliConfirmOrFeedback();
@@ -166,20 +170,13 @@ export const newCommand = new Command("new")
         );
       }
 
-      await FillService.execute(
+      await executeCliFillAction(
+        persona.agent,
+        writers.map((writer) => writer.agent),
         filePath,
+        fileContent,
         assembly.blueprint.components.map((c) => c.id),
-        persona,
-        writers,
-        ({ id, writerId }) =>
-          console.log(
-            chalk.gray(`   Generating section [${writerId}]: "${id}"... `),
-          ),
-        () => console.log(chalk.green("      Done ✅")),
-        cliRetryHandler,
       );
-
-      console.log(chalk.bold.cyan("🚀 Hub populated successfully!\n"));
 
       const { shouldAudit } = await inquirer.prompt([
         {

@@ -1,5 +1,6 @@
 // src/agents/Architect.ts
 import { AiService } from "../services/AiService.js";
+import { LoggerService } from "../services/LoggerService.js";
 import { getGlobalConfig } from "../utils/config.js";
 
 export type ArchitectInteractionResponse =
@@ -11,25 +12,19 @@ export type ArchitectInteractionResponse =
       feedback: string;
     };
 
-export interface ArchitectInteractionHandlerParams {
-  message: string;
-  brief: Brief;
-}
-
 export type ArchitectInteractionHandler = (
-  params: ArchitectInteractionHandlerParams,
+  params: ArchitectResponse,
 ) => Promise<ArchitectInteractionResponse>;
 
 export interface ArchitectContext {
   input?: string;
-  interact: ArchitectInteractionHandler;
+  interact?: ArchitectInteractionHandler;
   onRetry?: (err: Error) => Promise<boolean>;
   onThinking?: () => void;
 }
 
 export interface ArchitectGenerateContext {
   feedback?: string;
-  onRetry?: (err: Error) => Promise<boolean>;
 }
 
 export interface ArchitectResponse {
@@ -88,50 +83,63 @@ export class Architect {
     let currentFeedback: string | undefined = undefined;
 
     while (true) {
-      if (ctx.onThinking) ctx.onThinking();
+      try {
+        if (ctx.onThinking) ctx.onThinking();
 
-      const response = await this.generate({
-        feedback: currentFeedback,
-        onRetry: ctx.onRetry,
-      });
+        const generated = await this.generate({
+          feedback: currentFeedback,
+        });
 
-      const interaction = await ctx.interact(response);
+        if (!ctx.interact) {
+          return generated;
+        }
 
-      if (interaction.action === "proceed") {
-        return response;
+        const interaction = await ctx.interact(generated);
+
+        if (interaction.action === "proceed") {
+          return generated;
+        }
+
+        currentFeedback = interaction.feedback || "Continue refinement.";
+      } catch (error: any) {
+        if (ctx.onRetry) {
+          const shouldRetry = await ctx.onRetry?.(error);
+
+          if (shouldRetry) {
+            await LoggerService.info(
+              "Architect retrying based on user/handler decision.",
+            );
+            continue;
+          }
+        }
+
+        throw new Error(`Architect failed: ${error.message}`);
       }
-
-      currentFeedback = interaction.feedback || "Continue refinement.";
     }
   }
 
   async generate(ctx: ArchitectGenerateContext): Promise<ArchitectResponse> {
-    try {
-      const modelName = getGlobalConfig().architectModel || "gemini-3-flash";
+    const modelName = getGlobalConfig().architectModel || "gemini-3-flash";
 
-      const baseInstruction =
-        "Analyze the baseline and provide your best proposal/questions.";
+    const basePrompt =
+      "Analyze the baseline and provide your best proposal/questions.";
 
-      const prompt = ctx.feedback
-        ? `${baseInstruction}\n\nUSER FEEDBACK: ${ctx.feedback}`
-        : baseInstruction;
+    const prompt = ctx.feedback
+      ? `${basePrompt}\n\nUSER FEEDBACK: ${ctx.feedback}`
+      : basePrompt;
 
-      const text = await AiService.execute(prompt, {
-        model: modelName,
-        systemInstruction: this.systemInstruction,
-        history: this.history,
-        onRetry: ctx.onRetry,
-      });
+    const text = await AiService.execute(prompt.trim(), {
+      model: modelName,
+      systemInstruction: this.systemInstruction,
+      history: this.history,
+    });
 
-      this.history.push(
-        { role: "user", parts: [{ text: prompt }] },
-        { role: "model", parts: [{ text }] },
-      );
+    this.history.push(
+      { role: "user", parts: [{ text: prompt }] },
+      { role: "model", parts: [{ text }] },
+    );
 
-      return this.parse(text);
-    } catch (error: any) {
-      throw new Error(`Architect failed: ${error.message}`);
-    }
+    return this.parse(text);
   }
 
   private parse(text: string): ArchitectResponse {

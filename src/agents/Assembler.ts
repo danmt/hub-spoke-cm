@@ -1,5 +1,6 @@
 // src/agents/Assembler.ts
 import { AiService } from "../services/AiService.js";
+import { LoggerService } from "../services/LoggerService.js";
 import { HubBlueprint } from "../types/index.js";
 import { getGlobalConfig } from "../utils/config.js";
 
@@ -12,19 +13,15 @@ export type AssemblerInteractionResponse =
       feedback: string;
     };
 
-export interface AssemblerInteractionHandlerParams {
-  blueprint: HubBlueprint;
-}
-
 export type AssemblerInteractionHandler = (
-  params: AssemblerInteractionHandlerParams,
+  params: AssembleResponse,
 ) => Promise<AssemblerInteractionResponse>;
 
 export interface AssembleContext {
   topic: string;
   goal: string;
   audience: string;
-  interact: AssemblerInteractionHandler;
+  interact?: AssemblerInteractionHandler;
   onRetry?: (error: Error) => Promise<boolean>;
   onThinking?: () => void;
 }
@@ -38,7 +35,6 @@ export interface AssemblerGenerateContext {
   goal: string;
   audience: string;
   feedback?: string;
-  onRetry?: (error: Error) => Promise<boolean>;
 }
 
 export interface AssemblerGenerateResponse {
@@ -103,23 +99,41 @@ export class Assembler {
     let currentFeedback: string | undefined = undefined;
 
     while (true) {
-      if (ctx.onThinking) ctx.onThinking();
+      try {
+        if (ctx.onThinking) ctx.onThinking();
 
-      const generated = await this.generate({
-        audience: ctx.audience,
-        goal: ctx.goal,
-        topic: ctx.topic,
-        feedback: currentFeedback,
-        onRetry: ctx.onRetry,
-      });
+        const generated = await this.generate({
+          audience: ctx.audience,
+          goal: ctx.goal,
+          topic: ctx.topic,
+          feedback: currentFeedback,
+        });
 
-      const interaction = await ctx.interact(generated);
+        if (!ctx.interact) {
+          return generated;
+        }
 
-      if (interaction.action === "proceed") {
-        return generated;
+        const interaction = await ctx.interact(generated);
+
+        if (interaction.action === "proceed") {
+          return generated;
+        }
+
+        currentFeedback = interaction.feedback || "Continue refinement.";
+      } catch (error: any) {
+        if (ctx.onRetry) {
+          const shouldRetry = await ctx.onRetry?.(error);
+
+          if (shouldRetry) {
+            await LoggerService.info(
+              "Assemble retrying based on user/handler decision.",
+            );
+            continue;
+          }
+        }
+
+        throw new Error(`Assembler failed: ${error.message}`);
       }
-
-      currentFeedback = interaction.feedback || "Continue refinement.";
     }
   }
 
@@ -128,23 +142,20 @@ export class Assembler {
   ): Promise<AssemblerGenerateResponse> {
     const model = getGlobalConfig().architectModel || "gemini-3-flash";
 
-    const baseInstruction = `
-      Analyze the baseline and provide your best sequential execution blueprint.
-
-      [TOPIC]${ctx.topic}[/TOPIC]
-      [GOAL]${ctx.goal}[/GOAL]
-      [AUDIENCE]${ctx.audience}[/AUDIENCE]
-    `;
+    const basePrompt = `
+        [TOPIC]${ctx.topic}[/TOPIC]
+        [GOAL]${ctx.goal}[/GOAL]
+        [AUDIENCE]${ctx.audience}[/AUDIENCE]
+      `;
 
     const prompt = ctx.feedback
-      ? `${baseInstruction}\n\nUSER FEEDBACK: ${ctx.feedback}`
-      : baseInstruction;
+      ? `${basePrompt}\n\nUSER FEEDBACK: ${ctx.feedback}`
+      : basePrompt;
 
-    const text = await AiService.execute(prompt, {
+    const text = await AiService.execute(prompt.trim(), {
       model,
       systemInstruction: this.systemInstruction,
       history: this.history,
-      onRetry: ctx.onRetry,
     });
 
     this.history.push(
