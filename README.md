@@ -9,7 +9,7 @@ The heart of the tool is a dynamic **Registry** that manages your "Intelligence 
 ### How it Works:
 
 - **Discovery**: The `RegistryService` scans the `/agents` directory for Markdown files.
-- **Discriminated Types**: Each file is categorized by its frontmatter `type` into one of four categories: **Personas**, **Writers**, **Assemblers**, or **Auditors**.
+- **Discriminated Types**: Each file is categorized by its frontmatter `type` into one of four categories: **Personas**, **Writers**, or **Assemblers**.
 - **Live Loading**: Adding a new `.md` file to an agent folder immediately makes that strategy available to the CLI without a rebuild or code change.
 - **Context Injection**: The Registry converts these artifacts into active agents, injecting their specific strategies into the Gemini model's system instructions.
 
