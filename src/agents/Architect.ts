@@ -7,14 +7,18 @@ export interface InteractionResponse {
   content?: string;
 }
 
-export type InteractionHandler = (
-  message: string,
-  brief: Brief,
+export interface ArchitectInteractionHandlerParams {
+  message: string;
+  brief: Brief;
+}
+
+export type ArchitectInteractionHandler = (
+  params: ArchitectInteractionHandlerParams,
 ) => Promise<InteractionResponse>;
 
 export interface ArchitectContext {
   input?: string;
-  interact: InteractionHandler;
+  interact: ArchitectInteractionHandler;
   onRetry?: (err: Error) => Promise<boolean>;
   onThinking?: () => void;
 }
@@ -50,7 +54,6 @@ export class Architect {
 
   /**
    * Orchestrates the interview loop.
-   * If validator is omitted, it assumes a single-pass "hope it worked" approach.
    */
   async architect(ctx: ArchitectContext): Promise<Brief | null> {
     let currentInput =
@@ -71,7 +74,7 @@ export class Architect {
       );
 
       // The user sees the plan and decides: proceed or give feedback
-      const { action, content } = await ctx.interact(message, brief);
+      const { action, content } = await ctx.interact({ message, brief });
 
       if (action === "proceed") {
         return brief;

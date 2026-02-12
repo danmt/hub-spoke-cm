@@ -73,11 +73,14 @@ export const spawnCommand = new Command("spawn")
 
       const brief = await architect.architect({
         input: `Plan a Spoke for "${section}".`,
-        interact: async (message, proposal) => {
+        interact: async ({ message, brief }) => {
           console.log(`\n${chalk.green("Architect:")} ${message}`);
           console.log(chalk.dim(`\n--- Current Proposal ---`));
-          console.log(`${chalk.yellow("Assembler:")} ${proposal.assemblerId}`);
-          console.log(`${chalk.yellow("Persona:")}   ${proposal.personaId}\n`);
+          console.log(`${chalk.yellow("Topic:")} ${brief.topic}`);
+          console.log(`${chalk.yellow("Goal:")} ${brief.goal}`);
+          console.log(`${chalk.yellow("Audience:")} ${brief.audience}`);
+          console.log(`${chalk.yellow("Assembler:")} ${brief.assemblerId}`);
+          console.log(`${chalk.yellow("Persona:")}   ${brief.personaId}\n`);
 
           const { action } = await inquirer.prompt([
             {
