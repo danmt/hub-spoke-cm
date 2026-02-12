@@ -21,20 +21,18 @@ export interface WriterResponse {
 }
 
 export class Writer {
+  private readonly systemInstruction: string;
+
   constructor(
     public id: string,
     public description: string,
-    public writingStrategy: string,
-  ) {}
-
-  async write(ctx: WriterContext): Promise<WriterResponse> {
-    const modelName = getGlobalConfig().writerModel || "gemini-3-flash";
-
-    const systemInstruction = `
+    writingStrategy: string,
+  ) {
+    this.systemInstruction = `
       ROLE: You are a Neutral Content Writer.
       
       WRITING STRATEGY: 
-      ${this.writingStrategy}
+      ${writingStrategy}
               
       CORE EXECUTION RULES:
       1. Follow the INTENT micro-brief exactly. It defines your scope boundaries.
@@ -49,6 +47,14 @@ export class Writer {
          - Use H3 (###) or H4 (####) for sub-sections if needed.
       5. Do not repeat information reserved for other sections.
 
+      INPUT FORMAT:
+      [INTENT]Intent of the content[/INTENT]
+      [TOPIC]Topic of the content[/TOPIC]
+      [GOAL]Goal of the content[/GOAL]
+      [AUDIENCE]Audience of the content[/AUDIENCE]
+      [BRIDGE]Brief summary of whats been covered already[/BRIDGE]
+      [PROGRESS]Whether its start, in progress or conclusion[/PROGRESS]
+
       OUTPUT FORMAT:
       [HEADER]
       (Engaging H2 Title)
@@ -60,23 +66,30 @@ export class Writer {
       (Brief summary)
       [/BRIDGE]
     `.trim();
+  }
+
+  async write(ctx: WriterContext): Promise<WriterResponse> {
+    const modelName = getGlobalConfig().writerModel || "gemini-3-flash";
 
     const prompt = `
-      INTENT: ${ctx.intent}
-      
-      CONTEXT:
-      - Goal: ${ctx.goal}
-      - Target Audience: ${ctx.audience}
-      - Previous Context: ${ctx.precedingBridge || "Beginning of document"}
-      - Progress: ${ctx.isFirst ? "Start" : ctx.isLast ? "Conclusion" : "In-Progress"}
+      [INTENT]${ctx.intent}[/INTENT]
+      [TOPIC]${ctx.topic}[/TOPIC]
+      [GOAL]${ctx.goal}[/GOAL]
+      [AUDIENCE]${ctx.audience}[/AUDIENCE]
+      [BRIDGE]${ctx.precedingBridge || "Beginning of document"}[/BRIDGE]
+      [PROGRESS]${ctx.isFirst ? "Start" : ctx.isLast ? "Conclusion" : "In-Progress"}[/PROGRESS]
     `.trim();
 
     const text = await AiService.execute(prompt, {
       model: modelName,
-      systemInstruction,
+      systemInstruction: this.systemInstruction,
       onRetry: ctx.onRetry,
     });
 
+    return this.parse(text);
+  }
+
+  private parse(text: string): WriterResponse {
     const headerMatch = text.match(/\[HEADER\]([\s\S]*?)(\[\/HEADER\]|$)/i);
     const contentMatch = text.match(/\[CONTENT\]([\s\S]*?)(\[\/CONTENT\]|$)/i);
     const bridgeMatch = text.match(/\[BRIDGE\]([\s\S]*?)(\[\/BRIDGE\]|$)/i);

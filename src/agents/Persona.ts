@@ -9,7 +9,7 @@ export interface PersonaContext {
   language: string;
 }
 
-export interface RephraseResponse {
+export interface PersonaResponse {
   header: string;
   content: string;
 }
@@ -48,6 +48,9 @@ export class Persona {
         4. Do not change the technical intent, only the "vibe" and phrasing.
 
       INPUT FORMAT:
+      [TOPIC]Topic of the content[/TOPIC]
+      [GOAL]Goal of the content[/GOAL]
+      [AUDIENCE]Audience of the content[/AUDIENCE]
       [NEUTRAL_HEADER]Neutral header[/NEUTRAL_HEADER]
       [NEUTRAL_CONTENT]Neutral content[/NEUTRAL_CONTENT]
 
@@ -67,15 +70,13 @@ export class Persona {
     content: string,
     ctx: PersonaContext,
     onRetry?: (err: Error) => Promise<boolean>,
-  ): Promise<RephraseResponse> {
+  ): Promise<PersonaResponse> {
     const modelName = getGlobalConfig().architectModel || "gemini-2-flash";
 
     const prompt = `
-      CONTEXT:
-        Subject: "${ctx.topic}"
-        Goal: "${ctx.goal}"
-        Target Audience: "${ctx.audience}"
-        
+      [TOPIC]${ctx.topic}[/TOPIC]
+      [GOAL]${ctx.goal}[/GOAL]
+      [AUDIENCE]${ctx.audience}[/AUDIENCE]
       [NEUTRAL_HEADER]${header}[/NEUTRAL_HEADER]
       [NEUTRAL_CONTENT]
       ${content}
@@ -88,6 +89,10 @@ export class Persona {
       onRetry,
     });
 
+    return this.parse(text);
+  }
+
+  private parse(text: string): PersonaResponse {
     const hMatch = text.match(/\[HEADER\]([\s\S]*?)\[\/HEADER\]/i);
     const cMatch = text.match(/\[CONTENT\]([\s\S]*?)\[\/CONTENT\]/i);
 

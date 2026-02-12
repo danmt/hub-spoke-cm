@@ -2,10 +2,14 @@
 import { AiService } from "../services/AiService.js";
 import { getGlobalConfig } from "../utils/config.js";
 
-export interface InteractionResponse {
-  action: "proceed" | "feedback";
-  content?: string;
-}
+export type ArchitectInteractionResponse =
+  | {
+      action: "proceed";
+    }
+  | {
+      action: "feedback";
+      feedback: string;
+    };
 
 export interface ArchitectInteractionHandlerParams {
   message: string;
@@ -14,7 +18,7 @@ export interface ArchitectInteractionHandlerParams {
 
 export type ArchitectInteractionHandler = (
   params: ArchitectInteractionHandlerParams,
-) => Promise<InteractionResponse>;
+) => Promise<ArchitectInteractionResponse>;
 
 export interface ArchitectContext {
   input?: string;
@@ -23,16 +27,14 @@ export interface ArchitectContext {
   onThinking?: () => void;
 }
 
-export interface ArchitectChatWithUserContext {
+export interface ArchitectGenerateContext {
   input: string;
   onRetry?: (err: Error) => Promise<boolean>;
 }
 
 export interface ArchitectResponse {
   message: string;
-  isComplete: boolean;
-  brief?: Brief;
-  gapFound?: boolean;
+  brief: Brief;
 }
 
 export interface Brief {
@@ -45,59 +47,21 @@ export interface Brief {
 }
 
 export class Architect {
+  private readonly systemInstruction: string;
   private history: any[] = [];
 
-  constructor(
-    public manifest: string,
-    public initialContext: Partial<Brief>,
-  ) {}
-
-  /**
-   * Orchestrates the interview loop.
-   */
-  async architect(ctx: ArchitectContext): Promise<Brief | null> {
-    let currentInput =
-      ctx.input ||
-      "Analyze the baseline and provide your best proposal/questions.";
-
-    while (true) {
-      if (ctx.onThinking) ctx.onThinking();
-
-      const text = await this.chatWithUser({
-        input: currentInput,
-        onRetry: ctx.onRetry,
-      });
-      const message =
-        text.match(/\[MESSAGE\]([\s\S]*?)\[\/MESSAGE\]/i)?.[1].trim() || text;
-      const brief = this.parseBrief(
-        text.match(/\[BRIEF\]([\s\S]*?)\[\/BRIEF\]/i)?.[1] || "",
-      );
-
-      // The user sees the plan and decides: proceed or give feedback
-      const { action, content } = await ctx.interact({ message, brief });
-
-      if (action === "proceed") {
-        return brief;
-      }
-
-      currentInput = content || "Continue refinement.";
-    }
-  }
-
-  async chatWithUser(ctx: ArchitectChatWithUserContext): Promise<string> {
-    try {
-      const modelName = getGlobalConfig().architectModel || "gemini-3-flash";
-      const systemInstruction = `
+  constructor(manifest: string, initialContext: Partial<Brief>) {
+    this.systemInstruction = `
       You are the Hub Spoke Architect. Your job is to refine a content plan.
 
       USER BASELINE:
-      Topic: ${this.initialContext.topic}
-      Goal: ${this.initialContext.goal}
-      Audience: ${this.initialContext.audience}
-      Language: ${this.initialContext.language}
+      Topic: ${initialContext.topic}
+      Goal: ${initialContext.goal}
+      Audience: ${initialContext.audience}
+      Language: ${initialContext.language}
 
       AVAILABLE TOOLS:
-      ${this.manifest}
+      ${manifest}
 
       PROTOCOL:
       1. Review the baseline. Ask follow-up questions if it's too vague.
@@ -118,10 +82,40 @@ export class Architect {
       [PERSONA_ID]id[/PERSONA_ID]
       [/BRIEF]
     `.trim();
+  }
+
+  async architect(ctx: ArchitectContext): Promise<ArchitectResponse> {
+    let currentInput =
+      ctx.input ||
+      "Analyze the baseline and provide your best proposal/questions.";
+
+    while (true) {
+      if (ctx.onThinking) ctx.onThinking();
+
+      const response = await this.generate({
+        input: currentInput,
+        onRetry: ctx.onRetry,
+      });
+
+      const interaction = await ctx.interact(response);
+
+      if (interaction.action === "proceed") {
+        return response;
+      }
+
+      currentInput = interaction.feedback || "Continue refinement.";
+    }
+  }
+
+  async generate(
+    ctx: ArchitectGenerateContext,
+  ): Promise<ArchitectResponse> {
+    try {
+      const modelName = getGlobalConfig().architectModel || "gemini-3-flash";
 
       const text = await AiService.execute(ctx.input, {
         model: modelName,
-        systemInstruction,
+        systemInstruction: this.systemInstruction,
         history: this.history,
         onRetry: ctx.onRetry,
       });
@@ -131,26 +125,33 @@ export class Architect {
         { role: "model", parts: [{ text }] },
       );
 
-      return text;
+      return this.parse(text);
     } catch (error: any) {
       throw new Error(`Architect failed: ${error.message}`);
     }
   }
 
-  private parseBrief(block: string): Brief {
+  private parse(text: string): ArchitectResponse {
+    const message =
+      text.match(/\[MESSAGE\]([\s\S]*?)\[\/MESSAGE\]/i)?.[1].trim() || text;
+    const brief = text.match(/\[BRIEF\]([\s\S]*?)\[\/BRIEF\]/i)?.[1] || "";
+
     return {
-      topic: block.match(/\[TOPIC\](.*?)\[\/TOPIC\]/i)?.[1].trim() || "",
-      goal: block.match(/\[GOAL\](.*?)\[\/GOAL\]/i)?.[1].trim() || "",
-      audience:
-        block.match(/\[AUDIENCE\](.*?)\[\/AUDIENCE\]/i)?.[1].trim() || "",
-      language:
-        block.match(/\[LANGUAGE\](.*?)\[\/LANGUAGE\]/i)?.[1].trim() ||
-        "English",
-      assemblerId:
-        block.match(/\[ASSEMBLER_ID\](.*?)\[\/ASSEMBLER_ID\]/i)?.[1].trim() ||
-        "",
-      personaId:
-        block.match(/\[PERSONA_ID\](.*?)\[\/PERSONA_ID\]/i)?.[1].trim() || "",
+      message,
+      brief: {
+        topic: brief.match(/\[TOPIC\](.*?)\[\/TOPIC\]/i)?.[1].trim() || "",
+        goal: brief.match(/\[GOAL\](.*?)\[\/GOAL\]/i)?.[1].trim() || "",
+        audience:
+          brief.match(/\[AUDIENCE\](.*?)\[\/AUDIENCE\]/i)?.[1].trim() || "",
+        language:
+          brief.match(/\[LANGUAGE\](.*?)\[\/LANGUAGE\]/i)?.[1].trim() ||
+          "English",
+        assemblerId:
+          brief.match(/\[ASSEMBLER_ID\](.*?)\[\/ASSEMBLER_ID\]/i)?.[1].trim() ||
+          "",
+        personaId:
+          brief.match(/\[PERSONA_ID\](.*?)\[\/PERSONA_ID\]/i)?.[1].trim() || "",
+      }
     };
   }
 }

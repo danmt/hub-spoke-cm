@@ -10,6 +10,7 @@ import { IoService } from "../services/IoService.js";
 import { ParserService } from "../services/ParserService.js";
 import { RegistryService } from "../services/RegistryService.js";
 import { ValidationService } from "../services/ValidationService.js";
+import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
 import { cliRetryHandler } from "../utils/cliRetryHandler.js";
 
 export const spawnCommand = new Command("spawn")
@@ -71,7 +72,7 @@ export const spawnCommand = new Command("spawn")
         personaId: hubMeta.personaId,
       });
 
-      const brief = await architect.architect({
+      const architecture = await architect.architect({
         input: `Plan a Spoke for "${section}".`,
         interact: async ({ message, brief }) => {
           console.log(`\n${chalk.green("Architect:")} ${message}`);
@@ -82,87 +83,42 @@ export const spawnCommand = new Command("spawn")
           console.log(`${chalk.yellow("Assembler:")} ${brief.assemblerId}`);
           console.log(`${chalk.yellow("Persona:")}   ${brief.personaId}\n`);
 
-          const { action } = await inquirer.prompt([
-            {
-              type: "list",
-              name: "action",
-              message: "Action:",
-              choices: [
-                { name: "🚀 Proceed", value: "proceed" },
-                { name: "💬 Feedback", value: "feedback" },
-              ],
-            },
-          ]);
-
-          if (action === "proceed") return { action: "proceed" };
-
-          const { feed } = await inquirer.prompt([
-            {
-              type: "input",
-              name: "feed",
-              message: chalk.cyan("You:"),
-              validate: (v) => !!v,
-            },
-          ]);
-
-          return { action: "feedback", content: feed };
+          return cliConfirmOrFeedback();
         },
         onRetry: cliRetryHandler,
         onThinking: () =>
           console.log(chalk.blue("\n🧠 Architect is thinking...")),
       });
 
-      if (!brief) {
-        return;
-      }
-
       const assembler = assemblers.find(
-        (a) => a.artifact.id === brief.assemblerId,
+        (a) => a.artifact.id === architecture.brief.assemblerId,
       );
 
       if (!assembler) {
         throw new Error(
-          `Assembler "${brief.assemblerId}" not found in /agents/assemblers. ` +
+          `Assembler "${architecture.brief.assemblerId}" not found in /agents/assemblers. ` +
             `Available: ${assemblers.map((a) => a.artifact.id).join(", ")}`,
         );
       }
 
       const { blueprint } = await assembler.agent.assemble({
-        audience: brief.audience,
-        goal: brief.goal,
-        topic: brief.topic,
-        validator: async (blueprint) => {
+        audience: architecture.brief.audience,
+        goal: architecture.brief.goal,
+        topic: architecture.brief.topic,
+        interact: async ({ blueprint }) => {
           console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
+          console.log(chalk.white(`\nTITLE: ${architecture.brief.topic}`));
+          console.log(chalk.white(`HUB ID: ${blueprint.hubId}\n`));
+
           blueprint.components.forEach((c, i) => {
             console.log(
               chalk.white(`#${i + 1} [${c.writerId.toUpperCase()}] `) +
                 chalk.bold(c.header),
             );
+            console.log(chalk.gray(`  INTENT: ${c.intent}`));
           });
 
-          const { confirmed } = await inquirer.prompt([
-            {
-              type: "confirm",
-              name: "confirmed",
-              message: "Does this structure look good?",
-              default: true,
-            },
-          ]);
-
-          if (confirmed) {
-            return { confirmed };
-          }
-
-          const { feedback } = await inquirer.prompt([
-            {
-              type: "input",
-              name: "feedback",
-              message: chalk.cyan("You:"),
-              validate: (v) => !!v,
-            },
-          ]);
-
-          return { confirmed: false, feedback };
+          return cliConfirmOrFeedback();
         },
       });
 
@@ -174,7 +130,7 @@ export const spawnCommand = new Command("spawn")
 
       const fileContent = ParserService.generateScaffold(
         "spoke",
-        brief,
+        architecture.brief,
         blueprint,
         hubMeta.hubId,
       );
@@ -194,11 +150,13 @@ export const spawnCommand = new Command("spawn")
 
       if (!shouldFill) return;
 
-      const persona = personas.find((p) => p.artifact.id === brief.personaId);
+      const persona = personas.find(
+        (p) => p.artifact.id === architecture.brief.personaId,
+      );
 
       if (!persona) {
         throw new Error(
-          `Persona "${brief.personaId}" not found in workspace. ` +
+          `Persona "${architecture.brief.personaId}" not found in workspace. ` +
             `Available: ${personas.map((a) => a.artifact.id).join(", ")}`,
         );
       }

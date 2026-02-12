@@ -3,72 +3,69 @@ import { AiService } from "../services/AiService.js";
 import { HubBlueprint } from "../types/index.js";
 import { getGlobalConfig } from "../utils/config.js";
 
-export interface AssemblerContext {
+export type AssemblerInteractionResponse =
+  | {
+      action: "proceed";
+    }
+  | {
+      action: "feedback";
+      feedback: string;
+    };
+
+export interface AssemblerInteractionHandlerParams {
+  blueprint: HubBlueprint;
+}
+
+export type AssemblerInteractionHandler = (
+  params: AssemblerInteractionHandlerParams,
+) => Promise<AssemblerInteractionResponse>;
+
+export interface AssembleContext {
   topic: string;
   goal: string;
   audience: string;
-  feedback?: string;
+  input?: string;
+  interact: AssemblerInteractionHandler;
   onRetry?: (error: Error) => Promise<boolean>;
-  validator?: (
-    blueprint: HubBlueprint,
-  ) => Promise<{ confirmed: boolean; feedback?: string }>;
+  onThinking?: () => void;
 }
 
-export interface AssemblerResponse {
-  strategyPrompt: string;
+export interface AssembleResponse {
+  blueprint: HubBlueprint;
+}
+
+export interface AssemblerGenerateContext {
+  topic: string;
+  goal: string;
+  audience: string;
+  input?: string;
+  onRetry?: (error: Error) => Promise<boolean>;
+}
+
+export interface AssemblerGenerateResponse {
   blueprint: HubBlueprint;
 }
 
 export class Assembler {
+  private readonly systemInstruction: string;
+
   constructor(
     public id: string,
     public description: string,
     public strategyPrompt: string,
-    public writerIds: string[],
+    writerIds: string[],
   ) {
     if (writerIds.length === 0) {
       throw new Error(`Assembler "${id}" has an empty list of writers.`);
     }
-  }
 
-  async assemble(ctx: AssemblerContext): Promise<AssemblerResponse> {
-    let feedback: string | undefined;
-    const runValidator =
-      ctx.validator || (async () => ({ confirmed: true, feedback: undefined }));
+    const writerConstraint = writerIds.join("|");
 
-    while (true) {
-      const response = await this.generate(ctx);
-
-      const { confirmed, feedback: nextFeedback } = await runValidator(
-        response.blueprint,
-      );
-
-      if (confirmed) {
-        return response;
-      }
-
-      feedback =
-        nextFeedback ||
-        "The previous structure was rejected. Please try a different decomposition.";
-    }
-  }
-
-  async generate(ctx: AssemblerContext): Promise<AssemblerResponse> {
-    const model = getGlobalConfig().architectModel || "gemini-3-flash";
-    const writerConstraint = this.writerIds.join("|");
-
-    const systemInstruction = `
+    this.systemInstruction = `
       You are a Lead Content Architect. Your mission is to decompose a high-level project into a surgical, sequential execution blueprint.
 
-      PROJECT CONTEXT:
-      - TOPIC: "${ctx.topic}"
-      - GOAL: "${ctx.goal}"
-      - AUDIENCE: "${ctx.audience}"
-      
       STRATEGY: ${this.strategyPrompt}
 
-      ${ctx.feedback ? `CRITICAL - USER FEEDBACK ON PREVIOUS ATTEMPT: ${ctx.feedback}` : ""}
-      
       CRITICAL REQUIREMENT: "FUTURE-AWARE INTENTS"
       Every section's 'intent' must be a detailed micro-brief (50-100 words) that includes:
       1. PRIMARY FOCUS: The specific technical or narrative goal of THIS section.
@@ -79,29 +76,71 @@ export class Assembler {
       1. WRITER SELECTION: Select exactly ONE Writer ID from: [${writerConstraint}]. Choose the writer that best fits the specific nature of that section.
       2. LANGUAGE ENFORCEMENT: Write the blueprint 'header' and 'intent' blocks in English for clarity.
 
+      INPUT FORMAT:
+      [TOPIC]Topic of the blueprint[/TOPIC]
+      [GOAL]Goal of the blueprint[/GOAL]
+      [AUDIENCE]Audience of the blueprint[/AUDIENCE]
+
       OUTPUT FORMAT (Use these exact delimiters):
       [HUB_ID]slugified-topic-id[/HUB_ID]
       
       [COMPONENT]
       [ID]unique-section-id[/ID]
       [HEADER]Section Title[/HEADER]
-      [INTENT]Detailed micro-brief focusing on ${ctx.topic} for ${ctx.audience}...[/INTENT]
-      [WRITER_ID]${writerConstraint}[/WRITER_ID]
+      [INTENT]Detailed micro-brief focusing on the [TOPIC] for the [AUDIENCE][/INTENT]
+      [WRITER_ID]prose, code or custom writer IDs[/WRITER_ID]
       [/COMPONENT]
     `.trim();
+  }
 
-    const text = await AiService.execute(systemInstruction, {
+  async assemble(ctx: AssembleContext): Promise<AssembleResponse> {
+    let currentInput =
+      ctx.input || "Analyze the baseline and provide your best proposal.";
+
+    while (true) {
+      if (ctx.onThinking) ctx.onThinking();
+
+      const generated = await this.generate({
+        audience: ctx.audience,
+        goal: ctx.goal,
+        topic: ctx.topic,
+        input: currentInput,
+        onRetry: ctx.onRetry,
+      });
+
+      const interaction = await ctx.interact(generated);
+
+      if (interaction.action === "proceed") {
+        return generated;
+      }
+
+      currentInput = interaction.feedback || "Continue refinement.";
+    }
+  }
+
+  async generate(
+    ctx: AssemblerGenerateContext,
+  ): Promise<AssemblerGenerateResponse> {
+    const model = getGlobalConfig().architectModel || "gemini-3-flash";
+
+    const prompt = `
+      [TOPIC]${ctx.topic}[/TOPIC]
+      [GOAL]${ctx.goal}[/GOAL]
+      [AUDIENCE]${ctx.audience}[/AUDIENCE]
+      
+      ${ctx.input ? `CRITICAL - USER FEEDBACK ON PREVIOUS ATTEMPT: ${ctx.input}` : ""}
+    `.trim();
+
+    const text = await AiService.execute(prompt, {
       model,
+      systemInstruction: this.systemInstruction,
       onRetry: ctx.onRetry,
     });
 
-    return {
-      blueprint: this.parseDelimiterResponse(text),
-      strategyPrompt: this.strategyPrompt,
-    };
+    return this.parse(text);
   }
 
-  private parseDelimiterResponse(text: string): HubBlueprint {
+  private parse(text: string): AssembleResponse {
     const hubIdMatch = text.match(/\[HUB_ID\](.*?)\[\/HUB_ID\]/i);
     const hubId = hubIdMatch ? hubIdMatch[1].trim() : "generated-hub";
 
@@ -138,6 +177,6 @@ export class Assembler {
       );
     }
 
-    return { hubId, components };
+    return { blueprint: { hubId, components } };
   }
 }
