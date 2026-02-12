@@ -5,7 +5,6 @@ import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
-import { ContextService } from "../services/ContextService.js";
 import { IoService } from "../services/IoService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { ParserService } from "../services/ParserService.js";
@@ -28,7 +27,7 @@ export const fillCommand = new Command("fill")
         targetFile = path.resolve(currentDir, options.file);
       } else {
         const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
-        const { rootDir } = await ContextService.resolveHubContext(
+        const { rootDir } = await IoService.resolveHubContext(
           workspaceRoot,
           async (hubs) => {
             const { targetHub } = await inquirer.prompt([
