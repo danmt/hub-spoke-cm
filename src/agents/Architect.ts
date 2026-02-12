@@ -28,7 +28,7 @@ export interface ArchitectContext {
 }
 
 export interface ArchitectGenerateContext {
-  input: string;
+  feedback?: string;
   onRetry?: (err: Error) => Promise<boolean>;
 }
 
@@ -85,15 +85,13 @@ export class Architect {
   }
 
   async architect(ctx: ArchitectContext): Promise<ArchitectResponse> {
-    let currentInput =
-      ctx.input ||
-      "Analyze the baseline and provide your best proposal/questions.";
+    let currentFeedback: string | undefined = undefined;
 
     while (true) {
       if (ctx.onThinking) ctx.onThinking();
 
       const response = await this.generate({
-        input: currentInput,
+        feedback: currentFeedback,
         onRetry: ctx.onRetry,
       });
 
@@ -103,17 +101,22 @@ export class Architect {
         return response;
       }
 
-      currentInput = interaction.feedback || "Continue refinement.";
+      currentFeedback = interaction.feedback || "Continue refinement.";
     }
   }
 
-  async generate(
-    ctx: ArchitectGenerateContext,
-  ): Promise<ArchitectResponse> {
+  async generate(ctx: ArchitectGenerateContext): Promise<ArchitectResponse> {
     try {
       const modelName = getGlobalConfig().architectModel || "gemini-3-flash";
 
-      const text = await AiService.execute(ctx.input, {
+      const baseInstruction =
+        "Analyze the baseline and provide your best proposal/questions.";
+
+      const prompt = ctx.feedback
+        ? `${baseInstruction}\n\nUSER FEEDBACK: ${ctx.feedback}`
+        : baseInstruction;
+
+      const text = await AiService.execute(prompt, {
         model: modelName,
         systemInstruction: this.systemInstruction,
         history: this.history,
@@ -121,7 +124,7 @@ export class Architect {
       });
 
       this.history.push(
-        { role: "user", parts: [{ text: ctx.input }] },
+        { role: "user", parts: [{ text: prompt }] },
         { role: "model", parts: [{ text }] },
       );
 
@@ -151,7 +154,7 @@ export class Architect {
           "",
         personaId:
           brief.match(/\[PERSONA_ID\](.*?)\[\/PERSONA_ID\]/i)?.[1].trim() || "",
-      }
+      },
     };
   }
 }

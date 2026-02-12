@@ -24,7 +24,6 @@ export interface AssembleContext {
   topic: string;
   goal: string;
   audience: string;
-  input?: string;
   interact: AssemblerInteractionHandler;
   onRetry?: (error: Error) => Promise<boolean>;
   onThinking?: () => void;
@@ -38,7 +37,7 @@ export interface AssemblerGenerateContext {
   topic: string;
   goal: string;
   audience: string;
-  input?: string;
+  feedback?: string;
   onRetry?: (error: Error) => Promise<boolean>;
 }
 
@@ -48,11 +47,12 @@ export interface AssemblerGenerateResponse {
 
 export class Assembler {
   private readonly systemInstruction: string;
+  private history: any[] = [];
 
   constructor(
     public id: string,
     public description: string,
-    public strategyPrompt: string,
+    strategyPrompt: string,
     writerIds: string[],
   ) {
     if (writerIds.length === 0) {
@@ -64,7 +64,7 @@ export class Assembler {
     this.systemInstruction = `
       You are a Lead Content Architect. Your mission is to decompose a high-level project into a surgical, sequential execution blueprint.
 
-      STRATEGY: ${this.strategyPrompt}
+      STRATEGY: ${strategyPrompt}
 
       CRITICAL REQUIREMENT: "FUTURE-AWARE INTENTS"
       Every section's 'intent' must be a detailed micro-brief (50-100 words) that includes:
@@ -100,8 +100,7 @@ export class Assembler {
   }
 
   async assemble(ctx: AssembleContext): Promise<AssembleResponse> {
-    let currentInput =
-      ctx.input || "Analyze the baseline and provide your best proposal.";
+    let currentFeedback: string | undefined = undefined;
 
     while (true) {
       if (ctx.onThinking) ctx.onThinking();
@@ -110,7 +109,7 @@ export class Assembler {
         audience: ctx.audience,
         goal: ctx.goal,
         topic: ctx.topic,
-        input: currentInput,
+        feedback: currentFeedback,
         onRetry: ctx.onRetry,
       });
 
@@ -120,7 +119,7 @@ export class Assembler {
         return generated;
       }
 
-      currentInput = interaction.feedback || "Continue refinement.";
+      currentFeedback = interaction.feedback || "Continue refinement.";
     }
   }
 
@@ -129,19 +128,29 @@ export class Assembler {
   ): Promise<AssemblerGenerateResponse> {
     const model = getGlobalConfig().architectModel || "gemini-3-flash";
 
-    const prompt = `
+    const baseInstruction = `
+      Analyze the baseline and provide your best sequential execution blueprint.
+
       [TOPIC]${ctx.topic}[/TOPIC]
       [GOAL]${ctx.goal}[/GOAL]
       [AUDIENCE]${ctx.audience}[/AUDIENCE]
-      
-      ${ctx.input ? `CRITICAL - USER FEEDBACK ON PREVIOUS ATTEMPT: ${ctx.input}` : ""}
-    `.trim();
+    `;
+
+    const prompt = ctx.feedback
+      ? `${baseInstruction}\n\nUSER FEEDBACK: ${ctx.feedback}`
+      : baseInstruction;
 
     const text = await AiService.execute(prompt, {
       model,
       systemInstruction: this.systemInstruction,
+      history: this.history,
       onRetry: ctx.onRetry,
     });
+
+    this.history.push(
+      { role: "user", parts: [{ text: prompt }] },
+      { role: "model", parts: [{ text }] },
+    );
 
     return this.parse(text);
   }
