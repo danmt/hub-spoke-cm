@@ -13,6 +13,7 @@ import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { registryCommand } from "./commands/registry.js";
 import { LoggerService } from "./services/LoggerService.js";
+import { getGlobalConfig } from "./utils/config.js";
 
 // Load environment variables
 dotenv.config();
@@ -27,6 +28,7 @@ async function main() {
     )
     .version("1.0.0");
 
+  console.log(getGlobalConfig());
   // Register Commands
   program.addCommand(initCommand);
   program.addCommand(registryCommand);

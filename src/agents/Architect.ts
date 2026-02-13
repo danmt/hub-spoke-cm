@@ -125,7 +125,7 @@ export class Architect {
   }
 
   async generate(ctx: ArchitectGenerateContext): Promise<ArchitectResponse> {
-    const modelName = getGlobalConfig().architectModel || "gemini-3-flash";
+    const modelName = getGlobalConfig().architectModel || "gemini-2.0-flash";
 
     const basePrompt =
       "Analyze the baseline and provide your best proposal/questions.";

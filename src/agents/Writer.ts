@@ -148,7 +148,7 @@ export class Writer {
   }
 
   private async generate(ctx: WriterGenerateContext): Promise<WriterResponse> {
-    const modelName = getGlobalConfig().writerModel || "gemini-3-flash";
+    const modelName = getGlobalConfig().writerModel || "gemini-2.0-flash";
 
     const basePrompt = `
       [INTENT]${ctx.intent}[/INTENT]

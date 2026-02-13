@@ -148,7 +148,7 @@ export class Assembler {
   async generate(
     ctx: AssemblerGenerateContext,
   ): Promise<AssemblerGenerateResponse> {
-    const model = getGlobalConfig().architectModel || "gemini-3-flash";
+    const model = getGlobalConfig().architectModel || "gemini-2.0-flash";
 
     const basePrompt = `
         [TOPIC]${ctx.topic}[/TOPIC]
