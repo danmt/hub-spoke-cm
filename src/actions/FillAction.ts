@@ -2,18 +2,24 @@
 import { Persona, PersonaInteractionHandler } from "../agents/Persona.js";
 import { Writer, WriterInteractionHandler } from "../agents/Writer.js";
 import { LoggerService } from "../services/LoggerService.js";
-import { ParserService } from "../services/ParserService.js";
 import {
   AgentPair,
   getAgent,
   getAgentsByType,
 } from "../services/RegistryService.js";
+import { SectionBlueprint } from "../types/index.js";
 
-const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
-
-export interface FillActionExecuteParams {
-  content: string;
-  sectionIdsToFill: string[];
+export interface FillExecuteParams {
+  sectionId: string;
+  sectionBody: string;
+  blueprint: SectionBlueprint;
+  parentMetadata: {
+    title: string;
+    goal: string;
+    audience: string;
+  };
+  isFirst: boolean;
+  isLast: boolean;
 }
 
 export class FillAction {
@@ -75,65 +81,52 @@ export class FillAction {
     return this;
   }
 
-  async execute({ content, sectionIdsToFill }: FillActionExecuteParams) {
-    await LoggerService.info(`FillAction: Starting execution`, {
-      sectionIdsToFill,
-    });
+  async execute({
+    sectionId,
+    sectionBody,
+    blueprint,
+    parentMetadata,
+    isFirst,
+    isLast,
+  }: FillExecuteParams): Promise<string> {
+    await LoggerService.info("FillAction: Starting execution");
 
-    const parsed = ParserService.parseMarkdown(content);
-    const sectionIds = Object.keys(parsed.sections);
-    const blueprint = parsed.frontmatter.blueprint || {};
+    const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
+    const intent =
+      sectionBody.match(TODO_REGEX)?.[1]?.trim() || "Expand details.";
 
-    const updatedSections = { ...parsed.sections };
-
-    for (let i = 0; i < sectionIds.length; i++) {
-      const sectionId = sectionIds[i];
-      if (!sectionIdsToFill.includes(sectionId)) continue;
-
-      const body = updatedSections[sectionId];
-      const intent = body.match(TODO_REGEX)?.[1]?.trim() || "Expand details.";
-      const writerId = blueprint[sectionId].writerId;
-      const writer = this.writers.find((w) => w.id === writerId);
-
-      if (!writer) throw new Error(`Writer "${writerId}" not found.`);
-
-      this._onStart?.(sectionId);
-
-      // 1. Neutral Writing Phase
-      const neutral = await writer.write({
-        intent,
-        topic: parsed.frontmatter.title,
-        goal: parsed.frontmatter.goal,
-        audience: parsed.frontmatter.audience,
-        bridge: blueprint[sectionId].bridge,
-        isFirst: i === 0,
-        isLast: i === sectionIds.length - 1,
-        interact: this._onWrite,
-        onRetry: this._onRetry,
-        onThinking: () => this._onWriting?.({ id: sectionId, writerId }),
-      });
-
-      // 2. Persona Rephrasing Phase
-      const rephrased = await this.persona.rephrase({
-        header: neutral.header,
-        content: neutral.content,
-        interact: this._onRephrase,
-        onRetry: this._onRetry,
-        onThinking: () =>
-          this._onRephrasing?.({ id: sectionId, personaId: this.persona.id }),
-      });
-
-      updatedSections[sectionId] =
-        `## ${rephrased.header}\n\n${rephrased.content}`;
+    const writer = this.writers.find((w) => w.id === blueprint.writerId);
+    if (!writer) {
+      throw new Error(`FillAction: Writer "${blueprint.writerId}" not found.`);
     }
 
-    const finalMarkdown = ParserService.reconstructMarkdown(
-      parsed.frontmatter,
-      updatedSections,
-    );
+    // 1. Neutral Writing Phase
+    const neutral = await writer.write({
+      intent,
+      topic: parentMetadata.title,
+      goal: parentMetadata.goal,
+      audience: parentMetadata.audience,
+      bridge: blueprint.bridge,
+      isFirst,
+      isLast,
+      interact: this._onWrite,
+      onRetry: this._onRetry,
+      onThinking: () =>
+        this._onWriting?.({ id: sectionId, writerId: writer.id }),
+    });
 
-    await LoggerService.info(`FillAction: Execution finished`);
+    // 2. Persona Rephrasing Phase
+    const rephrased = await this.persona.rephrase({
+      header: neutral.header,
+      content: neutral.content,
+      interact: this._onRephrase,
+      onRetry: this._onRetry,
+      onThinking: () =>
+        this._onRephrasing?.({ id: sectionId, personaId: this.persona.id }),
+    });
 
-    return finalMarkdown;
+    await LoggerService.info("FillAction: Execution finished");
+
+    return `## ${rephrased.header}\n\n${rephrased.content}`;
   }
 }

@@ -2,6 +2,7 @@
 import chalk from "chalk";
 import { FillAction } from "../actions/FillAction.js";
 import { IoService } from "../services/IoService.js";
+import { ParserService } from "../services/ParserService.js";
 import { AgentPair } from "../services/RegistryService.js";
 import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
 import { cliRetryHandler } from "../utils/cliRetryHandler.js";
@@ -11,9 +12,13 @@ export async function executeCliFillAction(
   agents: AgentPair[],
   personaId: string,
   filePath: string,
-  content: string,
+  rawContent: string,
   sectionIdsToFill: string[],
 ): Promise<void> {
+  const parsed = ParserService.parseMarkdown(rawContent);
+  const sectionIds = Object.keys(parsed.sections);
+  const updatedSections = { ...parsed.sections };
+
   const fillAction = new FillAction(personaId, agents)
     .onStart((id) =>
       console.log(chalk.green(`\n🔄 Generating section: ${chalk.bold(id)}`)),
@@ -44,11 +49,32 @@ export async function executeCliFillAction(
       return await cliRetryHandler(error);
     });
 
-  const populatedMarkdown = await fillAction.execute({
-    content,
-    sectionIdsToFill,
-  });
+  for (const sectionId of sectionIdsToFill) {
+    const blueprint = parsed.frontmatter.blueprint[sectionId];
 
-  await IoService.safeWriteFile(filePath, populatedMarkdown);
-  console.log(chalk.green(`\n✅ File saved: ${filePath}`));
+    const result = await fillAction.execute({
+      sectionId,
+      sectionBody: updatedSections[sectionId],
+      blueprint,
+      parentMetadata: {
+        title: parsed.frontmatter.title,
+        goal: parsed.frontmatter.goal,
+        audience: parsed.frontmatter.audience,
+      },
+      isFirst: sectionId === sectionIds[0],
+      isLast: sectionId === sectionIds[sectionIds.length - 1],
+    });
+
+    updatedSections[sectionId] = result;
+  }
+
+  const finalMarkdown = ParserService.reconstructMarkdown(
+    parsed.frontmatter,
+    updatedSections,
+  );
+
+  await IoService.safeWriteFile(filePath, finalMarkdown);
+  console.log(
+    chalk.green(`\n✅ File successfully updated: ${chalk.bold(filePath)}`),
+  );
 }
