@@ -13,11 +13,9 @@ export interface FillExecuteParams {
   sectionId: string;
   sectionBody: string;
   blueprint: SectionBlueprint;
-  parentMetadata: {
-    title: string;
-    goal: string;
-    audience: string;
-  };
+  topic: string;
+  goal: string;
+  audience: string;
   isFirst: boolean;
   isLast: boolean;
 }
@@ -85,7 +83,9 @@ export class FillAction {
     sectionId,
     sectionBody,
     blueprint,
-    parentMetadata,
+    topic,
+    goal,
+    audience,
     isFirst,
     isLast,
   }: FillExecuteParams): Promise<string> {
@@ -100,12 +100,14 @@ export class FillAction {
       throw new Error(`FillAction: Writer "${blueprint.writerId}" not found.`);
     }
 
+    this._onStart?.(sectionId);
+
     // 1. Neutral Writing Phase
     const neutral = await writer.write({
       intent,
-      topic: parentMetadata.title,
-      goal: parentMetadata.goal,
-      audience: parentMetadata.audience,
+      topic,
+      goal,
+      audience,
       bridge: blueprint.bridge,
       isFirst,
       isLast,

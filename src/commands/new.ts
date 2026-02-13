@@ -27,7 +27,7 @@ export const newCommand = new Command("new")
 
       console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));
 
-      const { architecture, assembly, filePath, fileContent } =
+      const { architecture, filePath, fileContent } =
         await executeCliCreateHubAction(manifest, agents);
 
       const { shouldFill } = await inquirer.prompt([
@@ -48,7 +48,6 @@ export const newCommand = new Command("new")
         architecture.brief.personaId,
         filePath,
         fileContent,
-        assembly.blueprint.components.map((c) => c.id),
       );
     } catch (error) {
       console.error(chalk.red("\n❌ Command `new` Error:"), error);

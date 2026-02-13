@@ -52,28 +52,6 @@ export const fillCommand = new Command("fill")
       const content = await fs.readFile(targetFile, "utf-8");
       const parsed = ParserService.parseMarkdown(content);
 
-      const fillableSectionIds = Object.entries(parsed.sections)
-        .filter(([_, body]) => TODO_REGEX.test(body))
-        .map(([header]) => header);
-
-      if (fillableSectionIds.length === 0) {
-        return console.log(
-          chalk.yellow("✨ No sections marked with TODO found."),
-        );
-      }
-
-      const { sectionIdsToFill } = await inquirer.prompt([
-        {
-          type: "checkbox",
-          name: "selection",
-          message: "Select sections to generate (Sequential):",
-          choices: fillableSectionIds.map((sectionId) => ({
-            name: sectionId,
-            checked: true,
-          })),
-        },
-      ]);
-
       const rawArtifacts = await RegistryService.getAllArtifacts();
       const agents = RegistryService.initializeAgents(rawArtifacts);
 
@@ -82,7 +60,6 @@ export const fillCommand = new Command("fill")
         parsed.frontmatter.personaId,
         targetFile,
         content,
-        sectionIdsToFill,
       );
     } catch (error: any) {
       await LoggerService.error("Fill Command Failed", {
