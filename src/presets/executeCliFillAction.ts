@@ -1,21 +1,20 @@
 // src/cli/presets/cliFillAction.ts
 import chalk from "chalk";
 import { FillAction } from "../actions/FillAction.js";
-import { Persona } from "../agents/Persona.js";
-import { Writer } from "../agents/Writer.js";
 import { IoService } from "../services/IoService.js";
+import { AgentPair } from "../services/RegistryService.js";
 import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
 import { cliRetryHandler } from "../utils/cliRetryHandler.js";
 import { indentText } from "../utils/identText.js";
 
 export async function executeCliFillAction(
-  persona: Persona,
-  writers: Writer[],
+  agents: AgentPair[],
+  personaId: string,
   filePath: string,
   content: string,
   sectionIdsToFill: string[],
 ): Promise<void> {
-  const fillAction = new FillAction(persona, writers)
+  const fillAction = new FillAction(personaId, agents)
     .onStart((id) =>
       console.log(chalk.green(`\n🔄 Generating section: ${chalk.bold(id)}`)),
     )

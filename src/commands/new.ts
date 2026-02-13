@@ -2,14 +2,10 @@
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
-import { Architect } from "../agents/Architect.js";
 import { executeCliCreateHubAction } from "../presets/executeCliCreateHubAction.js";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
 import { IoService } from "../services/IoService.js";
-import {
-  getAgentsByType,
-  RegistryService,
-} from "../services/RegistryService.js";
+import { RegistryService } from "../services/RegistryService.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")
@@ -27,9 +23,6 @@ export const newCommand = new Command("new")
         process.exit(1);
       }
 
-      const personas = getAgentsByType(agents, "persona");
-      const writers = getAgentsByType(agents, "writer");
-      const assemblers = getAgentsByType(agents, "assembler");
       const manifest = RegistryService.toManifest(agents);
 
       console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));
@@ -62,14 +55,8 @@ export const newCommand = new Command("new")
         },
       ]);
 
-      const architect = new Architect(manifest, baseline);
-
       const { architecture, assembly, filePath, fileContent } =
-        await executeCliCreateHubAction(
-          architect,
-          assemblers.map((a) => a.agent),
-          personas.map((a) => a.agent),
-        );
+        await executeCliCreateHubAction(manifest, baseline, agents);
 
       const { shouldFill } = await inquirer.prompt([
         {
@@ -84,20 +71,9 @@ export const newCommand = new Command("new")
         return;
       }
 
-      const persona = personas.find(
-        (p) => p.artifact.id === architecture.brief.personaId,
-      );
-
-      if (!persona) {
-        throw new Error(
-          `Persona "${architecture.brief.personaId}" not found in workspace. ` +
-            `Available: ${personas.map((a) => a.artifact.id).join(", ")}`,
-        );
-      }
-
       await executeCliFillAction(
-        persona.agent,
-        writers.map((writer) => writer.agent),
+        agents,
+        architecture.brief.personaId,
         filePath,
         fileContent,
         assembly.blueprint.components.map((c) => c.id),

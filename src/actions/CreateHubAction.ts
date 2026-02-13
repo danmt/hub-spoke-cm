@@ -15,6 +15,7 @@ import {
   PersonaResponse,
 } from "../agents/Persona.js";
 import { LoggerService } from "../services/LoggerService.js";
+import { AgentPair, getAgentsByType } from "../services/RegistryService.js";
 
 export interface CreateHubActionResult {
   architecture: ArchitectResponse;
@@ -31,11 +32,25 @@ export class CreateHubAction {
   private _onRephrase?: PersonaInteractionHandler;
   private _onRetry?: (err: Error) => Promise<boolean>;
 
-  constructor(
-    private architect: Architect,
-    private assemblers: Assembler[],
-    private personas: Persona[],
-  ) {}
+  private architect: Architect;
+  private assemblers: Assembler[];
+  private personas: Persona[];
+
+  constructor(manifest: string, baseline: any, agents: AgentPair[]) {
+    this.architect = new Architect(manifest, baseline);
+
+    this.assemblers = getAgentsByType(agents, "assembler").map((a) => a.agent);
+
+    if (this.assemblers.length === 0) {
+      throw new Error("CreateHubAction: No assemblers found in the registry.");
+    }
+
+    this.personas = getAgentsByType(agents, "persona").map((a) => a.agent);
+
+    if (this.personas.length === 0) {
+      throw new Error("CreateHubAction: No personas found in the registry.");
+    }
+  }
 
   onArchitecting(cb: typeof this._onArchitecting) {
     this._onArchitecting = cb;

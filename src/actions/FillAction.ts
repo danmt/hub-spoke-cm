@@ -3,6 +3,11 @@ import { Persona, PersonaInteractionHandler } from "../agents/Persona.js";
 import { Writer, WriterInteractionHandler } from "../agents/Writer.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { ParserService } from "../services/ParserService.js";
+import {
+  AgentPair,
+  getAgent,
+  getAgentsByType,
+} from "../services/RegistryService.js";
 
 const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
@@ -19,10 +24,26 @@ export class FillAction {
   private _onWriting?: (data: { id: string; writerId: string }) => void;
   private _onRephrasing?: (data: { id: string; personaId: string }) => void;
 
-  constructor(
-    private persona: Persona,
-    private writers: Writer[],
-  ) {}
+  private persona: Persona;
+  private writers: Writer[];
+
+  constructor(personaId: string, agents: AgentPair[]) {
+    const persona = getAgent(agents, "persona", personaId);
+
+    if (!persona) {
+      throw new Error(
+        `FillAction: Persona "${personaId}" not found in the registry.`,
+      );
+    }
+
+    this.persona = persona.agent;
+
+    this.writers = getAgentsByType(agents, "writer").map((a) => a.agent);
+
+    if (this.writers.length === 0) {
+      throw new Error("FillAction: No writers found in the registry.");
+    }
+  }
 
   onStart(cb: typeof this._onStart) {
     this._onStart = cb;

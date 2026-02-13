@@ -8,10 +8,7 @@ import { executeCliFillAction } from "../presets/executeCliFillAction.js";
 import { IoService } from "../services/IoService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { ParserService } from "../services/ParserService.js";
-import {
-  getAgentsByType,
-  RegistryService,
-} from "../services/RegistryService.js";
+import { RegistryService } from "../services/RegistryService.js";
 
 const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
@@ -79,17 +76,10 @@ export const fillCommand = new Command("fill")
 
       const rawArtifacts = await RegistryService.getAllArtifacts();
       const agents = RegistryService.initializeAgents(rawArtifacts);
-      const persona = getAgentsByType(agents, "persona").find(
-        (p) => p.artifact.id === parsed.frontmatter.personaId,
-      );
-      const writers = getAgentsByType(agents, "writer");
-
-      if (!persona)
-        throw new Error(`Persona "${parsed.frontmatter.personaId}" not found.`);
 
       await executeCliFillAction(
-        persona.agent,
-        writers.map((writer) => writer.agent),
+        agents,
+        parsed.frontmatter.personaId,
         targetFile,
         content,
         sectionIdsToFill,

@@ -2,11 +2,11 @@
 import chalk from "chalk";
 import path from "path";
 import { CreateHubAction } from "../actions/CreateHubAction.js";
-import { Architect, ArchitectResponse } from "../agents/Architect.js";
-import { Assembler, AssembleResponse } from "../agents/Assembler.js";
-import { Persona } from "../agents/Persona.js";
+import { ArchitectResponse } from "../agents/Architect.js";
+import { AssembleResponse } from "../agents/Assembler.js";
 import { IoService } from "../services/IoService.js";
 import { ParserService } from "../services/ParserService.js";
+import { AgentPair } from "../services/RegistryService.js";
 import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
 import { cliRetryHandler } from "../utils/cliRetryHandler.js";
 import { indentText } from "../utils/identText.js";
@@ -19,11 +19,11 @@ export interface ExecuteCreateHubActionResult {
 }
 
 export async function executeCliCreateHubAction(
-  architect: Architect,
-  assemblers: Assembler[],
-  personas: Persona[],
+  manifest: string,
+  baseline: any,
+  agents: AgentPair[],
 ): Promise<ExecuteCreateHubActionResult> {
-  const action = new CreateHubAction(architect, assemblers, personas)
+  const action = new CreateHubAction(manifest, baseline, agents)
     .onArchitecting(() =>
       console.log(chalk.blue("\n🧠 Architect is thinking...")),
     )
