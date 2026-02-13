@@ -1,5 +1,6 @@
 // src/presets/executeCliCreateHubAction.ts
 import chalk from "chalk";
+import inquirer from "inquirer";
 import path from "path";
 import { CreateHubAction } from "../actions/CreateHubAction.js";
 import { ArchitectResponse } from "../agents/Architect.js";
@@ -20,9 +21,36 @@ export interface ExecuteCreateHubActionResult {
 
 export async function executeCliCreateHubAction(
   manifest: string,
-  baseline: any,
   agents: AgentPair[],
 ): Promise<ExecuteCreateHubActionResult> {
+  const baseline = await inquirer.prompt([
+    {
+      type: "input",
+      name: "topic",
+      message: "Main Topic:",
+      validate: (v) => !!v,
+    },
+    {
+      type: "input",
+      name: "goal",
+      message: "Goal of the Hub:",
+      default: "Master the basics",
+    },
+    {
+      type: "input",
+      name: "audience",
+      message: "Target Audience:",
+      default: "Intermediate Developers",
+    },
+    {
+      type: "list",
+      name: "language",
+      message: "Language:",
+      choices: ["English", "Spanish"],
+      default: "English",
+    },
+  ]);
+
   const action = new CreateHubAction(manifest, baseline, agents)
     .onArchitecting(() =>
       console.log(chalk.blue("\n🧠 Architect is thinking...")),

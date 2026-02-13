@@ -27,36 +27,8 @@ export const newCommand = new Command("new")
 
       console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));
 
-      const baseline = await inquirer.prompt([
-        {
-          type: "input",
-          name: "topic",
-          message: "Main Topic:",
-          validate: (v) => !!v,
-        },
-        {
-          type: "input",
-          name: "goal",
-          message: "Goal of the Hub:",
-          default: "Master the basics",
-        },
-        {
-          type: "input",
-          name: "audience",
-          message: "Target Audience:",
-          default: "Intermediate Developers",
-        },
-        {
-          type: "list",
-          name: "language",
-          message: "Language:",
-          choices: ["English", "Spanish"],
-          default: "English",
-        },
-      ]);
-
       const { architecture, assembly, filePath, fileContent } =
-        await executeCliCreateHubAction(manifest, baseline, agents);
+        await executeCliCreateHubAction(manifest, agents);
 
       const { shouldFill } = await inquirer.prompt([
         {
