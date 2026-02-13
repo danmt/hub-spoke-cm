@@ -3,6 +3,7 @@ import {
   Architect,
   ArchitectInteractionHandler,
   ArchitectResponse,
+  Brief,
 } from "../agents/Architect.js";
 import {
   Assembler,
@@ -36,7 +37,7 @@ export class CreateHubAction {
   private assemblers: Assembler[];
   private personas: Persona[];
 
-  constructor(manifest: string, baseline: any, agents: AgentPair[]) {
+  constructor(manifest: string, baseline: Partial<Brief>, agents: AgentPair[]) {
     this.architect = new Architect(manifest, baseline);
 
     this.assemblers = getAgentsByType(agents, "assembler").map((a) => a.agent);
