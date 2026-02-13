@@ -53,7 +53,7 @@ export class CreateHubAction {
     }
   }
 
-  onArchitecting(cb: typeof this._onArchitecting) {
+  onArchitecting(cb: (data: string) => void) {
     this._onArchitecting = cb;
     return this;
   }
@@ -63,7 +63,7 @@ export class CreateHubAction {
     return this;
   }
 
-  onAssembling(cb: typeof this._onAssembling) {
+  onAssembling(cb: (data: string) => void) {
     this._onAssembling = cb;
     return this;
   }
@@ -73,7 +73,7 @@ export class CreateHubAction {
     return this;
   }
 
-  onRephrasing(cb: typeof this._onRephrasing) {
+  onRephrasing(cb: (data: string) => void) {
     this._onRephrasing = cb;
     return this;
   }

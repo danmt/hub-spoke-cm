@@ -1,6 +1,6 @@
+import { getGlobalConfig, setGlobalConfig } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
-import { getGlobalConfig, setGlobalConfig } from "../utils/config.js";
 
 const configCommand = new Command("config").description(
   "Manage global configuration (API keys, Models)",

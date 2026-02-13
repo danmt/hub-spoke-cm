@@ -1,12 +1,11 @@
 // src/commands/export.ts
+import { IoService, ParserService } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
 import { existsSync } from "fs";
 import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
-import { IoService } from "../services/IoService.js";
-import { ParserService } from "../services/ParserService.js";
 
 export const exportCommand = new Command("export")
   .description(

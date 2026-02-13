@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 
 // Import Commands
 // Explicit .js extension is required for NodeNext module resolution
+import { LoggerService } from "@hub-spoke/core";
 import { checkCommand } from "./commands/check.js";
 import { configCommand } from "./commands/config.js";
 import { exportCommand } from "./commands/export.js";
@@ -12,8 +13,6 @@ import { fillCommand } from "./commands/fill.js";
 import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { registryCommand } from "./commands/registry.js";
-import { LoggerService } from "./services/LoggerService.js";
-import { getGlobalConfig } from "./utils/config.js";
 
 // Load environment variables
 dotenv.config();
@@ -26,9 +25,9 @@ async function main() {
     .description(
       'Hub & Spoke Content Manager - A "Vibe Coding" CLI for scaling technical content',
     )
-    .version("1.0.0");
+    .version("0.1.0-alpha.1")
+    .showHelpAfterError();
 
-  console.log(getGlobalConfig());
   // Register Commands
   program.addCommand(initCommand);
   program.addCommand(registryCommand);
@@ -45,11 +44,6 @@ async function main() {
     console.error(chalk.red(msg));
     process.exit(1);
   });
-
-  // Show help if no arguments provided
-  if (!process.argv.slice(2).length) {
-    program.outputHelp();
-  }
 
   await program.parseAsync(process.argv);
 }

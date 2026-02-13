@@ -49,12 +49,12 @@ export class FillAction {
     }
   }
 
-  onStart(cb: typeof this._onStart) {
+  onStart(cb: (data: string) => void) {
     this._onStart = cb;
     return this;
   }
 
-  onWriting(cb: typeof this._onWriting) {
+  onWriting(cb: (data: { id: string; writerId: string }) => void) {
     this._onWriting = cb;
     return this;
   }
@@ -64,7 +64,7 @@ export class FillAction {
     return this;
   }
 
-  onRephrasing(cb: typeof this._onRephrasing) {
+  onRephrasing(cb: (data: { id: string; personaId: string }) => void) {
     this._onRephrasing = cb;
     return this;
   }

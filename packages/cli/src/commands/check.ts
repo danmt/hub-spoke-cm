@@ -1,8 +1,7 @@
+import { IoService, ValidationService } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
 import path from "path";
-import { IoService } from "../services/IoService.js";
-import { ValidationService } from "../services/ValidationService.js";
 
 export const checkCommand = new Command("check")
   .description("Validate project consistency and check for pending TODOs")

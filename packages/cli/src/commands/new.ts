@@ -1,11 +1,10 @@
 // src/commands/new.ts
+import { IoService, RegistryService } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import { executeCliCreateHubAction } from "../presets/executeCliCreateHubAction.js";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
-import { IoService } from "../services/IoService.js";
-import { RegistryService } from "../services/RegistryService.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")

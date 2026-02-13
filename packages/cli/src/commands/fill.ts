@@ -1,14 +1,16 @@
 // src/commands/fill.ts
+import {
+  IoService,
+  LoggerService,
+  ParserService,
+  RegistryService,
+} from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
 import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
-import { IoService } from "../services/IoService.js";
-import { LoggerService } from "../services/LoggerService.js";
-import { ParserService } from "../services/ParserService.js";
-import { RegistryService } from "../services/RegistryService.js";
 
 const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 

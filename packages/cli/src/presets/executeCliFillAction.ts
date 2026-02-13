@@ -1,9 +1,11 @@
 // src/cli/presets/cliFillAction.ts
+import {
+  AgentPair,
+  FillAction,
+  IoService,
+  ParserService,
+} from "@hub-spoke/core";
 import chalk from "chalk";
-import { FillAction } from "../actions/FillAction.js";
-import { IoService } from "../services/IoService.js";
-import { ParserService } from "../services/ParserService.js";
-import { AgentPair } from "../services/RegistryService.js";
 import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
 import { cliRetryHandler } from "../utils/cliRetryHandler.js";
 import { indentText } from "../utils/identText.js";
