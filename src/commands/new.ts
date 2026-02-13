@@ -6,7 +6,10 @@ import { Architect } from "../agents/Architect.js";
 import { executeCliCreateHubAction } from "../presets/executeCliCreateHubAction.js";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
 import { IoService } from "../services/IoService.js";
-import { RegistryService } from "../services/RegistryService.js";
+import {
+  getAgentsByType,
+  RegistryService,
+} from "../services/RegistryService.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")
@@ -24,9 +27,9 @@ export const newCommand = new Command("new")
         process.exit(1);
       }
 
-      const personas = RegistryService.getAgentsByType(agents, "persona");
-      const writers = RegistryService.getAgentsByType(agents, "writer");
-      const assemblers = RegistryService.getAgentsByType(agents, "assembler");
+      const personas = getAgentsByType(agents, "persona");
+      const writers = getAgentsByType(agents, "writer");
+      const assemblers = getAgentsByType(agents, "assembler");
       const manifest = RegistryService.toManifest(agents);
 
       console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));

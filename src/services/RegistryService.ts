@@ -49,6 +49,27 @@ export function isAgentType<T extends AgentPair["type"]>(
   return pair.type === type;
 }
 
+export function getAgentsByType<T extends AgentPair["type"]>(
+  agents: AgentPair[],
+  type: T,
+): Extract<AgentPair, { type: T }>[] {
+  return agents.filter((a): a is Extract<AgentPair, { type: T }> =>
+    isAgentType(a, type),
+  );
+}
+
+export function getAgent<T extends AgentPair["type"]>(
+  agents: AgentPair[],
+  type: T,
+  id: string,
+): Extract<AgentPair, { type: T }> | null {
+  return (
+    agents
+      .filter((a): a is Extract<AgentPair, { type: T }> => isAgentType(a, type))
+      .find(({ artifact }) => artifact.id === id) ?? null
+  );
+}
+
 export class RegistryService {
   /**
    * Fetches all artifacts from the workspace.
@@ -159,15 +180,6 @@ export class RegistryService {
     return agents;
   }
 
-  static getAgentsByType<T extends AgentPair["type"]>(
-    agents: AgentPair[],
-    type: T,
-  ): Extract<AgentPair, { type: T }>[] {
-    return agents.filter((a): a is Extract<AgentPair, { type: T }> =>
-      isAgentType(a, type),
-    );
-  }
-
   /**
    * Converts active agents into a detailed Functional Capability Map.
    * This allows the Architect to see the actual strategies available.
@@ -212,8 +224,8 @@ export class RegistryService {
   }
 
   static validateIntegrity(agents: AgentPair[]): void {
-    const writers = this.getAgentsByType(agents, "writer");
-    const assemblers = this.getAgentsByType(agents, "assembler");
+    const writers = getAgentsByType(agents, "writer");
+    const assemblers = getAgentsByType(agents, "assembler");
     const availableWriterIds = new Set(writers.map((w) => w.artifact.id));
 
     for (const assembler of assemblers) {
