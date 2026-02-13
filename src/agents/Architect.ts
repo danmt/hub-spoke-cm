@@ -102,6 +102,12 @@ export class Architect {
 
         currentFeedback = interaction.feedback || "Continue refinement.";
       } catch (error: any) {
+        await LoggerService.error("Architect failed: ", {
+          code: error.error?.code,
+          message: error.message,
+          stack: error.stack,
+        });
+
         if (ctx.onRetry) {
           const shouldRetry = await ctx.onRetry?.(error);
 

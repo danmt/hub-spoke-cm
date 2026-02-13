@@ -124,6 +124,13 @@ export class Writer {
 
         currentFeedback = interaction.feedback || "Continue refinement.";
       } catch (error: any) {
+        await LoggerService.error("Writer failed: ", {
+          code: error.error?.code,
+          message: error.message,
+          stack: error.stack,
+          writerId: this.id,
+        });
+
         if (ctx.onRetry) {
           const shouldRetry = await ctx.onRetry?.(error);
 

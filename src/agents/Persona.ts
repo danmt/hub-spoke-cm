@@ -106,6 +106,13 @@ export class Persona {
 
         currentFeedback = interaction.feedback;
       } catch (error: any) {
+        await LoggerService.error("Persona failed: ", {
+          code: error.error?.code,
+          message: error.message,
+          stack: error.stack,
+          personaId: this.id,
+        });
+
         if (ctx.onRetry) {
           const shouldRetry = await ctx.onRetry?.(error);
 
