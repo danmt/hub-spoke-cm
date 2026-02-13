@@ -26,10 +26,12 @@ export const HubComponentSchema = SectionBlueprintSchema.extend({
  */
 export const FrontmatterSchema = z.object({
   title: z.string(),
+  description: z.string(),
   type: z.literal("hub"),
 
   // Identity Metadata
   hubId: z.string(),
+  topic: z.string(),
   goal: z.string(),
   audience: z.string(),
   language: z.string(),

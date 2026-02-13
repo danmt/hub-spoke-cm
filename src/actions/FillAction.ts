@@ -103,7 +103,7 @@ export class FillAction {
       });
 
       updatedSections[sectionId] =
-        `${rephrased.header}\n\n${rephrased.content}`;
+        `## ${rephrased.header}\n\n${rephrased.content}`;
     }
 
     const finalMarkdown = ParserService.reconstructMarkdown(

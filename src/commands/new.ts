@@ -65,6 +65,7 @@ export const newCommand = new Command("new")
         await executeCliCreateHubAction(
           architect,
           assemblers.map((a) => a.agent),
+          personas.map((a) => a.agent),
         );
 
       const { shouldFill } = await inquirer.prompt([

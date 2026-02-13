@@ -72,10 +72,10 @@ export class ParserService {
    * Centralizes the template for TODO blocks and frontmatter mapping.
    */
   static generateScaffold(
-    type: "hub" | "spoke",
     brief: Brief,
     blueprint: HubBlueprint,
-    parentHubId?: string,
+    title: string,
+    description: string,
   ): string {
     const blueprintData: Record<string, any> = {};
     const writerMap: Record<string, string> = {};
@@ -92,9 +92,11 @@ export class ParserService {
     });
 
     const frontmatter: Partial<ContentFrontmatter> = {
-      title: brief.topic,
+      title,
+      description,
       type: "hub",
-      hubId: parentHubId || blueprint.hubId,
+      hubId: blueprint.hubId,
+      topic: brief.topic,
       goal: brief.goal,
       audience: brief.audience,
       language: brief.language,
@@ -127,9 +129,7 @@ export class ParserService {
       .replace(/\n?\[\/SECTION\]/gi, "")
       .trim();
 
-    const title = data.title ? `# ${data.title}\n\n` : "";
-
-    return `${title}${cleanContent}`;
+    return `# ${data.title}\n\n${cleanContent}`;
   }
 
   private static extractSections(markdownBody: string): Record<string, string> {

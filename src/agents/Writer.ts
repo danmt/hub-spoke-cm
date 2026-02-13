@@ -63,14 +63,17 @@ export class Writer {
       CORE EXECUTION RULES:
       1. Follow the INTENT micro-brief exactly. It defines your scope boundaries.
       2. Do not repeat information or "steal" topics reserved for other sections.
+      3. LANGUAGE POLICY: You must write EXCLUSIVELY in English. Even if the topic or goal mentions another language, you provide the technical foundation in English.
 
       PROTOCOL:
-      1. Provide a [HEADER] block with a compelling H2 title for this section.
+      1. Provide a [HEADER] block with a compelling title for this section.
+        - Output clean text. Avoid markdown prefixes.
       2. Provide a [CONTENT] block with markdown.
       3. Provide a [BRIDGE] block with a brief summary for the next agent.
       4. FORMATTING: You are writing a SECTION of a document. 
          - NEVER use H1 (#) or H2 (##) tags inside the [CONTENT] block.
          - Use H3 (###) or H4 (####) for sub-sections if needed.
+         - NEVER combine a blockquote (>) with a header (#, ##, ###, ####, etc...).
       5. Do not repeat information reserved for other sections.
 
       INPUT FORMAT:
@@ -83,7 +86,7 @@ export class Writer {
 
       OUTPUT FORMAT:
       [HEADER]
-      (Engaging H2 Title)
+      (Title text here)
       [/HEADER]
       [CONTENT]
       (Your markdown content here, starting directly with text)

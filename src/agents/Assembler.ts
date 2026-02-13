@@ -3,6 +3,7 @@ import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { HubBlueprint } from "../types/index.js";
 import { getGlobalConfig } from "../utils/config.js";
+import { extractTag } from "../utils/extractTag.js";
 
 export type AssemblerInteractionResponse =
   | {
@@ -121,6 +122,13 @@ export class Assembler {
 
         currentFeedback = interaction.feedback || "Continue refinement.";
       } catch (error: any) {
+        await LoggerService.error("Assembler failed: ", {
+          code: error.error?.code,
+          message: error.message,
+          stack: error.stack,
+          assemblerId: this.id,
+        });
+
         if (ctx.onRetry) {
           const shouldRetry = await ctx.onRetry?.(error);
 
@@ -167,7 +175,7 @@ export class Assembler {
   }
 
   private parse(text: string): AssembleResponse {
-    const hubIdMatch = text.match(/\[HUB_ID\](.*?)\[\/HUB_ID\]/i);
+    const hubIdMatch = text.match(/\[HUB_ID\]([\s\S]*?)\[\/HUB_ID\]/i);
     const hubId = hubIdMatch ? hubIdMatch[1].trim() : "generated-hub";
 
     const componentRegex = /\[COMPONENT\]([\s\S]*?)\[\/COMPONENT\]/gi;
@@ -175,33 +183,39 @@ export class Assembler {
     let match;
 
     while ((match = componentRegex.exec(text)) !== null) {
-      const block = match[1];
-      const id = block.match(/\[ID\]([\s\S]*?)\[\/ID\]/i)?.[1].trim();
-      const header = block.match(/\[HEADER\](.*?)\[\/HEADER\]/i)?.[1].trim();
-      const intent = block
-        .match(/\[INTENT\]([\s\S]*?)\[\/INTENT\]/i)?.[1]
-        .trim();
-      const writerId = block
-        .match(/\[WRITER_ID\](.*?)\[\/WRITER_ID\]/i)?.[1]
-        .trim();
-      const bridge = block.match(/\[BRIDGE\](.*?)\[\/BRIDGE\]/i)?.[1].trim();
+      const block = match[1].trim();
 
-      if (!id || !header || !intent || !writerId || !bridge) {
-        throw new Error("Assembler failed to produce a valid [COMPONENT].");
+      const id = extractTag(block, "ID");
+      const header = extractTag(block, "HEADER");
+      const intent = extractTag(block, "INTENT");
+      const writerId = extractTag(block, "WRITER_ID");
+      const bridge = extractTag(block, "BRIDGE");
+
+      const missing = [];
+      if (!id) missing.push("ID");
+      if (!header) missing.push("HEADER");
+      if (!intent) missing.push("INTENT");
+      if (!writerId) missing.push("WRITER_ID");
+      if (!bridge) missing.push("BRIDGE");
+
+      if (missing.length > 0) {
+        throw new Error(
+          `Assembler failed to produce a valid [COMPONENT]. Missing tags: [${missing.join(", ")}] in block: ${block.substring(0, 50)}...`,
+        );
       }
 
       components.push({
-        id,
-        header,
-        intent,
-        writerId,
-        bridge,
+        id: id!,
+        header: header!,
+        intent: intent!,
+        writerId: writerId!,
+        bridge: bridge!,
       });
     }
 
     if (components.length === 0) {
       throw new Error(
-        "Assembler failed to produce any valid [COMPONENT] blocks.",
+        "Assembler failed to produce any valid [COMPONENT] blocks. Check if AI output follows [COMPONENT]...[/COMPONENT] format.",
       );
     }
 

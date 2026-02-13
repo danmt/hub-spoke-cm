@@ -1,5 +1,4 @@
 // src/actions/CreateHubAction.ts
-import path from "path";
 import {
   Architect,
   ArchitectInteractionHandler,
@@ -10,27 +9,32 @@ import {
   AssembleResponse,
   AssemblerInteractionHandler,
 } from "../agents/Assembler.js";
-import { IoService } from "../services/IoService.js";
+import {
+  Persona,
+  PersonaInteractionHandler,
+  PersonaResponse,
+} from "../agents/Persona.js";
 import { LoggerService } from "../services/LoggerService.js";
-import { ParserService } from "../services/ParserService.js";
 
 export interface CreateHubActionResult {
-  filePath: string;
-  fileContent: string;
   architecture: ArchitectResponse;
   assembly: AssembleResponse;
+  personification: PersonaResponse;
 }
 
 export class CreateHubAction {
   private _onArchitecting?: (data: string) => void;
-  private _onArchitectInteract?: ArchitectInteractionHandler;
+  private _onArchitect?: ArchitectInteractionHandler;
   private _onAssembling?: (data: string) => void;
-  private _onAssemblerInteract?: AssemblerInteractionHandler;
+  private _onAssembler?: AssemblerInteractionHandler;
+  private _onRephrasing?: (personaId: string) => void;
+  private _onRephrase?: PersonaInteractionHandler;
   private _onRetry?: (err: Error) => Promise<boolean>;
 
   constructor(
     private architect: Architect,
     private assemblers: Assembler[],
+    private personas: Persona[],
   ) {}
 
   onArchitecting(cb: typeof this._onArchitecting) {
@@ -38,8 +42,8 @@ export class CreateHubAction {
     return this;
   }
 
-  onArchitectInteract(handler: ArchitectInteractionHandler) {
-    this._onArchitectInteract = handler;
+  onArchitect(handler: ArchitectInteractionHandler) {
+    this._onArchitect = handler;
     return this;
   }
 
@@ -48,8 +52,18 @@ export class CreateHubAction {
     return this;
   }
 
-  onAssemblerInteract(handler: AssemblerInteractionHandler) {
-    this._onAssemblerInteract = handler;
+  onAssembler(handler: AssemblerInteractionHandler) {
+    this._onAssembler = handler;
+    return this;
+  }
+
+  onRephrasing(cb: typeof this._onRephrasing) {
+    this._onRephrasing = cb;
+    return this;
+  }
+
+  onRephrase(handler: PersonaInteractionHandler) {
+    this._onRephrase = handler;
     return this;
   }
 
@@ -63,7 +77,7 @@ export class CreateHubAction {
 
     // 1. Architect Phase (Refine the Brief)
     const architecture = await this.architect.architect({
-      interact: this._onArchitectInteract,
+      interact: this._onArchitect,
       onThinking: () => this._onArchitecting?.("default"),
       onRetry: this._onRetry,
     });
@@ -82,31 +96,35 @@ export class CreateHubAction {
       topic: architecture.brief.topic,
       goal: architecture.brief.goal,
       audience: architecture.brief.audience,
-      interact: this._onAssemblerInteract,
+      interact: this._onAssembler,
       onThinking: () => this._onAssembling?.(assemblerId),
       onRetry: this._onRetry,
     });
 
-    // 3. Scaffolding Phase
-    const hubDir = await IoService.createHubDirectory(assembly.blueprint.hubId);
-    const filePath = path.join(hubDir, "hub.md");
+    // 3. Rephrasing phase
+    const personaId = architecture.brief.personaId;
+    const persona = this.personas.find((p) => p.id === personaId);
 
-    const fileContent = ParserService.generateScaffold(
-      "hub",
-      architecture.brief,
-      assembly.blueprint,
-    );
+    if (!persona) {
+      throw new Error(
+        `CreateHubAction: Persona "${personaId}" not found in the provided list.`,
+      );
+    }
 
-    
-    await LoggerService.info("CreateHubAction: Execution finished", {
-      filePath,
+    const personification = await persona.rephrase({
+      header: architecture.brief.topic,
+      content: `Write an engaging one sentence long description for this content hub. Topic: ${architecture.brief.topic}. Goal: ${architecture.brief.goal}.`,
+      interact: this._onRephrase,
+      onThinking: () => this._onRephrasing?.(personaId),
+      onRetry: this._onRetry,
     });
 
+    await LoggerService.info("CreateHubAction: Execution finished");
+
     return {
-      filePath,
-      fileContent,
-      architecture: architecture,
-      assembly: assembly,
+      architecture,
+      assembly,
+      personification,
     };
   }
 }

@@ -1,27 +1,33 @@
 // src/presets/executeCliCreateHubAction.ts
 import chalk from "chalk";
 import path from "path";
-import {
-  CreateHubAction,
-  CreateHubActionResult,
-} from "../actions/CreateHubAction.js";
-import { Architect } from "../agents/Architect.js";
-import { Assembler } from "../agents/Assembler.js";
+import { CreateHubAction } from "../actions/CreateHubAction.js";
+import { Architect, ArchitectResponse } from "../agents/Architect.js";
+import { Assembler, AssembleResponse } from "../agents/Assembler.js";
+import { Persona } from "../agents/Persona.js";
 import { IoService } from "../services/IoService.js";
 import { ParserService } from "../services/ParserService.js";
 import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
 import { cliRetryHandler } from "../utils/cliRetryHandler.js";
 import { indentText } from "../utils/identText.js";
 
+export interface ExecuteCreateHubActionResult {
+  architecture: ArchitectResponse;
+  assembly: AssembleResponse;
+  filePath: string;
+  fileContent: string;
+}
+
 export async function executeCliCreateHubAction(
   architect: Architect,
   assemblers: Assembler[],
-): Promise<CreateHubActionResult> {
-  const action = new CreateHubAction(architect, assemblers)
+  personas: Persona[],
+): Promise<ExecuteCreateHubActionResult> {
+  const action = new CreateHubAction(architect, assemblers, personas)
     .onArchitecting(() =>
       console.log(chalk.blue("\n🧠 Architect is thinking...")),
     )
-    .onArchitectInteract(({ message, brief }) => {
+    .onArchitect(({ message, brief }) => {
       console.log(`\n${chalk.green("Architect:")} ${message}`);
       console.log(chalk.dim(`\n--- Current Proposal ---`));
       console.log(`${chalk.yellow("Topic:")} ${brief.topic}`);
@@ -38,7 +44,7 @@ export async function executeCliCreateHubAction(
         ),
       ),
     )
-    .onAssemblerInteract(({ blueprint }) => {
+    .onAssembler(({ blueprint }) => {
       console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
       console.log(`${chalk.yellow("Hub ID:")} ${blueprint.hubId}`);
 
@@ -53,16 +59,27 @@ export async function executeCliCreateHubAction(
 
       return cliConfirmOrFeedback();
     })
+    .onRephrasing((personaId) => {
+      console.log(
+        chalk.magenta(`\n✨ ${chalk.bold(personaId)} is styling...\n`),
+      );
+    })
+    .onRephrase(async ({ header, content }) => {
+      console.log(indentText(chalk.bold.cyan(`# ${header}\n`), 4));
+      console.log(indentText(chalk.white(`${content}\n`), 4));
+      return await cliConfirmOrFeedback();
+    })
     .onRetry(cliRetryHandler);
 
-  const { fileContent, assembly, architecture } = await action.execute();
+  const { assembly, architecture, personification } = await action.execute();
 
   const hubDir = await IoService.createHubDirectory(assembly.blueprint.hubId);
   const filePath = path.join(hubDir, "hub.md");
-  const finalMarkdown = ParserService.generateScaffold(
-    "hub",
+  const fileContent = ParserService.generateScaffold(
     architecture.brief,
     assembly.blueprint,
+    personification.header,
+    personification.content,
   );
   await IoService.safeWriteFile(filePath, fileContent);
 
@@ -72,5 +89,5 @@ export async function executeCliCreateHubAction(
     ),
   );
 
-  return { assembly, architecture, filePath, fileContent: finalMarkdown };
+  return { assembly, architecture, filePath, fileContent };
 }

@@ -25,7 +25,7 @@ export async function executeCliFillAction(
       );
     })
     .onWrite(async ({ header, content }) => {
-      console.log(indentText(chalk.bold.cyan(`${header}\n`), 4));
+      console.log(indentText(chalk.bold.cyan(`## ${header}\n`), 4));
       console.log(indentText(chalk.white(`${content}\n`), 4));
       return await cliConfirmOrFeedback();
     })
