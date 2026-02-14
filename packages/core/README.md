@@ -1,55 +1,72 @@
-# 🏗️ Hub & Spoke CM
+# 📁 Package: `@hub-spoke/core`
 
-**Hub & Spoke CM** is an AI-powered CLI tool designed to automate high-quality technical content clusters. By treating the local filesystem as a stateful database, it enables "Vibe Coding" workflows where content is managed as an interconnected network of nodes.
+This package is the environment-independent engine of the Hub & Spoke system. It manages the lifecycle of content hubs, the orchestration of AI agents, and the parsing of structural artifacts.
 
-## 🧠 The Agentic Registry
+## 🎯 Design Philosophy: "The Agnostic Brain"
 
-The heart of the tool is a dynamic **Registry** that manages your "Intelligence Layer". Instead of hardcoded prompts, the system discovers specialized agents as Markdown artifacts within your workspace.
+The Core is built to run anywhere a modern JavaScript runtime exists (Node.js, Deno, React Native, or the Browser). To achieve this, it adheres to three strict rules:
 
-### How it Works:
+1. **Dependency Inversion**: The Core defines _how_ a logger or a file-seeker should look, but the **Platform** (CLI/Mobile) provides the actual tool.
+2. **No Environmental Leaks**: No calls to `process.env`, `process.cwd()`, or hardcoded OS paths.
+3. **Stateless Execution**: Business logic (Actions) should not hold global state. Everything required for an operation is passed in at the moment of execution.
 
-- **Discovery**: The `RegistryService` scans the `/agents` directory for Markdown files.
-- **Discriminated Types**: Each file is categorized by its frontmatter `type` into one of four categories: **Personas**, **Writers**, or **Assemblers**.
-- **Live Loading**: Adding a new `.md` file to an agent folder immediately makes that strategy available to the CLI without a rebuild or code change.
-- **Context Injection**: The Registry converts these artifacts into active agents, injecting their specific strategies into the Gemini model's system instructions.
+## 🏗️ Core Modules
 
----
+### 1. Services (`/src/services`)
 
-## 🏛️ System Architecture
+The functional powerhouses of the system.
 
-### 1. The Structural Layer (Assemblers)
+- **`AiService`**: A stateless utility that takes a prompt and an API key to return AI responses.
+- **`IoService`**: The workspace architect. Handles directory scaffolding and Hub discovery based on an injected `rootDir`.
+- **`RegistryService`**: The "Agent Factory." It reads markdown artifacts and transforms them into active, credentialed Agents.
+- **`LoggerService`**: A pluggable interface. Defaults to a silent fallback until a Platform Provider (like Winston or Logcat) is registered.
 
-Assemblers act as the "Blueprints" of document organization. They generate a `HubBlueprint` that maps headers to specific writing intents and writers. This blueprint is persisted in the file's frontmatter to maintain the "Source of Truth".
+### 2. Agents (`/src/agents`)
 
-### 2. The Writing Layer (Specialized Strategies)
+The "Workforce." Each agent type (Persona, Writer, Assembler) encapsulates specific AI behavior and system instructions. Agents carry their own **API Key** and **Model ID**, allowing for granular control over which AI model powers which task.
 
-Using the **Strategy Pattern**, the system routes sections to specialized Writers (e.g., `ProseWriter`, `CodeWriter`). This ensures that technical implementation and narrative flow are handled by agents optimized for those specific tasks.
+### 3. Actions (`/src/actions`)
 
-### 3. The Validation Layer (Verification-First)
+The "Orchestrators." Classes like `FillAction` and `CreateHubAction` manage the multi-step "dance" between different agents. They use a **Callback Pattern** (`onStatus`, `onInteraction`) to communicate with the UI without knowing if that UI is a terminal or a mobile modal.
 
-- **Structural Integrity**: The `check` logic ensures consistency in persona, language, and completion (no TODOs).
+## 🔄 The Interaction Loop
 
----
+1. **Platform** initializes `RegistryService` with local files and credentials.
+2. **Platform** triggers an `Action` (e.g., `CreateHubAction`).
+3. **Action** requests a plan from the **Architect**.
+4. **Action** yields control to the **Platform** via a callback for user approval.
+5. **Platform** returns a "Proceed" signal.
+6. **Action** triggers the **Writer** and **Persona** agents to finalize content.
 
-## 🛠️ CLI Commands
+## 🛠️ Contribution Guidelines
 
-- **`hub init`**: Scaffolds a new workspace and seeds starter agents (Persona, Writer, Assembler) into `/agents`.
-- **`hub new`**: Conducts an Architect interview to plan a Hub. It saves the structural intent as a `blueprint` in the frontmatter.
-- **`hub fill`**: The generation engine that executes the `writerMap` strategy to replace `> **TODO:**` blocks with prose or code.
-- **`hub check`**: A fast, static audit to identify pending content or metadata inconsistencies.
+### Adding a New Agent Type
 
----
+1. Define the artifact schema in `src/types/artifacts.ts`.
+2. Create the Agent class in `src/agents/`.
+3. Update `RegistryService.initializeAgents()` to recognize the new type.
 
-## 📂 Hub Workspaces
+### Adding a New Action
 
-A Hub Workspace is defined by its directory structure, allowing for decentralized content management:
+1. Extend the `BaseAction` class.
+2. Ensure all UI-blocking steps use the `onInteraction` hook to remain headless.
+3. Export the action from `src/index.ts`.
 
-- **`.hub/`**: Internal workspace marker.
-- **`agents/`**: Your local Intelligence Layer. Dropping a file into `agents/writers/` creates a new writing strategy.
-- **`posts/`**: The content database. Every Hub folder contains a `hub.md`.
+### ⚠️ Restricted Imports
 
-### Setup
+To maintain mobile compatibility, **never** import the following directly into Core logic:
 
-1. **Configure**: `hub config set-key YOUR_GEMINI_API_KEY`.
-2. **Initialize**: `hub init`.
-3. **Create**: `hub new`.
+- `fs` or `fs/promises` (Use `IoService` or inject paths)
+- `os`
+- `process` (except for type checks)
+- Platform-specific binaries (e.g., `winston`, `inquirer`, `chalk`)
+
+## 🧪 Development
+
+```bash
+# Run unit tests for core logic
+npm run test -w @hub-spoke/core
+
+# Build core for usage in other packages
+npm run build -w @hub-spoke/core
+```

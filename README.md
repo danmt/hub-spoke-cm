@@ -1,55 +1,73 @@
-# 🏗️ Hub & Spoke CM
+# Hub & Spoke Content Manager (Monorepo)
 
-**Hub & Spoke CM** is an AI-powered CLI tool designed to automate high-quality technical content clusters. By treating the local filesystem as a stateful database, it enables "Vibe Coding" workflows where content is managed as an interconnected network of nodes.
+An AI-native content strategy engine designed for **"Vibe Coding"**—where the architecture is robust enough to stay out of your way. This monorepo uses **npm workspaces** to separate platform-agnostic logic from specific delivery interfaces.
 
-## 🧠 The Agentic Registry
+## 🏗️ The Multi-Platform Strategy
 
-The heart of the tool is a dynamic **Registry** that manages your "Intelligence Layer". Instead of hardcoded prompts, the system discovers specialized agents as Markdown artifacts within your workspace.
+The project is split into two distinct layers to ensure that the AI orchestration logic can be reused in a future Android application without modification:
 
-### How it Works:
+1.  **`@hub-spoke/core`**: The Headless Engine.
+    - Contains all Zod schemas, Markdown parsers, and AI Action logic.
+    - **Zero Environmental Assumptions**: Does not know about `.env` files or specific PC paths.
+    - **Credential-Carrying Agents**: AI agents are "dumb" until the platform "charges" them with an API key.
 
-- **Discovery**: The `RegistryService` scans the `/agents` directory for Markdown files.
-- **Discriminated Types**: Each file is categorized by its frontmatter `type` into one of four categories: **Personas**, **Writers**, or **Assemblers**.
-- **Live Loading**: Adding a new `.md` file to an agent folder immediately makes that strategy available to the CLI without a rebuild or code change.
-- **Context Injection**: The Registry converts these artifacts into active agents, injecting their specific strategies into the Gemini model's system instructions.
+2.  **`@hub-spoke/cli`**: The Terminal Interface.
+    - Handles local I/O, `~/.config` persistence, and terminal styling.
+    - Implements the `WinstonLoggerProvider` for local file logging.
+
+## 🛠️ Getting Started
+
+### Prerequisites
+
+- **Node.js**: v20 or higher
+- **npm**: v7 or higher (for Workspaces support)
+
+### Installation
+
+From the root directory:
+
+```bash
+npm install
+```
+
+### Building the Ecosystem
+
+Because the CLI depends on the Core, you must build the Core first:
+
+```bash
+# Build everything in the correct order
+npm run build
+
+# Or build specific packages
+npm run build -w @hub-spoke/core
+npm run build -w @hub-spoke/cli
+```
+
+### Global CLI Access
+
+To use the `hub` command from anywhere on your machine:
+
+```bash
+cd packages/cli
+npm link --force
+```
+
+## ⌨️ Common Development Scripts
+
+| Command                                   | Action                                       |
+| ----------------------------------------- | -------------------------------------------- |
+| `npm run dev -w @hub-spoke/cli -- [args]` | Run the CLI in development mode using `tsx`. |
+| `npm run test`                            | Run the test suite across all packages.      |
+| `npm run build`                           | Transpile all TypeScript packages to ESM.    |
+| `npm run lint`                            | Check code quality and formatting.           |
 
 ---
 
-## 🏛️ System Architecture
+## 🗺️ Dependency Graph & Data Flow
 
-### 1. The Structural Layer (Assemblers)
-
-Assemblers act as the "Blueprints" of document organization. They generate a `HubBlueprint` that maps headers to specific writing intents and writers. This blueprint is persisted in the file's frontmatter to maintain the "Source of Truth".
-
-### 2. The Writing Layer (Specialized Strategies)
-
-Using the **Strategy Pattern**, the system routes sections to specialized Writers (e.g., `ProseWriter`, `CodeWriter`). This ensures that technical implementation and narrative flow are handled by agents optimized for those specific tasks.
-
-### 3. The Validation Layer (Verification-First)
-
-- **Structural Integrity**: The `check` logic ensures consistency in persona, language, and completion (no TODOs).
-
----
-
-## 🛠️ CLI Commands
-
-- **`hub init`**: Scaffolds a new workspace and seeds starter agents (Persona, Writer, Assembler) into `/agents`.
-- **`hub new`**: Conducts an Architect interview to plan a Hub. It saves the structural intent as a `blueprint` in the frontmatter.
-- **`hub fill`**: The generation engine that executes the `writerMap` strategy to replace `> **TODO:**` blocks with prose or code.
-- **`hub check`**: A fast, static audit to identify pending content or metadata inconsistencies.
-
----
-
-## 📂 Hub Workspaces
-
-A Hub Workspace is defined by its directory structure, allowing for decentralized content management:
-
-- **`.hub/`**: Internal workspace marker.
-- **`agents/`**: Your local Intelligence Layer. Dropping a file into `agents/writers/` creates a new writing strategy.
-- **`posts/`**: The content database. Every Hub folder contains a `hub.md`.
-
-### Setup
-
-1. **Configure**: `hub config set-key YOUR_GEMINI_API_KEY`.
-2. **Initialize**: `hub init`.
-3. **Create**: `hub new`.
+1. **User** runs `hub fill`.
+2. **CLI** fetches the API key from `~/.config/hub-spoke-cm/config.json`.
+3. **CLI** finds the local workspace root and loads Agent files (`.md`).
+4. **CLI** initializes Core Agents by passing them the API key and local content.
+5. **Core Action** executes the AI logic and returns the personified content.
+6. **CLI** writes the result back to the local Hub file.
