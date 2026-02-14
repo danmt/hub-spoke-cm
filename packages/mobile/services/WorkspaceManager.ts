@@ -23,6 +23,15 @@ export class WorkspaceManager {
     LoggerService.setProvider(providers.logger);
   }
 
+  static async clearActiveWorkspace(providers: {
+    registry: RegistryProvider;
+    logger: LogProvider;
+  }) {
+    await WorkspaceStorage.setActiveWorkspace(undefined);
+    RegistryService.setProvider(providers.registry);
+    LoggerService.setProvider(providers.logger);
+  }
+
   /**
    * Pure utility to resolve the workspace path.
    */

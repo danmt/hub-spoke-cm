@@ -1,5 +1,4 @@
-import { MobileLoggerProvider } from "@/providers/MobileLoggerProvider";
-import { MobileRegistryProvider } from "@/providers/MobileRegistryProvider";
+import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { IoService } from "@hub-spoke/core";
@@ -28,15 +27,12 @@ export function WorkspaceSettings({
   onRefresh,
   themeColors,
 }: Props) {
+  const { switchWorkspace } = useWorkspace();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [newName, setNewName] = useState("");
 
   const handleSwitch = async (id: string | undefined) => {
-    const workspaceDir = WorkspaceManager.getWorkspaceUri(id);
-    await WorkspaceManager.switchWorkspace(id, {
-      logger: new MobileLoggerProvider(),
-      registry: new MobileRegistryProvider(workspaceDir.uri),
-    });
+    await switchWorkspace(id);
     await onRefresh();
   };
 

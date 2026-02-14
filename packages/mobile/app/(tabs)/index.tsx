@@ -2,32 +2,19 @@
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
-import { WorkspaceStorage } from "@/services/WorkspaceStorage";
+import { useWorkspace } from "@/services/WorkspaceContext";
 import { useNavigation } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Pressable, StyleSheet } from "react-native";
 
 export default function HomeScreen() {
-  const [activeWorkspace, setActiveWorkspace] = useState<string | undefined>(
-    undefined,
-  );
-  const [isLoading, setIsLoading] = useState(true);
+  const { activeWorkspace, isLoading } = useWorkspace();
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
   const navigation = useNavigation() as any;
 
-  useEffect(() => {
-    async function loadWorkspace() {
-      const ws = await WorkspaceStorage.getActiveWorkspace();
-      setActiveWorkspace(ws);
-      setIsLoading(false);
-    }
-    loadWorkspace();
-  }, []);
-
   if (isLoading) return null;
 
-  // Case 1: No Active Workspace
   if (!activeWorkspace) {
     return (
       <View style={styles.container}>
@@ -53,7 +40,6 @@ export default function HomeScreen() {
     );
   }
 
-  // Case 2: Active Workspace but No Hubs (Placeholder for now)
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -78,9 +64,6 @@ export default function HomeScreen() {
       <Text style={styles.emptyText}>
         No hubs found in the{" "}
         <Text style={{ fontWeight: "bold" }}>{activeWorkspace}</Text> workspace.
-      </Text>
-      <Text style={styles.subText}>
-        Tap "New Hub" to get started (Coming Soon).
       </Text>
     </View>
   );
@@ -107,30 +90,13 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     overflow: "hidden",
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-  },
-  separator: {
-    marginVertical: 20,
-    height: 1,
-    width: "100%",
-  },
+  title: { fontSize: 24, fontWeight: "bold" },
+  separator: { marginVertical: 20, height: 1, width: "100%" },
   emptyText: {
     fontSize: 16,
     color: "#666",
     textAlign: "center",
     lineHeight: 22,
   },
-  subText: {
-    fontSize: 14,
-    color: "#888",
-    marginTop: 10,
-    textAlign: "center",
-    fontStyle: "italic",
-  },
-  linkButton: {
-    padding: 10,
-    backgroundColor: "transparent",
-  },
+  linkButton: { padding: 10, backgroundColor: "transparent" },
 });

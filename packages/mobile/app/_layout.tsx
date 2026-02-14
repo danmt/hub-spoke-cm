@@ -27,6 +27,7 @@ import { MobileRegistryProvider } from "../providers/MobileRegistryProvider";
 import { useColorScheme } from "@/components/useColorScheme";
 import { MobileConfigProvider } from "@/providers/MobileConfigProvider";
 import { MobileSecretProvider } from "@/providers/MobileSecretProvider";
+import { WorkspaceProvider } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { WorkspaceStorage } from "@/services/WorkspaceStorage";
 
@@ -91,7 +92,11 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <WorkspaceProvider>
+      <RootLayoutNav />
+    </WorkspaceProvider>
+  );
 }
 
 function RootLayoutNav() {
