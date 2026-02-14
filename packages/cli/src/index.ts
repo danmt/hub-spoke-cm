@@ -6,9 +6,11 @@ import dotenv from "dotenv";
 // Import Commands
 // Explicit .js extension is required for NodeNext module resolution
 import {
+  ConfigService,
   IoService,
   LoggerService,
   RegistryService,
+  SecretService,
   ValidationService,
 } from "@hub-spoke/core";
 import { checkCommand } from "./commands/check.js";
@@ -18,9 +20,11 @@ import { fillCommand } from "./commands/fill.js";
 import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { registryCommand } from "./commands/registry.js";
+import { NodeConfigProvider } from "./services/NodeConfigProvider.js";
 import { NodeIoProvider } from "./services/NodeIoProvider.js";
-import { WinstonLoggerProvider } from "./services/NodeLoggerProvider.js";
+import { NodeLoggerProvider } from "./services/NodeLoggerProvider.js";
 import { NodeRegistryProvider } from "./services/NodeRegistryProvider.js";
+import { NodeSecretProvider } from "./services/NodeSecretProvider.js";
 import { NodeValidationProvider } from "./services/NodeValidationProvider.js";
 
 // Load environment variables
@@ -33,10 +37,12 @@ async function main() {
 
   IoService.setProvider(new NodeIoProvider());
   ValidationService.setProvider(new NodeValidationProvider());
+  SecretService.setProvider(new NodeSecretProvider());
+  ConfigService.setProvider(new NodeConfigProvider());
 
   const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
 
-  LoggerService.setProvider(new WinstonLoggerProvider(workspaceRoot));
+  LoggerService.setProvider(new NodeLoggerProvider(workspaceRoot));
   RegistryService.setProvider(new NodeRegistryProvider(workspaceRoot));
 
   await LoggerService.info("CLI initialized in workspace", { workspaceRoot });

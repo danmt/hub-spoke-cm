@@ -1,9 +1,11 @@
 // src/commands/fill.ts
 import {
+  ConfigService,
   IoService,
   LoggerService,
   ParserService,
   RegistryService,
+  SecretService,
 } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
@@ -11,7 +13,6 @@ import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
-import { NodeConfigStorage } from "../services/NodeConfigStorage.js";
 
 export const fillCommand = new Command("fill")
   .description("Generate content for sections marked with TODO blockquotes")
@@ -68,9 +69,10 @@ export const fillCommand = new Command("fill")
 
       const rawArtifacts = await RegistryService.getAllArtifacts(workspaceRoot);
 
-      const config = await NodeConfigStorage.load();
+      const config = await ConfigService.getConfig();
+      const secret = await SecretService.getSecret();
 
-      if (!config.apiKey) {
+      if (!secret.apiKey) {
         console.error(
           chalk.red(
             "Error: API Key not found. Run 'hub config set-key' first.",
@@ -89,7 +91,7 @@ export const fillCommand = new Command("fill")
       }
 
       const agents = RegistryService.initializeAgents(
-        config.apiKey,
+        secret.apiKey,
         config.model,
         rawArtifacts,
       );

@@ -5,6 +5,7 @@ import {
   HubBlueprintSchema,
   HubComponentSchema,
   HubConfigSchema,
+  HubSecretSchema,
   SectionBlueprintSchema,
 } from "./schemas.js";
 
@@ -14,6 +15,7 @@ export type HubComponent = z.infer<typeof HubComponentSchema>;
 export type ContentFrontmatter = z.infer<typeof FrontmatterSchema>;
 export type HubBlueprint = z.infer<typeof HubBlueprintSchema>;
 export type HubConfig = z.infer<typeof HubConfigSchema>;
+export type HubSecret = z.infer<typeof HubSecretSchema>;
 
 // Re-export Schemas for validation use
 export {
@@ -21,5 +23,6 @@ export {
   HubBlueprintSchema,
   HubComponentSchema,
   HubConfigSchema,
+  HubSecretSchema,
   SectionBlueprintSchema,
 } from "./schemas.js";

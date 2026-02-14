@@ -5,7 +5,7 @@ import path from "path";
 import winston from "winston";
 import "winston-daily-rotate-file";
 
-export class WinstonLoggerProvider implements LogProvider {
+export class NodeLoggerProvider implements LogProvider {
   private logger: winston.Logger;
 
   constructor(workspaceRoot?: string) {
