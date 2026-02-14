@@ -27,6 +27,8 @@ import { MobileRegistryProvider } from "../providers/MobileRegistryProvider";
 import { useColorScheme } from "@/components/useColorScheme";
 import { MobileConfigProvider } from "@/providers/MobileConfigProvider";
 import { MobileSecretProvider } from "@/providers/MobileSecretProvider";
+import { WorkspaceManager } from "@/services/WorkspaceManager";
+import { WorkspaceStorage } from "@/services/WorkspaceStorage";
 
 export { ErrorBoundary } from "expo-router";
 
@@ -54,6 +56,14 @@ export default function RootLayout() {
         // 3. Initialize Registry & Logger
         LoggerService.setProvider(new MobileLoggerProvider());
         RegistryService.setProvider(new MobileRegistryProvider(workspaceRoot));
+
+        const activeWorkspace = await WorkspaceStorage.getActiveWorkspace();
+        const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+
+        await WorkspaceManager.switchWorkspace(activeWorkspace, {
+          logger: new MobileLoggerProvider(),
+          registry: new MobileRegistryProvider(workspaceDir.uri),
+        });
 
         await LoggerService.info("Mobile Hub initialized", { workspaceRoot });
 

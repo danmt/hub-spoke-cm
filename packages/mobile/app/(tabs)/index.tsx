@@ -1,18 +1,83 @@
 // packages/mobile/app/(tabs)/index.tsx
 import { Text, View } from "@/components/Themed";
-import { StyleSheet } from "react-native";
+import { useColorScheme } from "@/components/useColorScheme";
+import Colors from "@/constants/Colors";
+import { WorkspaceStorage } from "@/services/WorkspaceStorage";
+import { useNavigation } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { Pressable, StyleSheet } from "react-native";
 
 export default function HomeScreen() {
+  const [activeWorkspace, setActiveWorkspace] = useState<string | undefined>(
+    undefined,
+  );
+  const [isLoading, setIsLoading] = useState(true);
+  const colorScheme = useColorScheme() ?? "light";
+  const themeColors = Colors[colorScheme];
+  const navigation = useNavigation() as any;
+
+  useEffect(() => {
+    async function loadWorkspace() {
+      const ws = await WorkspaceStorage.getActiveWorkspace();
+      setActiveWorkspace(ws);
+      setIsLoading(false);
+    }
+    loadWorkspace();
+  }, []);
+
+  if (isLoading) return null;
+
+  // Case 1: No Active Workspace
+  if (!activeWorkspace) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>No Active Workspace</Text>
+        <View
+          style={styles.separator}
+          lightColor="#eee"
+          darkColor="rgba(255,255,255,0.1)"
+        />
+        <Text style={styles.emptyText}>
+          You need to select or create a workspace before you can manage
+          content.
+        </Text>
+        <Pressable
+          style={[styles.linkButton, { marginTop: 20 }]}
+          onPress={() => navigation.navigate("settings")}
+        >
+          <Text style={{ color: themeColors.tint, fontWeight: "600" }}>
+            Go to Workspace Settings →
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // Case 2: Active Workspace but No Hubs (Placeholder for now)
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Content Hubs</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Content Hubs</Text>
+        <Text
+          style={[
+            styles.badge,
+            {
+              backgroundColor: themeColors.buttonPrimary + "20",
+              color: themeColors.buttonPrimary,
+            },
+          ]}
+        >
+          {activeWorkspace}
+        </Text>
+      </View>
       <View
         style={styles.separator}
         lightColor="#eee"
         darkColor="rgba(255,255,255,0.1)"
       />
       <Text style={styles.emptyText}>
-        No hubs found in the documents directory.
+        No hubs found in the{" "}
+        <Text style={{ fontWeight: "bold" }}>{activeWorkspace}</Text> workspace.
       </Text>
       <Text style={styles.subText}>
         Tap "New Hub" to get started (Coming Soon).
@@ -26,7 +91,21 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    padding: 30,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "transparent",
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: "bold",
+    marginLeft: 10,
+    overflow: "hidden",
   },
   title: {
     fontSize: 24,
@@ -41,6 +120,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     textAlign: "center",
+    lineHeight: 22,
   },
   subText: {
     fontSize: 14,
@@ -48,5 +128,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: "center",
     fontStyle: "italic",
+  },
+  linkButton: {
+    padding: 10,
+    backgroundColor: "transparent",
   },
 });

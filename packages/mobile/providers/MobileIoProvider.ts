@@ -1,15 +1,17 @@
-// src/providers/ExpoIoProvider.ts
 import { IoProvider } from "@hub-spoke/core";
 import { Directory, File } from "expo-file-system";
 
+/**
+ * Mobile implementation of the IoProvider using expo-file-system.
+ * Optimized for dynamic workspace switching and idempotent directory creation.
+ */
 export class MobileIoProvider implements IoProvider {
   /**
-   * Joins path parts.
-   * Expo's new API handles joining via the constructor of File or Directory.
+   * Joins path parts using the Directory constructor.
    */
   join(...parts: string[]): string {
     if (parts.length === 0) return "";
-    // We can use a Directory object to normalize and join the path string
+    // Normalize and join path parts into a URI string
     return new Directory(parts[0], ...parts.slice(1)).uri;
   }
 
@@ -25,13 +27,12 @@ export class MobileIoProvider implements IoProvider {
    * Returns the name of the file or directory.
    */
   basename(p: string): string {
-    // Both File and Directory have a 'name' property
+    // Both File and Directory instances have a 'name' property
     return new File(p).name;
   }
 
   /**
-   * Resolves paths. In mobile filesystems, paths are typically absolute URIs
-   * starting with 'file://'.
+   * Resolves paths into absolute file:// URIs.
    */
   resolve(...parts: string[]): string {
     return new Directory(...parts).uri;
@@ -39,10 +40,12 @@ export class MobileIoProvider implements IoProvider {
 
   /**
    * Checks if a file or directory exists.
+   * Updated to check both types to prevent "create" rejections.
    */
   async exists(p: string): Promise<boolean> {
     const file = new File(p);
-    return file.exists;
+    const dir = new Directory(p);
+    return file.exists || dir.exists;
   }
 
   /**
@@ -50,16 +53,24 @@ export class MobileIoProvider implements IoProvider {
    */
   async readFile(p: string): Promise<string> {
     const file = new File(p);
+    if (!file.exists) {
+      throw new Error(`File not found: ${p}`);
+    }
     return await file.text();
   }
 
   /**
-   * Writes content to a file.
+   * Writes content to a file, creating it if necessary.
    */
   async writeFile(p: string, content: string): Promise<void> {
     const file = new File(p);
-    // Note: In some versions, you may need to call file.create() first
-    // if the file doesn't exist.
+
+    // Ensure the parent directory exists first
+    const parentDir = file.parentDirectory;
+    if (parentDir && !parentDir.exists) {
+      parentDir.create();
+    }
+
     if (!file.exists) {
       file.create();
     }
@@ -67,11 +78,13 @@ export class MobileIoProvider implements IoProvider {
   }
 
   /**
-   * Reads directory contents and maps to the required interface.
+   * Reads directory contents and maps to the Core interface.
    */
   async readDir(p: string) {
     const dir = new Directory(p);
-    const contents = dir.list(); // Returns (File | Directory)[]
+    if (!dir.exists) return [];
+
+    const contents = dir.list();
 
     return contents.map((item) => ({
       name: item.name,
@@ -80,12 +93,12 @@ export class MobileIoProvider implements IoProvider {
   }
 
   /**
-   * Creates a directory.
-   * recursive=true is handled automatically by the native implementation
-   * when calling .create() on a Directory object.
+   * Creates a directory idempotently.
+   * recursive=true is handled natively by the Directory(path).create() method.
    */
   async makeDir(p: string, _recursive = true): Promise<void> {
     const dir = new Directory(p);
+
     if (!dir.exists) {
       dir.create();
     }
