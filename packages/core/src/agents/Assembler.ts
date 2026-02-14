@@ -2,7 +2,6 @@
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { HubBlueprint } from "../types/index.js";
-import { getGlobalConfig } from "../utils/config.js";
 import { extractTag } from "../utils/extractTag.js";
 
 export type AssemblerInteractionResponse =
@@ -47,6 +46,8 @@ export class Assembler {
   private history: any[] = [];
 
   constructor(
+    private readonly apiKey: string,
+    private readonly model: string,
     public id: string,
     public description: string,
     strategyPrompt: string,
@@ -148,8 +149,6 @@ export class Assembler {
   async generate(
     ctx: AssemblerGenerateContext,
   ): Promise<AssemblerGenerateResponse> {
-    const model = getGlobalConfig().architectModel || "gemini-2.0-flash";
-
     const basePrompt = `
         [TOPIC]${ctx.topic}[/TOPIC]
         [GOAL]${ctx.goal}[/GOAL]
@@ -161,9 +160,10 @@ export class Assembler {
       : basePrompt;
 
     const text = await AiService.execute(prompt.trim(), {
-      model,
+      model: this.model,
       systemInstruction: this.systemInstruction,
       history: this.history,
+      apiKey: this.apiKey,
     });
 
     this.history.push(

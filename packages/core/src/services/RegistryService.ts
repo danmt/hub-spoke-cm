@@ -6,7 +6,6 @@ import path from "path";
 import { Assembler } from "../agents/Assembler.js";
 import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
-import { IoService } from "./IoService.js";
 import { LoggerService } from "./LoggerService.js";
 
 export type ArtifactType = "persona" | "writer" | "assembler";
@@ -16,6 +15,7 @@ export interface BaseArtifact {
   type: ArtifactType;
   description: string;
   content: string;
+  model?: string;
 }
 
 export interface PersonaArtifact extends BaseArtifact {
@@ -74,7 +74,7 @@ export class RegistryService {
   /**
    * Fetches all artifacts from the workspace.
    */
-  static async getAllArtifacts(): Promise<Artifact[]> {
+  static async getAllArtifacts(workspaceRoot: string): Promise<Artifact[]> {
     const folders: Record<string, ArtifactType> = {
       personas: "persona",
       writers: "writer",
@@ -83,10 +83,7 @@ export class RegistryService {
 
     const allArtifacts: Artifact[] = [];
     try {
-      const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
-      await LoggerService.debug("Scanning registry folders in workspace", {
-        workspaceRoot,
-      });
+      await LoggerService.debug("Scanning registry folders", { workspaceRoot });
 
       for (const [folder, type] of Object.entries(folders)) {
         const dir = path.join(workspaceRoot, "agents", folder);
@@ -103,9 +100,8 @@ export class RegistryService {
             type,
             description: data.description || "",
             content: content.trim(),
+            model: data.model,
           };
-
-          await LoggerService.debug(`Loaded artifact: ${type}/${id}`);
 
           if (type === "persona") {
             allArtifacts.push({
@@ -128,14 +124,18 @@ export class RegistryService {
         }
       }
     } catch (e: any) {
-      await LoggerService.warn("Registry scanning failed or not in workspace", {
+      await LoggerService.warn("Registry scanning failed", {
         error: e.message,
       });
     }
     return allArtifacts;
   }
 
-  static initializeAgents(artifacts: Artifact[]): AgentPair[] {
+  static initializeAgents(
+    apiKey: string,
+    model: string,
+    artifacts: Artifact[],
+  ): AgentPair[] {
     const agents = artifacts.map((artifact): AgentPair => {
       switch (artifact.type) {
         case "persona":
@@ -143,6 +143,8 @@ export class RegistryService {
             type: "persona",
             artifact: artifact as PersonaArtifact,
             agent: new Persona(
+              apiKey,
+              artifact.model || model,
               artifact.id,
               artifact.name,
               artifact.description,
@@ -157,6 +159,8 @@ export class RegistryService {
             type: "writer",
             artifact: artifact as WriterArtifact,
             agent: new Writer(
+              apiKey,
+              artifact.model || model,
               artifact.id,
               artifact.description,
               artifact.content,
@@ -167,6 +171,8 @@ export class RegistryService {
             type: "assembler",
             artifact: artifact as AssemblerArtifact,
             agent: new Assembler(
+              apiKey,
+              artifact.model || model,
               artifact.id,
               artifact.description,
               artifact.content,

@@ -1,7 +1,6 @@
 // src/agents/Architect.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
-import { getGlobalConfig } from "../utils/config.js";
 
 export type ArchitectInteractionResponse =
   | {
@@ -45,7 +44,12 @@ export class Architect {
   private readonly systemInstruction: string;
   private history: any[] = [];
 
-  constructor(manifest: string, initialContext: Partial<Brief>) {
+  constructor(
+    private readonly apiKey: string,
+    private readonly model: string,
+    manifest: string,
+    initialContext: Partial<Brief>,
+  ) {
     this.systemInstruction = `
       You are the Hub Spoke Architect. Your job is to refine a content plan.
 
@@ -125,8 +129,6 @@ export class Architect {
   }
 
   async generate(ctx: ArchitectGenerateContext): Promise<ArchitectResponse> {
-    const modelName = getGlobalConfig().architectModel || "gemini-2.0-flash";
-
     const basePrompt =
       "Analyze the baseline and provide your best proposal/questions.";
 
@@ -135,9 +137,10 @@ export class Architect {
       : basePrompt;
 
     const text = await AiService.execute(prompt.trim(), {
-      model: modelName,
+      model: this.model,
       systemInstruction: this.systemInstruction,
       history: this.history,
+      apiKey: this.apiKey,
     });
 
     this.history.push(

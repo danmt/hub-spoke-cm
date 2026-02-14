@@ -37,8 +37,14 @@ export class CreateHubAction {
   private assemblers: Assembler[];
   private personas: Persona[];
 
-  constructor(manifest: string, baseline: Partial<Brief>, agents: AgentPair[]) {
-    this.architect = new Architect(manifest, baseline);
+  constructor(
+    apiKey: string,
+    model: string,
+    manifest: string,
+    baseline: Partial<Brief>,
+    agents: AgentPair[],
+  ) {
+    this.architect = new Architect(apiKey, model, manifest, baseline);
 
     this.assemblers = getAgentsByType(agents, "assembler").map((a) => a.agent);
 

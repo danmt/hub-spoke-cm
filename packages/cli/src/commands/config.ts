@@ -1,6 +1,7 @@
-import { getGlobalConfig, setGlobalConfig } from "@hub-spoke/core";
+import { ConfigManager } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
+import { ConfigStorage } from "../services/ConfigStorage.js";
 
 const configCommand = new Command("config").description(
   "Manage global configuration (API keys, Models)",
@@ -9,10 +10,12 @@ const configCommand = new Command("config").description(
 configCommand
   .command("list")
   .description("Show current configuration")
-  .action(() => {
-    const config = getGlobalConfig();
+  .action(async () => {
+    const config = await ConfigStorage.load();
+    const storagePath = ConfigStorage.getStoragePath();
+
     console.log(chalk.blue("\n⚙️  Global Configuration:"));
-    console.log(chalk.gray("   (~/.config/hub-spoke-cm/config.json)\n"));
+    console.log(chalk.gray(`   (${storagePath})\n`));
 
     // Mask API Key for security
     const maskedKey = config.apiKey
@@ -21,10 +24,7 @@ configCommand
 
     console.log(`   ${chalk.bold("API Key:")}         ${maskedKey}`);
     console.log(
-      `   ${chalk.bold("Architect Model:")} ${chalk.green(config.architectModel)}`,
-    );
-    console.log(
-      `   ${chalk.bold("Writer Model:")}    ${chalk.green(config.writerModel)}`,
+      `   ${chalk.bold("Default Model:")} ${chalk.green(config.model || "gemini-2.0-flash")}`,
     );
     console.log("");
   });
@@ -32,27 +32,24 @@ configCommand
 configCommand
   .command("set-key <key>")
   .description("Set your Google Gemini API Key")
-  .action((key) => {
-    setGlobalConfig({ apiKey: key });
+  .action(async (key) => {
+    const current = await ConfigStorage.load();
+    // Validate changes through Core logic
+    const updated = ConfigManager.prepareUpdate(current, { apiKey: key });
+    await ConfigStorage.save(updated);
     console.log(chalk.green("\n✅ API Key saved successfully."));
   });
 
 configCommand
-  .command("set-model-architect <modelName>")
-  .description(
-    "Set the model used for planning structure (e.g. gemini-1.5-pro)",
-  )
-  .action((modelName) => {
-    setGlobalConfig({ architectModel: modelName });
-    console.log(chalk.green(`\n✅ Architect model set to: ${modelName}`));
-  });
-
-configCommand
-  .command("set-model-writer <modelName>")
-  .description("Set the model used for writing prose (e.g. gemini-1.5-flash)")
-  .action((modelName) => {
-    setGlobalConfig({ writerModel: modelName });
-    console.log(chalk.green(`\n✅ Writer model set to: ${modelName}`));
+  .command("set-model <modelName>")
+  .description("Set the default model to be used")
+  .action(async (modelName) => {
+    const current = await ConfigStorage.load();
+    const updated = ConfigManager.prepareUpdate(current, {
+      model: modelName,
+    });
+    await ConfigStorage.save(updated);
+    console.log(chalk.green(`\n✅ Model set to: ${modelName}`));
   });
 
 export { configCommand };

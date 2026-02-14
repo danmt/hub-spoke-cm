@@ -1,4 +1,4 @@
-// src/core/services/IoService.ts
+// packages/core/src/services/IoService.ts
 import { existsSync } from "fs";
 import fs from "fs/promises";
 import matter from "gray-matter";
@@ -22,19 +22,21 @@ export class IoService {
    * Searches up the tree to find the Workspace Root (.hub folder).
    */
   static async findWorkspaceRoot(startDir: string): Promise<string> {
-    let current = startDir;
+    let current = path.resolve(startDir);
     while (current !== path.parse(current).root) {
       const workspaceMarker = path.join(current, ".hub");
       if (existsSync(workspaceMarker)) {
         return current;
       }
-      current = path.dirname(current);
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
     }
     throw new Error("Not a Hub workspace. Run 'hub init' first.");
   }
 
   /**
-   * Returns all Hub IDs (folder names) present in the workspace posts directory.
+   * Returns all Hub IDs present in the workspace posts directory.
    */
   static async findAllHubsInWorkspace(
     workspaceRoot: string,
@@ -50,29 +52,10 @@ export class IoService {
     }
   }
 
-  /**
-   * Searches up the tree to find a specific Hub Root (hub.md).
-   */
-  static async findHubRoot(startDir: string): Promise<string> {
-    let current = startDir;
-    while (current !== path.parse(current).root) {
-      try {
-        await fs.access(path.join(current, "hub.md"));
-        return current;
-      } catch {
-        current = path.dirname(current);
-      }
-    }
-    throw new Error("No hub.md found. Are you inside a Hub directory?");
-  }
-
-  static async readHubFile(rootDir: string): Promise<string> {
-    const filePath = path.join(rootDir, "hub.md");
-    return fs.readFile(filePath, "utf-8");
-  }
-
-  static async readHubMetadata(rootDir: string): Promise<ContentFrontmatter> {
-    const filePath = path.join(rootDir, "hub.md");
+  static async readHubMetadata(
+    hubRootDir: string,
+  ): Promise<ContentFrontmatter> {
+    const filePath = path.join(hubRootDir, "hub.md");
     const content = await fs.readFile(filePath, "utf-8");
     const { data } = matter(content);
     return FrontmatterSchema.parse(data);
@@ -84,11 +67,12 @@ export class IoService {
     await fs.writeFile(filePath, content, "utf-8");
   }
 
-  static async createHubDirectory(hubId: string): Promise<string> {
-    const dirPath = path.join(process.cwd(), "posts", hubId);
-
+  static async createHubDirectory(
+    workspaceRoot: string,
+    hubId: string,
+  ): Promise<string> {
+    const dirPath = path.join(workspaceRoot, "posts", hubId);
     await fs.mkdir(dirPath, { recursive: true });
-
     return dirPath;
   }
 
@@ -129,12 +113,11 @@ export class IoService {
   }
 
   /**
-   * Attempts to find a Hub context based on current directory.
-   * Returns null if not inside a Hub.
+   * Detects hub context starting from a specific directory.
    */
-  static async detectCurrentHub(): Promise<HubContext | null> {
+  static async detectCurrentHub(startDir: string): Promise<HubContext | null> {
     try {
-      let current = process.cwd();
+      let current = path.resolve(startDir);
       while (current !== path.parse(current).root) {
         if (await IoService.isHubDirectory(current)) {
           return {
@@ -142,7 +125,9 @@ export class IoService {
             hubId: path.basename(current),
           };
         }
-        current = path.dirname(current);
+        const parent = path.dirname(current);
+        if (parent === current) break;
+        current = parent;
       }
     } catch {
       return null;
@@ -151,14 +136,14 @@ export class IoService {
   }
 
   /**
-   * Resolves the target Hub by checking context first,
-   * then falling back to a provided picker.
+   * Resolves context using provided workspaceRoot and startDir.
    */
   static async resolveHubContext(
     workspaceRoot: string,
+    startDir: string,
     picker: (hubs: string[]) => Promise<string>,
   ): Promise<HubContext> {
-    const current = await this.detectCurrentHub();
+    const current = await this.detectCurrentHub(startDir);
     if (current) return current;
 
     const hubs = await IoService.findAllHubsInWorkspace(workspaceRoot);
@@ -213,23 +198,8 @@ Focus on narrative flow, clarity, and transitions. Avoid code blocks unless abso
       path.join(rootDir, "agents/writers/prose.md"),
       proseWriter,
     );
+
     const gitignore = ".hub/tmp/*\n.hub/logs/*\noutput/*\n!output/.keep";
     await fs.writeFile(path.join(rootDir, ".gitignore"), gitignore, "utf-8");
-  }
-
-  /**
-   * Returns the path for a temporary file inside the .hub/tmp directory.
-   * Ensures the directory exists.
-   */
-  static async getTempPath(
-    workspaceRoot: string,
-    fileName: string,
-  ): Promise<string> {
-    const tempDir = path.join(workspaceRoot, ".hub", "tmp");
-    if (!existsSync(tempDir)) {
-      await fs.mkdir(tempDir, { recursive: true });
-    }
-    // Use a timestamp or unique hash to avoid collisions during concurrent runs
-    return path.join(tempDir, `${Date.now()}-${fileName}.tmp`);
   }
 }

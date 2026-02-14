@@ -1,5 +1,5 @@
 // src/cli/commands/registry.ts
-import { RegistryService } from "@hub-spoke/core";
+import { IoService, RegistryService } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
 
@@ -14,7 +14,8 @@ export const registryCommand = new Command("registry")
   .action(async () => {
     try {
       // 1. Fetch all artifacts from the workspace once
-      const artifacts = await RegistryService.getAllArtifacts();
+      const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
+      const artifacts = await RegistryService.getAllArtifacts(workspaceRoot);
 
       if (artifacts.length === 0) {
         console.log(chalk.yellow("\n⚠️  No artifacts found."));

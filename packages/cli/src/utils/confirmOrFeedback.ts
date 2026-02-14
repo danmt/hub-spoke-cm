@@ -10,7 +10,7 @@ export type InteractionResponse =
       feedback: string;
     };
 
-export async function cliConfirmOrFeedback(): Promise<InteractionResponse> {
+export async function confirmOrFeedback(): Promise<InteractionResponse> {
   const { action } = await inquirer.prompt([
     {
       type: "list",

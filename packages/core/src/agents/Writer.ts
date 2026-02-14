@@ -1,7 +1,6 @@
 // src/agents/Writer.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
-import { getGlobalConfig } from "../utils/config.js";
 
 export type WriterInteractionResponse =
   | {
@@ -50,6 +49,8 @@ export class Writer {
   private history: any[] = [];
 
   constructor(
+    private readonly apiKey: string,
+    private readonly model: string,
     public id: string,
     public description: string,
     writingStrategy: string,
@@ -148,8 +149,6 @@ export class Writer {
   }
 
   private async generate(ctx: WriterGenerateContext): Promise<WriterResponse> {
-    const modelName = getGlobalConfig().writerModel || "gemini-2.0-flash";
-
     const basePrompt = `
       [INTENT]${ctx.intent}[/INTENT]
       [TOPIC]${ctx.topic}[/TOPIC]
@@ -164,8 +163,10 @@ export class Writer {
       : basePrompt;
 
     const text = await AiService.execute(prompt.trim(), {
-      model: modelName,
+      model: this.model,
       systemInstruction: this.systemInstruction,
+      apiKey: this.apiKey,
+      history: this.history,
     });
 
     this.history.push(

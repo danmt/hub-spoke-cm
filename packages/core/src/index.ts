@@ -20,4 +20,5 @@ export * from "./services/ValidationService.js";
 // Types & Configuration
 export * from "./types/index.js";
 export * from "./utils/config.js";
+export * from "./utils/ConfigManager.js";
 export { extractTag } from "./utils/extractTag.js";

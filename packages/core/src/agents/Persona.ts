@@ -1,7 +1,6 @@
 // src/agents/Persona.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
-import { getGlobalConfig } from "../utils/config.js";
 
 export type PersonaInteractionResponse =
   | {
@@ -40,6 +39,8 @@ export class Persona {
   private history: any[] = [];
 
   constructor(
+    private readonly apiKey: string,
+    private readonly model: string,
     public id: string,
     public name: string,
     public description: string,
@@ -132,8 +133,6 @@ export class Persona {
   private async generate(
     ctx: PersonaGenerateContext,
   ): Promise<PersonaResponse> {
-    const modelName = getGlobalConfig().architectModel || "gemini-2-flash";
-
     const basePrompt = `
       [NEUTRAL_HEADER]${ctx.header}[/NEUTRAL_HEADER]
       [NEUTRAL_CONTENT]
@@ -146,8 +145,10 @@ export class Persona {
       : basePrompt;
 
     const text = await AiService.execute(prompt.trim(), {
-      model: modelName,
+      model: this.model,
       systemInstruction: this.systemInstruction,
+      apiKey: this.apiKey,
+      history: this.history,
     });
 
     this.history.push(

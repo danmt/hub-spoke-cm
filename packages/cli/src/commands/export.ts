@@ -16,16 +16,17 @@ export const exportCommand = new Command("export")
     try {
       const currentDir = process.cwd();
       const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
+
       let sourceFile: string;
       let hubRootDir: string;
 
-      // 1. Resolve Hub Context
       if (options.file) {
         sourceFile = path.resolve(currentDir, options.file);
         hubRootDir = path.dirname(sourceFile);
       } else {
         const context = await IoService.resolveHubContext(
           workspaceRoot,
+          currentDir,
           async (hubs) => {
             const { targetHub } = await inquirer.prompt([
               {

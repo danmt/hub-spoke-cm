@@ -57,3 +57,8 @@ export const HubBlueprintSchema = z.object({
   // Optional hint if the Architect wants to force a specific Persona based on the interview
   suggestedPersonaId: z.string().optional(),
 });
+
+export const HubConfigSchema = z.object({
+  apiKey: z.string().min(1, "API Key is required"),
+  model: z.string().default("gemini-2.0-flash"),
+});

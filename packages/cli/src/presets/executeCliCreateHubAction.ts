@@ -10,9 +10,9 @@ import {
 import chalk from "chalk";
 import inquirer from "inquirer";
 import path from "path";
-import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
-import { cliRetryHandler } from "../utils/cliRetryHandler.js";
+import { confirmOrFeedback } from "../utils/confirmOrFeedback.js";
 import { indentText } from "../utils/identText.js";
+import { retryHandler } from "../utils/retryHandler.js";
 
 export interface ExecuteCreateHubActionResult {
   architecture: ArchitectResponse;
@@ -22,8 +22,11 @@ export interface ExecuteCreateHubActionResult {
 }
 
 export async function executeCliCreateHubAction(
+  apiKey: string,
+  model: string,
   manifest: string,
   agents: AgentPair[],
+  workspaceRoot: string,
 ): Promise<ExecuteCreateHubActionResult> {
   const baseline = await inquirer.prompt([
     {
@@ -53,7 +56,7 @@ export async function executeCliCreateHubAction(
     },
   ]);
 
-  const action = new CreateHubAction(manifest, baseline, agents)
+  const action = new CreateHubAction(apiKey, model, manifest, baseline, agents)
     .onArchitecting(() =>
       console.log(chalk.blue("\n🧠 Architect is thinking...")),
     )
@@ -65,7 +68,7 @@ export async function executeCliCreateHubAction(
       console.log(`${chalk.yellow("Audience:")} ${brief.audience}`);
       console.log(`${chalk.yellow("Assembler:")} ${brief.assemblerId}`);
       console.log(`${chalk.yellow("Persona:")}   ${brief.personaId}\n`);
-      return cliConfirmOrFeedback();
+      return confirmOrFeedback();
     })
     .onAssembling((assemblerId) =>
       console.log(
@@ -87,7 +90,7 @@ export async function executeCliCreateHubAction(
         console.log(indentText(`${chalk.yellow("Intent:")} ${c.intent}`, 4));
       });
 
-      return cliConfirmOrFeedback();
+      return confirmOrFeedback();
     })
     .onRephrasing((personaId) => {
       console.log(
@@ -97,13 +100,16 @@ export async function executeCliCreateHubAction(
     .onRephrase(async ({ header, content }) => {
       console.log(indentText(chalk.bold.cyan(`# ${header}\n`), 4));
       console.log(indentText(chalk.white(`${content}\n`), 4));
-      return await cliConfirmOrFeedback();
+      return await confirmOrFeedback();
     })
-    .onRetry(cliRetryHandler);
+    .onRetry(retryHandler);
 
   const { assembly, architecture, personification } = await action.execute();
 
-  const hubDir = await IoService.createHubDirectory(assembly.blueprint.hubId);
+  const hubDir = await IoService.createHubDirectory(
+    workspaceRoot,
+    assembly.blueprint.hubId,
+  );
   const filePath = path.join(hubDir, "hub.md");
   const fileContent = ParserService.generateScaffold(
     architecture.brief,

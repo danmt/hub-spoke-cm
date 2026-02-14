@@ -5,14 +5,40 @@ import { Command } from "commander";
 import inquirer from "inquirer";
 import { executeCliCreateHubAction } from "../presets/executeCliCreateHubAction.js";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
+import { ConfigStorage } from "../services/ConfigStorage.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")
   .action(async () => {
     try {
       const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
-      const rawArtifacts = await RegistryService.getAllArtifacts();
-      const agents = RegistryService.initializeAgents(rawArtifacts);
+      const rawArtifacts = await RegistryService.getAllArtifacts(workspaceRoot);
+
+      const config = await ConfigStorage.load();
+
+      if (!config.apiKey) {
+        console.error(
+          chalk.red(
+            "Error: API Key not found. Run 'hub config set-key' first.",
+          ),
+        );
+        process.exit(1);
+      }
+
+      if (!config.model) {
+        console.error(
+          chalk.red(
+            "Error: Default model not found. Run 'hub config set-model' first.",
+          ),
+        );
+        process.exit(1);
+      }
+
+      const agents = RegistryService.initializeAgents(
+        config.apiKey,
+        config.model,
+        rawArtifacts,
+      );
 
       try {
         RegistryService.validateIntegrity(agents);
@@ -27,7 +53,13 @@ export const newCommand = new Command("new")
       console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));
 
       const { architecture, filePath, fileContent } =
-        await executeCliCreateHubAction(manifest, agents);
+        await executeCliCreateHubAction(
+          config.apiKey,
+          config.model,
+          manifest,
+          agents,
+          workspaceRoot,
+        );
 
       const { shouldFill } = await inquirer.prompt([
         {

@@ -6,9 +6,9 @@ import {
   ParserService,
 } from "@hub-spoke/core";
 import chalk from "chalk";
-import { cliConfirmOrFeedback } from "../utils/cliConfirmOrFeedback.js";
-import { cliRetryHandler } from "../utils/cliRetryHandler.js";
+import { confirmOrFeedback } from "../utils/confirmOrFeedback.js";
 import { indentText } from "../utils/identText.js";
+import { retryHandler } from "../utils/retryHandler.js";
 
 const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
@@ -45,7 +45,7 @@ export async function executeCliFillAction(
     .onWrite(async ({ header, content }) => {
       console.log(indentText(chalk.bold.cyan(`## ${header}\n`), 4));
       console.log(indentText(chalk.white(`${content}\n`), 4));
-      return await cliConfirmOrFeedback();
+      return await confirmOrFeedback();
     })
     .onRephrasing(({ personaId }) => {
       console.log(
@@ -57,10 +57,10 @@ export async function executeCliFillAction(
     .onRephrase(async ({ header, content }) => {
       console.log(indentText(chalk.bold.cyan(`${header}\n`), 4));
       console.log(indentText(chalk.white(`${content}\n`), 4));
-      return await cliConfirmOrFeedback();
+      return await confirmOrFeedback();
     })
     .onRetry(async (error) => {
-      return await cliRetryHandler(error);
+      return await retryHandler(error);
     });
 
   for (const sectionId of pendingSectionIds) {
