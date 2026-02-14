@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 
 // Import Commands
 // Explicit .js extension is required for NodeNext module resolution
-import { IoService, LoggerService } from "@hub-spoke/core";
+import { IoService, LoggerService, RegistryService } from "@hub-spoke/core";
 import { checkCommand } from "./commands/check.js";
 import { configCommand } from "./commands/config.js";
 import { exportCommand } from "./commands/export.js";
@@ -13,7 +13,9 @@ import { fillCommand } from "./commands/fill.js";
 import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { registryCommand } from "./commands/registry.js";
-import { WinstonLoggerProvider } from "./services/WinstonLoggerProvider.js";
+import { NodeIoProvider } from "./services/NodeIoProvider.js";
+import { WinstonLoggerProvider } from "./services/NodeLoggerProvider.js";
+import { NodeRegistryProvider } from "./services/NodeRegistryProvider.js";
 
 // Load environment variables
 dotenv.config();
@@ -22,9 +24,13 @@ const program = new Command();
 
 async function main() {
   const currentDir = process.cwd();
+
+  IoService.setProvider(new NodeIoProvider());
+
   const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
 
   LoggerService.setProvider(new WinstonLoggerProvider(workspaceRoot));
+  RegistryService.setProvider(new NodeRegistryProvider(workspaceRoot));
 
   await LoggerService.info("CLI initialized in workspace", { workspaceRoot });
 

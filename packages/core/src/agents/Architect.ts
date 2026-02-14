@@ -65,8 +65,8 @@ export class Architect {
       PROTOCOL:
       1. Review the baseline. Ask follow-up questions if it's too vague.
       2. Provide a [MESSAGE] block with explanation/questions.
-      3. Provide a [PROPOSAL] block with the current structured Brief.
-      4. If tools are missing, explain in [MESSAGE] and propose the closest match in [PROPOSAL].
+      3. Provide a [BRIEF] block with the current structured Brief.
+      4. If tools are missing, explain in [MESSAGE] and propose the closest match in [BRIEF].
       5. The [MESSAGE] should be in the user's language.
       6. The [TOPIC], [GOAL] and [AUDIENCE] should be ALWAYS in English.
 

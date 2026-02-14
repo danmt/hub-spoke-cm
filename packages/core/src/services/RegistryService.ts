@@ -1,8 +1,5 @@
 // src/services/RegistryService.ts
-import { existsSync } from "fs";
-import fs from "fs/promises";
 import matter from "gray-matter";
-import path from "path";
 import { Assembler } from "../agents/Assembler.js";
 import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
@@ -70,11 +67,27 @@ export function getAgent<T extends AgentPair["type"]>(
   );
 }
 
+export interface RegistryProvider {
+  listAgentFiles(folder: string): Promise<string[]>;
+  readAgentFile(folder: string, filename: string): Promise<string>;
+  getIdentifier(filename: string): string;
+}
+
 export class RegistryService {
+  private static provider: RegistryProvider | null = null;
+
+  static setProvider(provider: RegistryProvider): void {
+    this.provider = provider;
+  }
+
   /**
    * Fetches all artifacts from the workspace.
    */
   static async getAllArtifacts(workspaceRoot: string): Promise<Artifact[]> {
+    if (!this.provider) {
+      throw new Error("RegistryService: RegistryProvider not registered.");
+    }
+
     const folders: Record<string, ArtifactType> = {
       personas: "persona",
       writers: "writer",
@@ -86,14 +99,13 @@ export class RegistryService {
       await LoggerService.debug("Scanning registry folders", { workspaceRoot });
 
       for (const [folder, type] of Object.entries(folders)) {
-        const dir = path.join(workspaceRoot, "agents", folder);
-        if (!existsSync(dir)) continue;
+        const files = await this.provider.listAgentFiles(folder);
+        const mdFiles = files.filter((f) => f.endsWith(".md"));
 
-        const files = (await fs.readdir(dir)).filter((f) => f.endsWith(".md"));
-        for (const file of files) {
-          const raw = await fs.readFile(path.join(dir, file), "utf-8");
+        for (const file of mdFiles) {
+          const raw = await this.provider.readAgentFile(folder, file);
           const { data, content } = matter(raw);
-          const id = data.id || path.parse(file).name;
+          const id = data.id || this.provider.getIdentifier(file);
 
           const base = {
             id,

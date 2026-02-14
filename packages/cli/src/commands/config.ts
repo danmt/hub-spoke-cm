@@ -1,7 +1,7 @@
 import { ConfigManager } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
-import { ConfigStorage } from "../services/ConfigStorage.js";
+import { ConfigStorage } from "../services/NodeConfigStorage.js";
 
 const configCommand = new Command("config").description(
   "Manage global configuration (API keys, Models)",

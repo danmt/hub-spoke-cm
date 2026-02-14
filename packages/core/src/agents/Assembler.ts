@@ -94,6 +94,8 @@ export class Assembler {
       [WRITER_ID]prose, code or custom writer IDs[/WRITER_ID]
       [BRIDGE]Context of the concepts already covered so far[/BRIDGE]
       [/COMPONENT]
+
+      Remember: Every [COMPONENT] must include [ID], [HEADER], [INTENT], [WRITER_ID], and [BRIDGE] tags.
     `.trim();
   }
 
@@ -166,6 +168,8 @@ export class Assembler {
       apiKey: this.apiKey,
     });
 
+    console.log(text);
+
     this.history.push(
       { role: "user", parts: [{ text: prompt }] },
       { role: "model", parts: [{ text }] },
@@ -190,6 +194,8 @@ export class Assembler {
       const intent = extractTag(block, "INTENT");
       const writerId = extractTag(block, "WRITER_ID");
       const bridge = extractTag(block, "BRIDGE");
+
+      console.log(`\n${block}`);
 
       const missing = [];
       if (!id) missing.push("ID");

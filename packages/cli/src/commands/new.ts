@@ -5,7 +5,7 @@ import { Command } from "commander";
 import inquirer from "inquirer";
 import { executeCliCreateHubAction } from "../presets/executeCliCreateHubAction.js";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
-import { ConfigStorage } from "../services/ConfigStorage.js";
+import { ConfigStorage } from "../services/NodeConfigStorage.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")
