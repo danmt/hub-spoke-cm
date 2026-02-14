@@ -11,9 +11,7 @@ import fs from "fs/promises";
 import inquirer from "inquirer";
 import path from "path";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
-import { ConfigStorage } from "../services/NodeConfigStorage.js";
-
-const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
+import { NodeConfigStorage } from "../services/NodeConfigStorage.js";
 
 export const fillCommand = new Command("fill")
   .description("Generate content for sections marked with TODO blockquotes")
@@ -70,7 +68,7 @@ export const fillCommand = new Command("fill")
 
       const rawArtifacts = await RegistryService.getAllArtifacts(workspaceRoot);
 
-      const config = await ConfigStorage.load();
+      const config = await NodeConfigStorage.load();
 
       if (!config.apiKey) {
         console.error(

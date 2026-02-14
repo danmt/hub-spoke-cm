@@ -1,11 +1,30 @@
 // src/services/ValidationService.ts
-import fs from "fs/promises";
-import path from "path";
 import { LoggerService } from "./LoggerService.js";
 import { ParserService } from "./ParserService.js";
 import { StaticAnalysisService } from "./StaticAnalysisService.js";
 
+/**
+ * Interface scoped specifically to what Validation needs.
+ */
+export interface ValidationProvider {
+  readFile(path: string): Promise<string>;
+  basename(path: string): string;
+}
+
 export class ValidationService {
+  private static provider: ValidationProvider | null = null;
+
+  static setProvider(provider: ValidationProvider): void {
+    this.provider = provider;
+  }
+
+  private static ensureProvider(): ValidationProvider {
+    if (!this.provider) {
+      throw new Error("ValidationService: ValidationProvider not registered.");
+    }
+    return this.provider;
+  }
+
   /**
    * Static integrity check for structural failures and metadata drift.
    */
@@ -14,10 +33,13 @@ export class ValidationService {
     expectedPersonaId: string,
     expectedLanguage: string,
   ): Promise<{ isValid: boolean; issues: string[] }> {
+    const fp = this.ensureProvider();
+
     await LoggerService.debug(`Integrity check started`, {
-      file: path.basename(filePath),
+      file: fp.basename(filePath),
     });
-    const content = await fs.readFile(filePath, "utf-8");
+
+    const content = await fp.readFile(filePath);
     const { frontmatter } = ParserService.parseMarkdown(content);
     const issues: string[] = [];
 
@@ -36,7 +58,7 @@ export class ValidationService {
 
     if (issues.length > 0) {
       await LoggerService.warn(`Integrity issues found`, {
-        file: path.basename(filePath),
+        file: fp.basename(filePath),
         issues,
       });
     }

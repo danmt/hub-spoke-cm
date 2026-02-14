@@ -1,7 +1,7 @@
 import { ConfigManager } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
-import { ConfigStorage } from "../services/NodeConfigStorage.js";
+import { NodeConfigStorage } from "../services/NodeConfigStorage.js";
 
 const configCommand = new Command("config").description(
   "Manage global configuration (API keys, Models)",
@@ -11,8 +11,8 @@ configCommand
   .command("list")
   .description("Show current configuration")
   .action(async () => {
-    const config = await ConfigStorage.load();
-    const storagePath = ConfigStorage.getStoragePath();
+    const config = await NodeConfigStorage.load();
+    const storagePath = NodeConfigStorage.getStoragePath();
 
     console.log(chalk.blue("\n⚙️  Global Configuration:"));
     console.log(chalk.gray(`   (${storagePath})\n`));
@@ -33,10 +33,10 @@ configCommand
   .command("set-key <key>")
   .description("Set your Google Gemini API Key")
   .action(async (key) => {
-    const current = await ConfigStorage.load();
+    const current = await NodeConfigStorage.load();
     // Validate changes through Core logic
     const updated = ConfigManager.prepareUpdate(current, { apiKey: key });
-    await ConfigStorage.save(updated);
+    await NodeConfigStorage.save(updated);
     console.log(chalk.green("\n✅ API Key saved successfully."));
   });
 
@@ -44,11 +44,11 @@ configCommand
   .command("set-model <modelName>")
   .description("Set the default model to be used")
   .action(async (modelName) => {
-    const current = await ConfigStorage.load();
+    const current = await NodeConfigStorage.load();
     const updated = ConfigManager.prepareUpdate(current, {
       model: modelName,
     });
-    await ConfigStorage.save(updated);
+    await NodeConfigStorage.save(updated);
     console.log(chalk.green(`\n✅ Model set to: ${modelName}`));
   });
 

@@ -5,7 +5,7 @@ import { Command } from "commander";
 import inquirer from "inquirer";
 import { executeCliCreateHubAction } from "../presets/executeCliCreateHubAction.js";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
-import { ConfigStorage } from "../services/NodeConfigStorage.js";
+import { NodeConfigStorage } from "../services/NodeConfigStorage.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")
@@ -14,7 +14,7 @@ export const newCommand = new Command("new")
       const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
       const rawArtifacts = await RegistryService.getAllArtifacts(workspaceRoot);
 
-      const config = await ConfigStorage.load();
+      const config = await NodeConfigStorage.load();
 
       if (!config.apiKey) {
         console.error(

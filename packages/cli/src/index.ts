@@ -5,7 +5,12 @@ import dotenv from "dotenv";
 
 // Import Commands
 // Explicit .js extension is required for NodeNext module resolution
-import { IoService, LoggerService, RegistryService } from "@hub-spoke/core";
+import {
+  IoService,
+  LoggerService,
+  RegistryService,
+  ValidationService,
+} from "@hub-spoke/core";
 import { checkCommand } from "./commands/check.js";
 import { configCommand } from "./commands/config.js";
 import { exportCommand } from "./commands/export.js";
@@ -16,6 +21,7 @@ import { registryCommand } from "./commands/registry.js";
 import { NodeIoProvider } from "./services/NodeIoProvider.js";
 import { WinstonLoggerProvider } from "./services/NodeLoggerProvider.js";
 import { NodeRegistryProvider } from "./services/NodeRegistryProvider.js";
+import { NodeValidationProvider } from "./services/NodeValidationProvider.js";
 
 // Load environment variables
 dotenv.config();
@@ -26,6 +32,7 @@ async function main() {
   const currentDir = process.cwd();
 
   IoService.setProvider(new NodeIoProvider());
+  ValidationService.setProvider(new NodeValidationProvider());
 
   const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
 

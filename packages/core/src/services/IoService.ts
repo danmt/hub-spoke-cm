@@ -1,6 +1,5 @@
 // packages/core/src/services/IoService.ts
 import matter from "gray-matter";
-import path from "path";
 import { ContentFrontmatter, FrontmatterSchema } from "../types/index.js";
 
 export interface HubContext {
@@ -178,7 +177,7 @@ export class IoService {
 
     const selectedId = await picker(hubs);
     return {
-      rootDir: path.join(workspaceRoot, "posts", selectedId),
+      rootDir: this.provider.join(workspaceRoot, "posts", selectedId),
       hubId: selectedId,
     };
   }

@@ -4,7 +4,7 @@ import fs from "fs/promises";
 import os from "os";
 import path from "path";
 
-export class ConfigStorage {
+export class NodeConfigStorage {
   // Matches your requested path: ~/.config/hub-spoke-cm/config.json
   private static storageDir = path.join(
     os.homedir(),
