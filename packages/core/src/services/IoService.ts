@@ -115,6 +115,7 @@ export class IoService {
       ".hub",
       ".hub/logs",
       "posts",
+      "agents",
       "agents/personas",
       "agents/writers",
       "agents/assemblers",
