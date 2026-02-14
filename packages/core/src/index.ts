@@ -16,8 +16,6 @@ export * from "./services/LoggerService.js";
 export * from "./services/ParserService.js";
 export * from "./services/RegistryService.js";
 export * from "./services/SecretService.js";
-export * from "./services/StaticAnalysisService.js";
-export * from "./services/ValidationService.js";
 
 // Types & Configuration
 export * from "./types/index.js";

@@ -11,9 +11,7 @@ import {
   LoggerService,
   RegistryService,
   SecretService,
-  ValidationService,
 } from "@hub-spoke/core";
-import { checkCommand } from "./commands/check.js";
 import { configCommand } from "./commands/config.js";
 import { exportCommand } from "./commands/export.js";
 import { fillCommand } from "./commands/fill.js";
@@ -25,7 +23,6 @@ import { NodeIoProvider } from "./services/NodeIoProvider.js";
 import { NodeLoggerProvider } from "./services/NodeLoggerProvider.js";
 import { NodeRegistryProvider } from "./services/NodeRegistryProvider.js";
 import { NodeSecretProvider } from "./services/NodeSecretProvider.js";
-import { NodeValidationProvider } from "./services/NodeValidationProvider.js";
 
 // Load environment variables
 dotenv.config();
@@ -36,7 +33,6 @@ async function main() {
   const currentDir = process.cwd();
 
   IoService.setProvider(new NodeIoProvider());
-  ValidationService.setProvider(new NodeValidationProvider());
   SecretService.setProvider(new NodeSecretProvider());
   ConfigService.setProvider(new NodeConfigProvider());
 
@@ -59,7 +55,6 @@ async function main() {
   program.addCommand(initCommand);
   program.addCommand(registryCommand);
   program.addCommand(newCommand);
-  program.addCommand(checkCommand);
   program.addCommand(fillCommand);
   program.addCommand(configCommand);
   program.addCommand(exportCommand);
