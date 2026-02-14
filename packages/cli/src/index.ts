@@ -18,11 +18,11 @@ import { fillCommand } from "./commands/fill.js";
 import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { registryCommand } from "./commands/registry.js";
-import { NodeConfigProvider } from "./services/NodeConfigProvider.js";
-import { NodeIoProvider } from "./services/NodeIoProvider.js";
-import { NodeLoggerProvider } from "./services/NodeLoggerProvider.js";
-import { NodeRegistryProvider } from "./services/NodeRegistryProvider.js";
-import { NodeSecretProvider } from "./services/NodeSecretProvider.js";
+import { NodeConfigProvider } from "./providers/NodeConfigProvider.js";
+import { NodeIoProvider } from "./providers/NodeIoProvider.js";
+import { NodeLoggerProvider } from "./providers/NodeLoggerProvider.js";
+import { NodeRegistryProvider } from "./providers/NodeRegistryProvider.js";
+import { NodeSecretProvider } from "./providers/NodeSecretProvider.js";
 
 // Load environment variables
 dotenv.config();

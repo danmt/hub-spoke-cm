@@ -7,6 +7,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
+    "build:core": "npm run build -w @hub-spoke/core",
+    "build:cli": "npm run build -w @hub-spoke/cli",
     "dev:cli": "npm run dev -w @hub-spoke/cli",
     "dev:mobile": "npm start -w @hub-spoke/mobile"
   },

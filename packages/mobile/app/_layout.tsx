@@ -20,13 +20,13 @@ import {
   SecretService,
 } from "@hub-spoke/core";
 
-import { MobileIoProvider } from "../services/MobileIoProvider";
-import { MobileLoggerProvider } from "../services/MobileLoggerProvider"; // See note below
-import { MobileRegistryProvider } from "../services/MobileRegistryProvider";
+import { MobileIoProvider } from "../providers/MobileIoProvider";
+import { MobileLoggerProvider } from "../providers/MobileLoggerProvider"; // See note below
+import { MobileRegistryProvider } from "../providers/MobileRegistryProvider";
 
 import { useColorScheme } from "@/components/useColorScheme";
-import { MobileConfigProvider } from "@/services/MobileConfigProvider";
-import { MobileSecretProvider } from "@/services/MobileSecretProvider";
+import { MobileConfigProvider } from "@/providers/MobileConfigProvider";
+import { MobileSecretProvider } from "@/providers/MobileSecretProvider";
 
 export { ErrorBoundary } from "expo-router";
 
