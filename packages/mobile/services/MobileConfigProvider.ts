@@ -1,24 +1,24 @@
-// src/services/ExpoConfigStorage.ts
-import { HubConfig } from "@hub-spoke/core";
+// packages/mobile/services/MobileConfigProvider.ts
+import { ConfigProvider, HubConfig } from "@hub-spoke/core";
 import { Directory, File, Paths } from "expo-file-system";
 
-export class ExpoConfigStorage {
+export class MobileConfigProvider implements ConfigProvider {
   /**
    * On mobile, we use the app's internal document directory.
-   * We still use a subdirectory to keep things organized.
    */
-  private static storageDir = new Directory(Paths.document, "hub-spoke-cm");
-  private static fileName = "config.json";
+  private storageDir = new Directory(Paths.document, "hub-spoke-cm");
+  private fileName = "config.json";
 
-  static getStoragePath(): string {
-    // We return the full URI for the config file
-    return new File(this.storageDir, this.fileName).uri;
+  private async ensureDir() {
+    if (!this.storageDir.exists) {
+      this.storageDir.create();
+    }
   }
 
   /**
-   * Safely loads the config from disk.
+   * Loads the global configuration from the mobile filesystem.
    */
-  static async load(): Promise<Partial<HubConfig>> {
+  async loadConfig(): Promise<Partial<HubConfig>> {
     const configFile = new File(this.storageDir, this.fileName);
 
     if (!configFile.exists) {
@@ -29,23 +29,26 @@ export class ExpoConfigStorage {
       const data = await configFile.text();
       return JSON.parse(data);
     } catch (error) {
-      // Return empty if JSON is malformed or unreadable
+      // Return empty if JSON is malformed or unreadable to allow default fallback
       return {};
     }
   }
 
   /**
-   * Persists the config to the document directory.
+   * Persists the configuration to the internal document directory.
    */
-  static async save(config: HubConfig): Promise<void> {
-    // Ensure the subdirectory (~/hub-spoke-cm) exists
-    if (!this.storageDir.exists) {
-      this.storageDir.create();
-    }
-
+  async saveConfig(config: HubConfig): Promise<void> {
+    await this.ensureDir();
     const configFile = new File(this.storageDir, this.fileName);
 
-    // Write the JSON string to the file
-    configFile.write(JSON.stringify(config, null, 2));
+    // Validate or merge if necessary, though ConfigService handles most logic
+    await configFile.write(JSON.stringify(config, null, 2));
+  }
+
+  /**
+   * Returns the URI of the configuration file for debugging/tracing.
+   */
+  getStorageInfo(): string {
+    return new File(this.storageDir, this.fileName).uri;
   }
 }

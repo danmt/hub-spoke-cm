@@ -13,18 +13,20 @@ import "react-native-reanimated";
 
 // Core Services
 import {
+  ConfigService,
   IoService,
   LoggerService,
   RegistryService,
-  ValidationService,
+  SecretService,
 } from "@hub-spoke/core";
 
 import { MobileIoProvider } from "../services/MobileIoProvider";
 import { MobileLoggerProvider } from "../services/MobileLoggerProvider"; // See note below
 import { MobileRegistryProvider } from "../services/MobileRegistryProvider";
-import { MobileValidationProvider } from "../services/MobileValidationProvider";
 
 import { useColorScheme } from "@/components/useColorScheme";
+import { MobileConfigProvider } from "@/services/MobileConfigProvider";
+import { MobileSecretProvider } from "@/services/MobileSecretProvider";
 
 export { ErrorBoundary } from "expo-router";
 
@@ -43,7 +45,8 @@ export default function RootLayout() {
       try {
         // 1. Initialize Global Providers
         IoService.setProvider(new MobileIoProvider());
-        ValidationService.setProvider(new MobileValidationProvider());
+        SecretService.setProvider(new MobileSecretProvider());
+        ConfigService.setProvider(new MobileConfigProvider());
 
         // 2. Set Workspace Root (Mobile uses Document Directory)
         const workspaceRoot = Paths.document.uri;
