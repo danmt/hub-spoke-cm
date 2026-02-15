@@ -64,8 +64,8 @@ export const fillCommand = new Command("fill")
         chalk.bold(`\n🔍 Target: ${chalk.cyan(path.basename(targetFile))}`),
       );
 
-      const content = await fs.readFile(targetFile, "utf-8");
-      const parsed = ParserService.parseMarkdown(content);
+      const hubFile = await fs.readFile(targetFile, "utf-8");
+      const hub = ParserService.parseMarkdown(hubFile);
 
       const rawArtifacts = await RegistryService.getAllArtifacts(workspaceRoot);
 
@@ -98,9 +98,9 @@ export const fillCommand = new Command("fill")
 
       await executeCliFillAction(
         agents,
-        parsed.frontmatter.personaId,
+        hub.frontmatter,
+        hub.sections,
         targetFile,
-        content,
       );
     } catch (error: any) {
       await LoggerService.error("Fill Command Failed", {
