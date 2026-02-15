@@ -173,7 +173,7 @@ export default function HubDetailsScreen() {
             ]}
             onPress={() =>
               router.push({
-                pathname: "/(tabs)/hubs/fill",
+                pathname: "/hubs/fill",
                 params: { id: metadata.hubId },
               })
             }

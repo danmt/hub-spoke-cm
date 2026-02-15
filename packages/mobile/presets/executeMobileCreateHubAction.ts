@@ -1,3 +1,4 @@
+// packages/mobile/presets/executeMobileCreateHubAction.ts
 import { AskHandler } from "@/types/interactions";
 import {
   AgentPair,
@@ -17,9 +18,6 @@ export interface ExecuteMobileCreateHubActionResult {
   fileContent: string;
 }
 
-/**
- * Orchestrates the Hub creation process for Mobile with full type safety.
- */
 export async function executeMobileCreateHubAction(
   apiKey: string,
   model: string,
@@ -29,25 +27,20 @@ export async function executeMobileCreateHubAction(
   workspaceRoot: string,
   handlers: {
     ask: AskHandler;
-    onStatus: (message: string) => void;
+    onStatus: (message: string, agentId?: string, phase?: string) => void;
   },
 ): Promise<ExecuteMobileCreateHubActionResult> {
   const action = new CreateHubAction(apiKey, model, manifest, baseline, agents)
-    // 1. Architect Phase: Expects ArchitectInteractionResponse
-    .onArchitecting(() => handlers.onStatus("Architect is planning..."))
+    .onArchitecting(() =>
+      handlers.onStatus("Architect is planning...", "Architect", "planning"),
+    )
     .onArchitect((data) => handlers.ask("architect", data))
-
-    // 2. Assembler Phase: Expects AssemblerInteractionResponse
     .onAssembling((id) =>
-      handlers.onStatus(`Assembler (${id}) is building structure...`),
+      handlers.onStatus(`Building structure...`, id, "assembling"),
     )
     .onAssembler((data) => handlers.ask("assembler", data))
-
-    // 3. Personification Phase: Expects PersonaInteractionResponse
-    .onRephrasing((id) => handlers.onStatus(`${id} is styling the intro...`))
+    .onRephrasing((id) => handlers.onStatus(`Styling intro...`, id, "styling"))
     .onRephrase((data) => handlers.ask("persona", data))
-
-    // 4. Global Retry Handler: Expects boolean (retry or not)
     .onRetry((err) => handlers.ask("retry", err));
 
   const result = await action.execute();
@@ -58,7 +51,6 @@ export async function executeMobileCreateHubAction(
   );
 
   const filePath = `${hubDir}/hub.md`;
-
   const fileContent = ParserService.generateScaffold(
     result.architecture.brief,
     result.assembly.blueprint,
@@ -68,9 +60,5 @@ export async function executeMobileCreateHubAction(
 
   await IoService.safeWriteFile(filePath, fileContent);
 
-  return {
-    ...result,
-    filePath,
-    fileContent,
-  };
+  return { ...result, filePath, fileContent };
 }

@@ -1,7 +1,9 @@
+// packages/mobile/components/proposals/ConfirmOrFeedback.tsx
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -26,9 +28,16 @@ export function ConfirmOrFeedback({
   const themeColors = Colors[colorScheme];
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleConfirm = () => {
+    setIsSubmitting(true);
+    onConfirm();
+  };
 
   const handleSubmitFeedback = () => {
     if (!feedbackText.trim()) return;
+    setIsSubmitting(true);
     onFeedback(feedbackText);
     setFeedbackText("");
     setIsModalVisible(false);
@@ -40,6 +49,7 @@ export function ConfirmOrFeedback({
         <Pressable
           style={[styles.button, styles.secondaryButton]}
           onPress={() => setIsModalVisible(true)}
+          disabled={isSubmitting}
         >
           <Text
             style={[styles.secondaryButtonText, { color: themeColors.text }]}
@@ -52,9 +62,14 @@ export function ConfirmOrFeedback({
             styles.button,
             { backgroundColor: themeColors.buttonPrimary },
           ]}
-          onPress={onConfirm}
+          onPress={handleConfirm}
+          disabled={isSubmitting}
         >
-          <Text style={styles.buttonText}>{confirmText}</Text>
+          {isSubmitting ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.buttonText}>{confirmText}</Text>
+          )}
         </Pressable>
       </View>
 
@@ -71,9 +86,8 @@ export function ConfirmOrFeedback({
           >
             <Text style={styles.modalTitle}>Provide Feedback</Text>
             <Text style={styles.modalSubtitle}>
-              Tell the AI what you'd like to change about this proposal.
+              Tell the AI what you'd like to change.
             </Text>
-
             <TextInput
               style={[
                 styles.input,
@@ -86,7 +100,6 @@ export function ConfirmOrFeedback({
               multiline
               autoFocus
             />
-
             <View style={styles.modalButtons}>
               <Pressable onPress={() => setIsModalVisible(false)}>
                 <Text
@@ -97,7 +110,7 @@ export function ConfirmOrFeedback({
               </Pressable>
               <Pressable
                 onPress={handleSubmitFeedback}
-                disabled={!feedbackText.trim()}
+                disabled={!feedbackText.trim() || isSubmitting}
               >
                 <Text
                   style={{
@@ -119,7 +132,7 @@ export function ConfirmOrFeedback({
 
 const styles = StyleSheet.create({
   container: { backgroundColor: "transparent" },
-  actions: { flexDirection: "row", gap: 12, paddingTop: 10 },
+  actions: { flexDirection: "row", gap: 12, paddingTop: 10, paddingBottom: 20 },
   button: {
     flex: 1,
     height: 56,

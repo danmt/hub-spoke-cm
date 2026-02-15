@@ -40,8 +40,6 @@ export default function HubsScreen() {
       const hubItems: HubItem[] = await Promise.all(
         hubIds.map(async (id) => {
           try {
-            const workspaceDir =
-              WorkspaceManager.getWorkspaceUri(activeWorkspace);
             const hubPath = `${workspaceDir.uri}/posts/${id}`;
             const parsed = await IoService.readHub(hubPath);
             const canFill = />\s*\*\*?TODO:?\*?\s*/i.test(parsed.content);
@@ -129,13 +127,15 @@ export default function HubsScreen() {
                 style={[
                   styles.actionBtn,
                   {
-                    backgroundColor: themeColors.buttonPrimary,
+                    backgroundColor: item.canFill
+                      ? themeColors.buttonPrimary
+                      : "#888",
                     borderWidth: 0,
                   },
                 ]}
                 onPress={() =>
                   router.push({
-                    pathname: "/(tabs)/hubs/fill",
+                    pathname: "/hubs/fill",
                     params: { id: item.id },
                   })
                 }

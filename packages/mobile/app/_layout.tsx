@@ -21,7 +21,7 @@ import {
 } from "@hub-spoke/core";
 
 import { MobileIoProvider } from "../providers/MobileIoProvider";
-import { MobileLoggerProvider } from "../providers/MobileLoggerProvider"; // See note below
+import { MobileLoggerProvider } from "../providers/MobileLoggerProvider";
 import { MobileRegistryProvider } from "../providers/MobileRegistryProvider";
 
 import { useColorScheme } from "@/components/useColorScheme";
@@ -82,7 +82,6 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
-    // Hide splash only when fonts AND core logic are ready
     if (loaded && isReady) {
       SplashScreen.hideAsync();
     }
@@ -105,6 +104,25 @@ function RootLayoutNav() {
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+        {/* Step 3: Registration of top-level Action routes */}
+        <Stack.Screen
+          name="hubs/new"
+          options={{
+            presentation: "fullScreenModal",
+            headerShown: false,
+            gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="hubs/fill"
+          options={{
+            presentation: "fullScreenModal",
+            headerShown: false,
+            gestureEnabled: false,
+          }}
+        />
+
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
     </ThemeProvider>
