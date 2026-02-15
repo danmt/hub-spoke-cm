@@ -146,7 +146,7 @@ export default function HubsScreen() {
 
       <Pressable
         style={[styles.fab, { backgroundColor: themeColors.buttonPrimary }]}
-        onPress={() => router.push("/new-hub")}
+        onPress={() => router.push("/hubs/new")}
       >
         <FontAwesome name="plus" size={24} color="#fff" />
       </Pressable>

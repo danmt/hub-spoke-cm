@@ -73,10 +73,6 @@ export default function NewHubScreen() {
       const workspaceRoot = workspaceDir.uri;
 
       const artifacts = await RegistryService.getAllArtifacts(workspaceRoot);
-
-      console.log(artifacts);
-      console.log("ALKOOOOOOOOOOOOOOOO");
-
       const agents = RegistryService.initializeAgents(
         secret.apiKey,
         config.model!,

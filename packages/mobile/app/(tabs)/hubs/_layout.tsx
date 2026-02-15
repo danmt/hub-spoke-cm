@@ -28,6 +28,14 @@ export default function HubsLayout() {
           headerShown: true,
         }}
       />
+
+      <Stack.Screen
+        name="new"
+        options={{
+          title: "Create New Hub",
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }
