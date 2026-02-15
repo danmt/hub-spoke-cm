@@ -21,7 +21,12 @@ export async function executeMobileFillAction(
   filePath: string,
   handlers: {
     ask: AskHandler;
-    onStatus: (message: string, agentId?: string, phase?: string) => void;
+    onStatus: (
+      message: string,
+      sectionId: string,
+      agentId?: string,
+      phase?: string,
+    ) => void;
   },
 ): Promise<void> {
   const sectionIds = Object.keys(sections);
@@ -38,12 +43,13 @@ export async function executeMobileFillAction(
   const fillAction = new FillAction(frontmatter.personaId, agents)
     .onStart((id) => {
       // Basic initialization status
-      handlers.onStatus(`Initializing section: ${id}`);
+      handlers.onStatus(`Initializing section: ${id}`, id);
     })
     .onWriting((data) => {
       // Phase 1: Neutral technical drafting
       handlers.onStatus(
-        `Drafting technical foundation...`,
+        `Writing section ${data.id}...`,
+        data.id,
         data.writerId,
         "writing",
       );
@@ -51,7 +57,8 @@ export async function executeMobileFillAction(
     .onRephrasing((data) => {
       // Phase 2: Persona-specific voice application
       handlers.onStatus(
-        `Applying ${data.personaId} style...`,
+        `Styling section ${data.id}...`,
+        data.id,
         data.personaId,
         "styling",
       );

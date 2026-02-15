@@ -47,6 +47,7 @@ export default function FillHubScreen() {
     id: string;
     model: string;
     phase?: string;
+    sectionId?: string;
   } | null>(null);
   const [hubData, setHubData] = useState<ParsedFile | null>(null);
   const [hubPathUri, setHubPathUri] = useState<string>("");
@@ -79,10 +80,28 @@ export default function FillHubScreen() {
     };
   }, [hubData]);
 
+  // Dynamically calculate remaining based on active section
+  const remainingCount = useMemo(() => {
+    if (!activeAgent?.sectionId) return sections.pending.length;
+    const index = sections.pending.indexOf(activeAgent.sectionId);
+    return index === -1
+      ? sections.pending.length
+      : sections.pending.length - index;
+  }, [sections.pending, activeAgent?.sectionId]);
+
+  const handleFinish = () => {
+    // By using navigate instead of push/replace after dismiss,
+    // Expo Router handles the transition back into the existing stack context properly.
+    router.dismissAll();
+    router.navigate({
+      pathname: "/(tabs)/hubs/details",
+      params: { id: hubData?.frontmatter.hubId },
+    });
+  };
+
   const startFilling = async () => {
     if (!activeWorkspace || !hubData) return;
 
-    // Lock into processing state immediately
     setState("PROCESSING");
     setStatusMessage("Initializing AI Orchestrator...");
 
@@ -106,21 +125,19 @@ export default function FillHubScreen() {
             await Vibe.handoff();
             setState("REVIEWING");
             const response = await ask(type, data);
-
-            // Critical: Immediately set back to PROCESSING after approval
-            // This prevents the screen from bouncing back to IDLE
             setState("PROCESSING");
             setStatusMessage("Submitting approval...");
-
             return response;
           },
-          onStatus: (msg, agentId, phase) => {
-            // Ensure we are in PROCESSING even if coming from a callback
+          onStatus: (msg, sectionId, agentId, phase) => {
             setState("PROCESSING");
             setStatusMessage(msg);
-            if (agentId) {
-              setActiveAgent({ id: agentId, model: config.model!, phase });
-            }
+            setActiveAgent({
+              id: agentId || "Filler",
+              model: config.model!,
+              phase,
+              sectionId,
+            });
           },
         },
       );
@@ -140,7 +157,7 @@ export default function FillHubScreen() {
         model={activeAgent.model}
         phase={activeAgent.phase}
         status={statusMessage}
-        progressText={`${sections.pending.length} SECTIONS REMAINING`}
+        progressText={`${remainingCount} SECTIONS REMAINING`}
         color={activeAgent.phase === "styling" ? "#a832a4" : themeColors.tint}
       />
     );
@@ -177,12 +194,7 @@ export default function FillHubScreen() {
               styles.primaryButton,
               { backgroundColor: themeColors.buttonPrimary },
             ]}
-            onPress={() =>
-              router.replace({
-                pathname: "/(tabs)/hubs/details",
-                params: { id: hubData?.frontmatter.hubId },
-              })
-            }
+            onPress={handleFinish}
           >
             <Text style={styles.btnText}>View Finished Hub</Text>
           </Pressable>
