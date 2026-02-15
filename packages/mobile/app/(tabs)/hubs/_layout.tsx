@@ -36,6 +36,14 @@ export default function HubsLayout() {
           headerShown: false,
         }}
       />
+
+      <Stack.Screen
+        name="fill"
+        options={{
+          title: "Fill Hub",
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

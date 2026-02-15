@@ -133,7 +133,12 @@ export default function HubsScreen() {
                     borderWidth: 0,
                   },
                 ]}
-                onPress={() => console.log("Fill placeholder")}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(tabs)/hubs/fill",
+                    params: { id: item.id },
+                  })
+                }
                 disabled={!item.canFill}
               >
                 <FontAwesome name="magic" size={14} color="#fff" />

@@ -158,7 +158,12 @@ export default function HubDetailsScreen() {
               styles.fillButton,
               { backgroundColor: themeColors.buttonPrimary },
             ]}
-            onPress={() => console.log("Fill action placeholder")}
+            onPress={() =>
+              router.push({
+                pathname: "/(tabs)/hubs/fill",
+                params: { id: metadata.hubId },
+              })
+            }
           >
             <FontAwesome name="magic" size={18} color="#fff" />
             <Text style={styles.fillButtonText}>Fill Empty Sections</Text>

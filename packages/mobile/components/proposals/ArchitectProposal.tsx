@@ -50,7 +50,7 @@ export function ArchitectProposal({ data, onResolve }: Props) {
 
       {/* Shared interaction component with the feedback modal logic */}
       <ConfirmOrFeedback
-        confirmText="Approve Plan"
+        confirmText="🚀 Approve"
         onConfirm={() => onResolve({ action: "proceed" })}
         onFeedback={(text) => onResolve({ action: "feedback", feedback: text })}
       />
@@ -59,7 +59,7 @@ export function ArchitectProposal({ data, onResolve }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  container: { flex: 1, padding: 20, paddingTop: 80 },
   title: { fontSize: 28, fontWeight: "bold", marginBottom: 20 },
   scroll: { flex: 1 },
   message: { fontSize: 16, lineHeight: 24, marginBottom: 24, opacity: 0.8 },

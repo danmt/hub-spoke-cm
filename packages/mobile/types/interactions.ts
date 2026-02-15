@@ -5,6 +5,8 @@ import {
   AssemblerInteractionResponse,
   PersonaInteractionResponse,
   PersonaResponse,
+  WriterInteractionResponse,
+  WriterResponse,
 } from "@hub-spoke/core";
 
 /**
@@ -22,6 +24,10 @@ export interface InteractionMap {
   persona: {
     data: PersonaResponse;
     response: PersonaInteractionResponse;
+  };
+  writer: {
+    data: WriterResponse;
+    response: WriterInteractionResponse;
   };
   retry: {
     data: Error;
