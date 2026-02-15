@@ -77,6 +77,7 @@ export interface RegistryProvider {
 
 export class RegistryService {
   private static provider: RegistryProvider | null = null;
+  private static cachedArtifacts: Artifact[] = [];
 
   static setProvider(provider: RegistryProvider): void {
     this.provider = provider;
@@ -85,7 +86,7 @@ export class RegistryService {
   /**
    * Fetches all artifacts from the workspace.
    */
-  static async getAllArtifacts(workspaceRoot: string): Promise<Artifact[]> {
+  static async sync(workspaceRoot: string): Promise<Artifact[]> {
     if (!this.provider) {
       throw new Error("RegistryService: RegistryProvider not registered.");
     }
@@ -150,7 +151,18 @@ export class RegistryService {
         error: e.message,
       });
     }
+
     return allArtifacts;
+  }
+
+  static getCachedArtifacts(): Artifact[] {
+    return this.cachedArtifacts;
+  }
+
+  static async getAllArtifacts(workspaceRoot: string): Promise<Artifact[]> {
+    if (this.cachedArtifacts.length > 0) return this.cachedArtifacts;
+    this.cachedArtifacts = await this.sync(workspaceRoot);
+    return this.cachedArtifacts;
   }
 
   static initializeAgents(
