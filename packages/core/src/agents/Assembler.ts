@@ -95,7 +95,7 @@ export class Assembler {
       [BRIDGE]Context of the concepts already covered so far[/BRIDGE]
       [/COMPONENT]
 
-      Remember: Every [COMPONENT] must include [ID], [HEADER], [INTENT], [WRITER_ID], and [BRIDGE] tags.
+      Remember: Every [COMPONENT] must include [ID], [HEADER], [INTENT], [WRITER_ID], and [BRIDGE] tags. Always include a closing tag.
     `.trim();
   }
 
@@ -167,8 +167,6 @@ export class Assembler {
       history: this.history,
       apiKey: this.apiKey,
     });
-
-    console.log(text);
 
     this.history.push(
       { role: "user", parts: [{ text: prompt }] },
