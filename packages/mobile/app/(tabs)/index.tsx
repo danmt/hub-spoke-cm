@@ -3,8 +3,9 @@ import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
 import { useWorkspace } from "@/services/WorkspaceContext";
+import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { FontAwesome } from "@expo/vector-icons";
-import { Artifact, RegistryService } from "@hub-spoke/core";
+import { Artifact, IoService, RegistryService } from "@hub-spoke/core";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -21,18 +22,33 @@ export default function HomeScreen() {
   const router = useRouter();
 
   const [agents, setAgents] = useState<Artifact[]>([]);
+  const [hubCount, setHubCount] = useState(0);
 
   useEffect(() => {
-    if (!isLoading && activeWorkspace) {
-      // Access the static cache primed by the WorkspaceProvider
-      const cached = RegistryService.getCachedArtifacts();
-      setAgents(cached);
+    async function syncDashboardData() {
+      if (!isLoading && activeWorkspace) {
+        // 1. Load Agents from primed cache
+        const cachedAgents = RegistryService.getCachedArtifacts();
+        setAgents(cachedAgents);
 
-      // Verification log as requested
-      console.log(
-        `🏠 Dashboard: [${activeWorkspace}] loaded with ${cached.length} agents.`,
-      );
+        // 2. Load Hub Count using the absolute Workspace URI
+        try {
+          const workspaceDir =
+            WorkspaceManager.getWorkspaceUri(activeWorkspace);
+          const hubIds = await IoService.findAllHubsInWorkspace(
+            workspaceDir.uri,
+          );
+          setHubCount(hubIds.length);
+        } catch (err) {
+          console.error("Dashboard sync error:", err);
+          setHubCount(0);
+        }
+
+        console.log(`🏠 Dashboard: [${activeWorkspace}] synced.`);
+      }
     }
+
+    syncDashboardData();
   }, [activeWorkspace, isLoading]);
 
   if (isLoading) {
@@ -82,7 +98,7 @@ export default function HomeScreen() {
     >
       <View style={styles.header}>
         <View style={{ backgroundColor: "transparent" }}>
-          <Text style={styles.title}>Dashboard</Text>
+          <Text style={styles.title}>Dashboard 2</Text>
           <View style={styles.badgeContainer}>
             <Text
               style={[
@@ -97,12 +113,6 @@ export default function HomeScreen() {
             </Text>
           </View>
         </View>
-        <Pressable
-          style={[styles.fab, { backgroundColor: themeColors.buttonPrimary }]}
-          onPress={() => router.push("/new-hub")}
-        >
-          <FontAwesome name="plus" size={20} color="#fff" />
-        </Pressable>
       </View>
 
       <View
@@ -111,7 +121,42 @@ export default function HomeScreen() {
         darkColor="rgba(255,255,255,0.1)"
       />
 
-      {/* Agents Summary Section */}
+      {/* Production Layer Summary */}
+      <Text style={styles.sectionTitle}>Content Strategy</Text>
+      <View
+        style={[
+          styles.summaryCard,
+          { backgroundColor: themeColors.cardBackground, marginBottom: 20 },
+        ]}
+      >
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{hubCount}</Text>
+            <Text style={styles.statLabel}>Active Hubs</Text>
+          </View>
+          <View style={styles.statItem}>
+            <View
+              style={[
+                styles.iconCircle,
+                { backgroundColor: themeColors.tint + "20" },
+              ]}
+            >
+              <FontAwesome name="sitemap" size={20} color={themeColors.tint} />
+            </View>
+          </View>
+        </View>
+
+        <Pressable
+          style={styles.viewMoreButton}
+          onPress={() => router.push("/hubs")}
+        >
+          <Text style={{ color: themeColors.tint, fontWeight: "bold" }}>
+            Manage Content Hubs →
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* Intelligence Layer Section */}
       <Text style={styles.sectionTitle}>Intelligence Layer</Text>
       <View
         style={[
@@ -149,11 +194,6 @@ export default function HomeScreen() {
           </Text>
         </Pressable>
       </View>
-
-      <Text style={styles.sectionTitle}>Content Hubs</Text>
-      <View style={styles.emptyHubs}>
-        <Text style={styles.emptyText}>No hubs created yet.</Text>
-      </View>
     </ScrollView>
   );
 }
@@ -187,39 +227,38 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 32, fontWeight: "bold" },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: "900",
     marginTop: 30,
     marginBottom: 15,
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    opacity: 0.5,
   },
   separator: { marginVertical: 25, height: 1, width: "100%" },
   summaryCard: { padding: 20, borderRadius: 20 },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-around",
+    alignItems: "center",
     marginBottom: 20,
     backgroundColor: "transparent",
   },
   statItem: { alignItems: "center", backgroundColor: "transparent" },
-  statNumber: { fontSize: 24, fontWeight: "bold" },
+  statNumber: { fontSize: 28, fontWeight: "bold" },
   statLabel: { fontSize: 12, opacity: 0.6, marginTop: 4 },
+  iconCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   viewMoreButton: {
     alignItems: "center",
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: "rgba(128,128,128,0.1)",
-  },
-  fab: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
   },
   statusText: { marginTop: 20, fontSize: 16, opacity: 0.6 },
   emptyText: {
@@ -228,7 +267,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
   },
-  emptyHubs: { padding: 40, alignItems: "center", opacity: 0.5 },
   primaryButton: {
     height: 50,
     borderRadius: 12,

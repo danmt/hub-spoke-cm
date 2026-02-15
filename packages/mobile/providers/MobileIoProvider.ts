@@ -1,24 +1,33 @@
+// packages/mobile/providers/MobileIoProvider.ts
 import { IoProvider } from "@hub-spoke/core";
-import { Directory, File } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 
 /**
  * Mobile implementation of the IoProvider using expo-file-system.
- * Optimized for dynamic workspace switching and idempotent directory creation.
+ * Optimized for dynamic workspace switching and absolute URI enforcement.
  */
 export class MobileIoProvider implements IoProvider {
   /**
-   * Joins path parts using the Directory constructor.
+   * Joins path parts. If the first part isn't an absolute URI,
+   * it defaults to the document directory.
    */
   join(...parts: string[]): string {
-    if (parts.length === 0) return "";
-    // Normalize and join path parts into a URI string
-    return new Directory(parts[0], ...parts.slice(1)).uri;
+    const filtered = parts.filter((p) => p !== "");
+    if (filtered.length === 0) return Paths.document.uri;
+
+    // If the first part isn't already a file URI, make it absolute
+    const base = filtered[0].startsWith("file://")
+      ? filtered[0]
+      : `${Paths.document.uri}/${filtered[0]}`;
+
+    return new Directory(base, ...filtered.slice(1)).uri;
   }
 
   /**
    * Returns the parent directory URI.
    */
   dirname(p: string): string {
+    if (!p || p === "" || p === "file:///") return Paths.document.uri;
     const dir = new Directory(p);
     return dir.parentDirectory?.uri ?? p;
   }
@@ -27,22 +36,33 @@ export class MobileIoProvider implements IoProvider {
    * Returns the name of the file or directory.
    */
   basename(p: string): string {
-    // Both File and Directory instances have a 'name' property
+    if (!p || p === "") return "";
     return new File(p).name;
   }
 
   /**
    * Resolves paths into absolute file:// URIs.
+   * Defaults to document directory if no valid path is provided.
    */
   resolve(...parts: string[]): string {
-    return new Directory(...parts).uri;
+    const filtered = parts.filter((p) => p !== "");
+    if (filtered.length === 0) return Paths.document.uri;
+
+    const base = filtered[0].startsWith("file://")
+      ? filtered[0]
+      : Paths.document.uri;
+    const extra = filtered[0].startsWith("file://")
+      ? filtered.slice(1)
+      : filtered;
+
+    return new Directory(base, ...extra).uri;
   }
 
   /**
    * Checks if a file or directory exists.
-   * Updated to check both types to prevent "create" rejections.
    */
   async exists(p: string): Promise<boolean> {
+    if (!p || p === "") return false;
     const file = new File(p);
     const dir = new Directory(p);
     return file.exists || dir.exists;
@@ -64,9 +84,8 @@ export class MobileIoProvider implements IoProvider {
    */
   async writeFile(p: string, content: string): Promise<void> {
     const file = new File(p);
-
-    // Ensure the parent directory exists first
     const parentDir = file.parentDirectory;
+
     if (parentDir && !parentDir.exists) {
       parentDir.create();
     }
@@ -78,7 +97,7 @@ export class MobileIoProvider implements IoProvider {
   }
 
   /**
-   * Reads directory contents and maps to the Core interface.
+   * Reads directory contents.
    */
   async readDir(p: string) {
     const dir = new Directory(p);
@@ -94,11 +113,9 @@ export class MobileIoProvider implements IoProvider {
 
   /**
    * Creates a directory idempotently.
-   * recursive=true is handled natively by the Directory(path).create() method.
    */
   async makeDir(p: string, _recursive = true): Promise<void> {
     const dir = new Directory(p);
-
     if (!dir.exists) {
       dir.create();
     }
