@@ -1,9 +1,12 @@
-// packages/mobile/app/(tabs)/hubs/fill.tsx
+import { ConfirmRetry } from "@/components/proposals/ConfirmRetry";
+import { PersonaProposal } from "@/components/proposals/PersonaProposal";
+import { WriterProposal } from "@/components/proposals/WriterProposal";
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
 import { useInteractionDeferrer } from "@/hooks/useInteractionDeferrer";
 import { executeMobileFillAction } from "@/presets/executeMobileFillAction";
+import { ExportService } from "@/services/ExportService";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { FontAwesome } from "@expo/vector-icons";
@@ -19,14 +22,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
 } from "react-native";
-
-import { ConfirmRetry } from "@/components/proposals/ConfirmRetry";
-import { PersonaProposal } from "@/components/proposals/PersonaProposal";
-import { WriterProposal } from "@/components/proposals/WriterProposal";
 
 type ScreenState = "IDLE" | "PROCESSING" | "REVIEWING" | "ERROR" | "DONE";
 
@@ -41,12 +41,37 @@ export default function FillHubScreen() {
 
   const [state, setState] = useState<ScreenState>("IDLE");
   const [statusMessage, setStatusMessage] = useState("");
+  const [activeAgent, setActiveAgent] = useState<{
+    id: string;
+    model: string;
+  } | null>(null);
   const [hubData, setHubData] = useState<ParsedFile | null>(null);
+  const [hubRootDir, setHubRootDir] = useState<string>("");
   const [hubPathUri, setHubPathUri] = useState<string>("");
 
-  const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
+  const pulseAnim = useMemo(() => new Animated.Value(1), []);
 
-  // Initial Load: Just get the data for preview
+  useEffect(() => {
+    if (state === "PROCESSING") {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 0.5,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [state]);
+
   useEffect(() => {
     async function loadHubForPreview() {
       if (!activeWorkspace || !id) return;
@@ -54,9 +79,9 @@ export default function FillHubScreen() {
         const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
         const hubDir = new Directory(workspaceDir, "posts", id);
         const hubFile = new File(hubDir, "hub.md");
-
         const hub = await IoService.readHub(hubDir.uri);
         setHubData(hub);
+        setHubRootDir(hubDir.uri);
         setHubPathUri(hubFile.uri);
       } catch (err: any) {
         setStatusMessage(err.message);
@@ -66,23 +91,24 @@ export default function FillHubScreen() {
     loadHubForPreview();
   }, [id, activeWorkspace]);
 
-  const pendingSections = useMemo(() => {
-    if (!hubData) return [];
-    return Object.keys(hubData.sections).filter((sid) =>
-      TODO_REGEX.test(hubData.sections[sid]),
-    );
+  const sections = useMemo(() => {
+    if (!hubData) return { completed: [], pending: [] };
+    const all = Object.keys(hubData.sections);
+    const todoRegex = />\s*\*\*?TODO:?\*?\s*(.*)/i;
+    return {
+      completed: all.filter((s) => !todoRegex.test(hubData.sections[s])),
+      pending: all.filter((s) => todoRegex.test(hubData.sections[s])),
+    };
   }, [hubData]);
 
   const startFilling = async () => {
     if (!activeWorkspace || !hubData) return;
-
     setState("PROCESSING");
     try {
       const config = await ConfigService.getConfig();
       const secret = await SecretService.getSecret();
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
       const artifacts = await RegistryService.getAllArtifacts(workspaceDir.uri);
-
       const agents = RegistryService.initializeAgents(
         secret.apiKey!,
         config.model!,
@@ -102,19 +128,21 @@ export default function FillHubScreen() {
           onStatus: (msg) => {
             setState("PROCESSING");
             setStatusMessage(msg);
+            // Extract Agent ID if possible from message or use frontmatter
+            setActiveAgent({
+              id: hubData.frontmatter.personaId,
+              model: config.model!,
+            });
           },
         },
       );
-
       setState("DONE");
-      setTimeout(() => router.back(), 1500);
     } catch (err: any) {
       setStatusMessage(err.message);
       setState("ERROR");
     }
   };
 
-  // 1. Loading state for initial data fetch
   if (!hubData && state === "IDLE") {
     return (
       <View style={styles.centered}>
@@ -123,33 +151,95 @@ export default function FillHubScreen() {
     );
   }
 
-  // 2. IDLE: Preview state
+  if (state === "DONE") {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.victoryEmoji}>🎉</Text>
+        <Text style={styles.title}>Generation Complete</Text>
+        <Text style={styles.description}>
+          Your content hub has been personified and filled.
+        </Text>
+
+        <View style={styles.victoryActions}>
+          <Pressable
+            style={[
+              styles.primaryButton,
+              { backgroundColor: themeColors.buttonPrimary },
+            ]}
+            onPress={() =>
+              router.replace({
+                pathname: "/(tabs)/hubs/details",
+                params: { id: hubData?.frontmatter.hubId },
+              })
+            }
+          >
+            <Text style={styles.btnText}>View Finished Hub</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.secondaryButton, { borderColor: themeColors.tint }]}
+            onPress={() => ExportService.exportHub(hubRootDir)}
+          >
+            <FontAwesome name="share" size={16} color={themeColors.tint} />
+            <Text
+              style={{
+                color: themeColors.tint,
+                fontWeight: "bold",
+                marginLeft: 8,
+              }}
+            >
+              Export / Share
+            </Text>
+          </Pressable>
+
+          <Pressable onPress={() => router.replace("/hubs")}>
+            <Text style={{ marginTop: 20, opacity: 0.5, fontWeight: "600" }}>
+              Back to List
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   if (state === "IDLE" && hubData) {
     return (
       <View style={styles.container}>
         <ScrollView contentContainerStyle={styles.idleContent}>
           <Text style={styles.title}>Fill Hub</Text>
-          <Text style={styles.description}>
-            The AI will generate content for {pendingSections.length} pending
-            sections using the {hubData.frontmatter.personaId} persona.
-          </Text>
-
-          <View
-            style={[
-              styles.previewCard,
-              { backgroundColor: themeColors.cardBackground },
-            ]}
-          >
-            <Text style={styles.previewLabel}>TOPIC</Text>
-            <Text style={styles.previewValue}>{hubData.frontmatter.topic}</Text>
-            <Text style={styles.previewLabel}>GOAL</Text>
-            <Text style={styles.previewValue}>{hubData.frontmatter.goal}</Text>
+          <View style={styles.personaBadge}>
+            <Text style={styles.personaBadgeText}>
+              Styling with: {hubData.frontmatter.personaId}
+            </Text>
           </View>
 
-          <Text style={styles.sectionHeader}>Queue</Text>
-          {pendingSections.map((sid) => (
+          <View style={styles.statsGrid}>
+            <View
+              style={[
+                styles.statBox,
+                { backgroundColor: themeColors.cardBackground },
+              ]}
+            >
+              <Text style={styles.statNum}>{sections.completed.length}</Text>
+              <Text style={styles.statLab}>Completed</Text>
+            </View>
+            <View
+              style={[
+                styles.statBox,
+                { backgroundColor: themeColors.cardBackground },
+              ]}
+            >
+              <Text style={[styles.statNum, { color: "#ffcc00" }]}>
+                {sections.pending.length}
+              </Text>
+              <Text style={styles.statLab}>Pending</Text>
+            </View>
+          </View>
+
+          <Text style={styles.sectionHeader}>Pending Items</Text>
+          {sections.pending.map((sid) => (
             <View key={sid} style={styles.queueItem}>
-              <FontAwesome name="clock-o" size={14} color={themeColors.tint} />
+              <FontAwesome name="circle-o" size={14} color="#ffcc00" />
               <Text style={styles.queueText}>
                 {hubData.frontmatter.blueprint[sid].header}
               </Text>
@@ -159,28 +249,19 @@ export default function FillHubScreen() {
 
         <View style={styles.footer}>
           <Pressable
-            style={[styles.secondaryButton, { borderColor: themeColors.tint }]}
-            onPress={() => router.back()}
-          >
-            <Text style={{ color: themeColors.tint, fontWeight: "bold" }}>
-              Cancel
-            </Text>
-          </Pressable>
-          <Pressable
             style={[
               styles.primaryButton,
               { backgroundColor: themeColors.buttonPrimary },
             ]}
             onPress={startFilling}
           >
-            <Text style={styles.btnText}>Start Generation</Text>
+            <Text style={styles.btnText}>Start Filling</Text>
           </Pressable>
         </View>
       </View>
     );
   }
 
-  // 3. Reviewing Interaction state
   if (state === "REVIEWING" && pendingInteraction) {
     const { type, data } = pendingInteraction;
     return (
@@ -198,32 +279,21 @@ export default function FillHubScreen() {
     );
   }
 
-  // 4. Processing / Done / Error state
   return (
     <View style={styles.container}>
       <View style={styles.processingContent}>
-        {state === "PROCESSING" && (
-          <ActivityIndicator size="large" color={themeColors.tint} />
+        {activeAgent && (
+          <View style={styles.agentWatermark}>
+            <FontAwesome name="bolt" size={10} color={themeColors.tint} />
+            <Text style={styles.agentWatermarkText}>
+              {activeAgent.id} | {activeAgent.model}
+            </Text>
+          </View>
         )}
-        {state === "DONE" && <Text style={{ fontSize: 40 }}>✅</Text>}
-        <Text style={styles.statusText}>
-          {state === "DONE" ? "Hub successfully filled!" : statusMessage}
-        </Text>
-        {state === "ERROR" && (
-          <Pressable
-            style={[
-              styles.primaryButton,
-              {
-                backgroundColor: themeColors.buttonPrimary,
-                marginTop: 20,
-                width: "100%",
-              },
-            ]}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.btnText}>Go Back</Text>
-          </Pressable>
-        )}
+        <ActivityIndicator size="large" color={themeColors.tint} />
+        <Animated.Text style={[styles.statusText, { opacity: pulseAnim }]}>
+          {statusMessage}
+        </Animated.Text>
       </View>
     </View>
   );
@@ -231,22 +301,36 @@ export default function FillHubScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  idleContent: { padding: 25, paddingTop: 60 },
-  title: { fontSize: 32, fontWeight: "bold", marginBottom: 10 },
-  description: { fontSize: 16, opacity: 0.6, lineHeight: 24, marginBottom: 30 },
-  previewCard: { padding: 20, borderRadius: 16, marginBottom: 30 },
-  previewLabel: {
-    fontSize: 10,
-    fontWeight: "bold",
-    opacity: 0.4,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
   },
-  previewValue: {
+  idleContent: { padding: 25, paddingTop: 60 },
+  title: { fontSize: 28, fontWeight: "bold", marginBottom: 10 },
+  description: {
     fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 15,
+    opacity: 0.6,
+    lineHeight: 24,
+    marginBottom: 30,
+    textAlign: "center",
+  },
+  personaBadge: {
+    backgroundColor: "rgba(50, 168, 82, 0.15)",
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 20,
+    alignSelf: "flex-start",
+  },
+  personaBadgeText: { color: "#32a852", fontWeight: "bold", fontSize: 12 },
+  statsGrid: { flexDirection: "row", gap: 15, marginBottom: 30 },
+  statBox: { flex: 1, padding: 15, borderRadius: 16, alignItems: "center" },
+  statNum: { fontSize: 24, fontWeight: "bold" },
+  statLab: {
+    fontSize: 10,
+    opacity: 0.5,
+    textTransform: "uppercase",
     marginTop: 4,
   },
   sectionHeader: {
@@ -263,26 +347,26 @@ const styles = StyleSheet.create({
   },
   queueText: { fontSize: 15, fontWeight: "500", opacity: 0.7 },
   footer: {
-    flexDirection: "row",
     padding: 20,
-    gap: 12,
     borderTopWidth: 1,
     borderTopColor: "rgba(128,128,128,0.1)",
   },
   primaryButton: {
-    flex: 2,
     height: 56,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
   },
   secondaryButton: {
-    flex: 1,
     height: 56,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
+    flexDirection: "row",
+    width: "100%",
+    marginTop: 12,
   },
   btnText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
   processingContent: {
@@ -295,6 +379,23 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontSize: 16,
     textAlign: "center",
-    opacity: 0.8,
+    fontWeight: "600",
   },
+  agentWatermark: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(128,128,128,0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 30,
+  },
+  agentWatermarkText: {
+    fontSize: 10,
+    fontWeight: "bold",
+    marginLeft: 6,
+    opacity: 0.6,
+  },
+  victoryEmoji: { fontSize: 60, marginBottom: 20 },
+  victoryActions: { width: "100%", marginTop: 30 },
 });

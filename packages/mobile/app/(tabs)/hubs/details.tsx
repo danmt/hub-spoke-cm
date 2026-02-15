@@ -2,10 +2,12 @@
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
+import { ExportService } from "@/services/ExportService";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { FontAwesome } from "@expo/vector-icons";
 import { ContentFrontmatter, IoService } from "@hub-spoke/core";
+import { Directory } from "expo-file-system";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -27,17 +29,19 @@ export default function HubDetailsScreen() {
   const [sections, setSections] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [hubRootDir, setHubRootDir] = useState<string>("");
 
   useEffect(() => {
     async function loadHub() {
       if (!activeWorkspace || !id) return;
       try {
         const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-        const hubPath = `${workspaceDir.uri}/posts/${id}`;
-        const parsed = await IoService.readHub(hubPath);
+        const hubDir = new Directory(workspaceDir, "posts", id);
+        const { frontmatter, sections } = await IoService.readHub(hubDir.uri);
 
-        setMetadata(parsed.frontmatter);
-        setSections(parsed.sections);
+        setHubRootDir(hubDir.uri);
+        setMetadata(frontmatter);
+        setSections(sections);
       } catch (err) {
         console.error("Failed to load hub details:", err);
       } finally {
@@ -50,6 +54,15 @@ export default function HubDetailsScreen() {
   const toggleSection = (sectionId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedSection(expandedSection === sectionId ? null : sectionId);
+  };
+
+  const handleExport = async () => {
+    if (!hubRootDir) return;
+    try {
+      await ExportService.exportHub(hubRootDir);
+    } catch (err: any) {
+      console.error("Export failed:", err.message);
+    }
   };
 
   const hasTodo = Object.values(sections).some((content) =>
@@ -72,7 +85,7 @@ export default function HubDetailsScreen() {
         options={{
           title: metadata.title,
           headerRight: () => (
-            <Pressable onPress={() => console.log("Export action")}>
+            <Pressable onPress={handleExport}>
               <FontAwesome
                 name="share-square-o"
                 size={20}

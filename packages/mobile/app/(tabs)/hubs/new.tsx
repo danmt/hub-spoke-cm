@@ -1,9 +1,12 @@
+// packages/mobile/app/(tabs)/hubs/new.tsx
+import { FontAwesome } from "@expo/vector-icons";
 import { ConfigService, RegistryService, SecretService } from "@hub-spoke/core";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -38,6 +41,11 @@ export default function NewHubScreen() {
 
   const [state, setState] = useState<ScreenState>("IDLE");
   const [statusMessage, setStatusMessage] = useState("");
+  const [activeAgent, setActiveAgent] = useState<{
+    id: string;
+    model: string;
+  } | null>(null);
+  const [createdHubId, setCreatedHubId] = useState<string | null>(null);
 
   // Baseline Form State
   const [baseline, setBaseline] = useState({
@@ -46,6 +54,29 @@ export default function NewHubScreen() {
     audience: "",
     language: "English",
   });
+
+  const pulseAnim = useMemo(() => new Animated.Value(1), []);
+
+  useEffect(() => {
+    if (state === "PROCESSING") {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 0.4,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [state]);
 
   const startGeneration = async () => {
     if (!baseline.topic.trim()) {
@@ -80,9 +111,7 @@ export default function NewHubScreen() {
       );
       const manifest = RegistryService.toManifest(agents);
 
-      console.log(`manifest: ${manifest}`);
-
-      await executeMobileCreateHubAction(
+      const result = await executeMobileCreateHubAction(
         secret.apiKey,
         config.model!,
         manifest,
@@ -97,12 +126,19 @@ export default function NewHubScreen() {
           onStatus: (msg) => {
             setState("PROCESSING");
             setStatusMessage(msg);
+            // Dynamic watermark update based on the phase
+            setActiveAgent({
+              id: msg.includes("Architect")
+                ? "Architect"
+                : msg.match(/\((.*?)\)/)?.[1] || "Core",
+              model: config.model!,
+            });
           },
         },
       );
 
+      setCreatedHubId(result.assembly.blueprint.hubId);
       setState("DONE");
-      router.replace("/");
     } catch (err: any) {
       console.error(err);
       setStatusMessage(err.message);
@@ -110,17 +146,82 @@ export default function NewHubScreen() {
     }
   };
 
-  // 1. Processing View
-  if (state === "PROCESSING") {
+  // 1. DONE: The Victory Screen
+  if (state === "DONE") {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={themeColors.tint} />
-        <Text style={styles.statusText}>{statusMessage}</Text>
+        <Text style={styles.victoryEmoji}>🏗️</Text>
+        <Text style={styles.title}>Hub Architected!</Text>
+        <Text style={styles.description}>
+          The structure for "{baseline.topic}" is ready. Would you like to
+          generate the content now?
+        </Text>
+
+        <View style={styles.victoryActions}>
+          <Pressable
+            style={[
+              styles.primaryButton,
+              { backgroundColor: themeColors.buttonPrimary },
+            ]}
+            onPress={() =>
+              router.replace({
+                pathname: "/(tabs)/hubs/fill",
+                params: { id: createdHubId },
+              })
+            }
+          >
+            <FontAwesome name="magic" size={18} color="#fff" />
+            <Text style={styles.buttonText}>Fill Content Now</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.secondaryButton, { borderColor: themeColors.tint }]}
+            onPress={() =>
+              router.replace({
+                pathname: "/(tabs)/hubs/details",
+                params: { id: createdHubId },
+              })
+            }
+          >
+            <Text style={{ color: themeColors.tint, fontWeight: "bold" }}>
+              View Scaffold Only
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.replace("/hubs")}
+            style={{ marginTop: 20 }}
+          >
+            <Text style={{ opacity: 0.5, fontWeight: "600" }}>
+              Back to Hubs List
+            </Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
-  // 2. Reviewing View
+  // 2. Processing View with Agent Watermark and Pulse
+  if (state === "PROCESSING") {
+    return (
+      <View style={styles.centered}>
+        {activeAgent && (
+          <View style={styles.agentWatermark}>
+            <FontAwesome name="shield" size={10} color={themeColors.tint} />
+            <Text style={styles.agentWatermarkText}>
+              {activeAgent.id.toUpperCase()} | {activeAgent.model}
+            </Text>
+          </View>
+        )}
+        <ActivityIndicator size="large" color={themeColors.tint} />
+        <Animated.Text style={[styles.statusText, { opacity: pulseAnim }]}>
+          {statusMessage}
+        </Animated.Text>
+      </View>
+    );
+  }
+
+  // 3. Reviewing View (Modals/Proposals)
   if (state === "REVIEWING" && pendingInteraction) {
     const { type, data } = pendingInteraction;
     return (
@@ -141,12 +242,13 @@ export default function NewHubScreen() {
     );
   }
 
-  // 3. Error View
+  // 4. Error View
   if (state === "ERROR") {
     return (
       <View style={styles.centered}>
-        <Text style={[styles.title, { color: "#ff4444" }]}>
-          Generation Failed
+        <FontAwesome name="exclamation-triangle" size={50} color="#ff4444" />
+        <Text style={[styles.title, { color: "#ff4444", marginTop: 20 }]}>
+          Architect Failed
         </Text>
         <Text style={styles.errorText}>{statusMessage}</Text>
         <Pressable
@@ -166,7 +268,7 @@ export default function NewHubScreen() {
     );
   }
 
-  // 4. IDLE: The Baseline Form
+  // 5. IDLE: The Baseline Form
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -249,8 +351,19 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   formContent: { padding: 25, paddingTop: 60 },
-  title: { fontSize: 34, fontWeight: "bold", marginBottom: 10 },
-  description: { fontSize: 16, opacity: 0.6, lineHeight: 24, marginBottom: 30 },
+  title: {
+    fontSize: 32,
+    fontWeight: "bold",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  description: {
+    fontSize: 16,
+    opacity: 0.6,
+    lineHeight: 24,
+    marginBottom: 30,
+    textAlign: "center",
+  },
   inputGroup: { marginBottom: 25 },
   label: {
     fontSize: 12,
@@ -281,6 +394,36 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
+    flexDirection: "row",
+    gap: 12,
+  },
+  secondaryButton: {
+    height: 60,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    borderWidth: 1,
+    marginTop: 12,
   },
   buttonText: { color: "#fff", fontWeight: "bold", fontSize: 18 },
+  agentWatermark: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(128,128,128,0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 30,
+  },
+  agentWatermarkText: {
+    fontSize: 10,
+    fontWeight: "bold",
+    marginLeft: 6,
+    opacity: 0.6,
+    letterSpacing: 1,
+  },
+  victoryEmoji: { fontSize: 60, marginBottom: 20 },
+  victoryActions: { width: "100%", marginTop: 20 },
 });
