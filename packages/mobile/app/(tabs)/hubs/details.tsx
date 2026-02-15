@@ -1,4 +1,4 @@
-// packages/mobile/app/hub-details.tsx
+// packages/mobile/app/(tabs)/hubs/details.tsx
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
@@ -69,7 +69,19 @@ export default function HubDetailsScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen
-        options={{ title: metadata.title, headerRight: () => null }}
+        options={{
+          title: metadata.title,
+          headerRight: () => (
+            <Pressable onPress={() => console.log("Export action")}>
+              <FontAwesome
+                name="share-square-o"
+                size={20}
+                color={themeColors.tint}
+                style={{ marginRight: 15 }}
+              />
+            </Pressable>
+          ),
+        }}
       />
 
       <ScrollView contentContainerStyle={styles.content}>

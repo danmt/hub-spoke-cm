@@ -1,4 +1,4 @@
-// packages/mobile/app/(tabs)/hubs.tsx
+// packages/mobile/app/(tabs)/hubs/index.tsx
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
@@ -114,7 +114,7 @@ export default function HubsScreen() {
                 style={[styles.actionBtn, { borderColor: themeColors.tint }]}
                 onPress={() =>
                   router.push({
-                    pathname: "/hub-details",
+                    pathname: "/(tabs)/hubs/details",
                     params: { id: item.id },
                   })
                 }

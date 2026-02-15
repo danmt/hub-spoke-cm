@@ -53,6 +53,7 @@ export default function TabLayout() {
         name="hubs"
         options={{
           title: "Hubs",
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <TabBarIcon name="sitemap" color={color} />
           ),
