@@ -1,7 +1,7 @@
 // packages/mobile/services/WorkspaceContext.tsx
 import { MobileLoggerProvider } from "@/providers/MobileLoggerProvider";
 import { MobileRegistryProvider } from "@/providers/MobileRegistryProvider";
-import { Paths } from "expo-file-system";
+import { RegistryService } from "@hub-spoke/core";
 import React, {
   createContext,
   ReactNode,
@@ -26,35 +26,40 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [activeWorkspace, setActiveWorkspace] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function init() {
-      const ws = await WorkspaceStorage.getActiveWorkspace();
-      // Initialize core providers for the last saved workspace
-      const workspaceDir = WorkspaceManager.getWorkspaceUri(ws);
-      await WorkspaceManager.switchWorkspace(ws, {
-        logger: new MobileLoggerProvider(),
-        registry: new MobileRegistryProvider(workspaceDir.uri),
-      });
-      setActiveWorkspace(ws);
-      setIsLoading(false);
-    }
-    init();
-  }, []);
-
-  const switchWorkspace = async (id: string | undefined) => {
+  const loadWorkspaceData = async (id: string | undefined) => {
+    setIsLoading(true);
     if (!id) {
-      await WorkspaceManager.clearActiveWorkspace({
-        logger: new MobileLoggerProvider(),
-        registry: new MobileRegistryProvider(Paths.document.uri),
-      });
-    } else {
+      setActiveWorkspace(undefined);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
       const workspaceDir = WorkspaceManager.getWorkspaceUri(id);
+
+      // 1. Set providers first
       await WorkspaceManager.switchWorkspace(id, {
         logger: new MobileLoggerProvider(),
         registry: new MobileRegistryProvider(workspaceDir.uri),
       });
+
+      // 2. Await the sync before proceeding
+      await RegistryService.getAllArtifacts(workspaceDir.uri);
+
+      setActiveWorkspace(id);
+    } catch (err) {
+      console.error("Failed to load workspace data:", err);
+    } finally {
+      setIsLoading(false);
     }
-    setActiveWorkspace(id);
+  };
+
+  useEffect(() => {
+    WorkspaceStorage.getActiveWorkspace().then(loadWorkspaceData);
+  }, []);
+
+  const switchWorkspace = async (id: string | undefined) => {
+    await loadWorkspaceData(id);
   };
 
   return (

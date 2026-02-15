@@ -6,7 +6,7 @@ export default {
   light: {
     text: "#000",
     background: "#fff",
-    cardBackground: "#eee",
+    cardBackground: "#ddd",
     modalBackground: "#ddd",
     tint: tintColorLight,
     tabIconDefault: "#ccc",
@@ -16,7 +16,7 @@ export default {
   dark: {
     text: "#fff",
     background: "#000",
-    cardBackground: "#111",
+    cardBackground: "#222",
     modalBackground: "#222",
     tint: tintColorDark,
     tabIconDefault: "#ccc",
