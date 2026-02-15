@@ -1,6 +1,6 @@
 // packages/core/src/services/IoService.ts
-import matter from "gray-matter";
-import { ContentFrontmatter, FrontmatterSchema } from "../types/index.js";
+import { ContentFrontmatter } from "../types/index.js";
+import { ParserService } from "./ParserService.js";
 
 export interface HubContext {
   rootDir: string;
@@ -84,8 +84,8 @@ export class IoService {
     this.ensureProvider();
     const filePath = this.provider.join(hubRootDir, "hub.md");
     const content = await this.provider.readFile(filePath);
-    const { data } = matter(content);
-    return FrontmatterSchema.parse(data);
+    const { frontmatter } = ParserService.parseMarkdown(content);
+    return frontmatter;
   }
 
   static async writeMarkdown(filePath: string, content: string): Promise<void> {

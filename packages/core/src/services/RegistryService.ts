@@ -1,8 +1,10 @@
 // src/services/RegistryService.ts
-import matter from "gray-matter";
 import { Assembler } from "../agents/Assembler.js";
 import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
+import { parseAssemblerArtifact } from "../utils/parseAssemblerArtifact.js";
+import { parsePersonaArtifact } from "../utils/parsePersonaArtifact.js";
+import { parseWriterArtifact } from "../utils/parseWriterArtifact.js";
 import { LoggerService } from "./LoggerService.js";
 
 export type ArtifactType = "persona" | "writer" | "assembler";
@@ -104,33 +106,41 @@ export class RegistryService {
 
         for (const file of mdFiles) {
           const raw = await this.provider.readAgentFile(folder, file);
-          const { data, content } = matter(raw);
-          const id = data.id || this.provider.getIdentifier(file);
-
-          const base = {
-            id,
-            type,
-            description: data.description || "",
-            content: content.trim(),
-            model: data.model,
-          };
 
           if (type === "persona") {
+            const personaArtifact = parsePersonaArtifact(raw);
+
             allArtifacts.push({
-              ...base,
-              type: "persona",
-              name: data.name || id,
-              language: data.language || "English",
-              tone: data.tone || "Neutral",
-              accent: data.accent || "Standard",
-            } as PersonaArtifact);
+              id: personaArtifact.id,
+              type,
+              description: personaArtifact.description || "",
+              content: personaArtifact.content.trim(),
+              model: personaArtifact.model,
+              name: personaArtifact.name,
+              language: personaArtifact.language || "English",
+              tone: personaArtifact.tone || "Neutral",
+              accent: personaArtifact.accent || "Standard",
+            });
           } else if (type === "writer") {
-            allArtifacts.push({ ...base, type: "writer" } as WriterArtifact);
-          } else {
+            const writerArtifact = parseWriterArtifact(raw);
+
             allArtifacts.push({
-              ...base,
-              writerIds: data.writerIds || [],
-              type: "assembler",
+              type,
+              content: writerArtifact.content,
+              description: writerArtifact.description,
+              id: writerArtifact.id,
+              model: writerArtifact.model,
+            });
+          } else {
+            const assemblerArtifact = parseAssemblerArtifact(raw);
+
+            allArtifacts.push({
+              type,
+              content: assemblerArtifact.content,
+              description: assemblerArtifact.description,
+              id: assemblerArtifact.id,
+              model: assemblerArtifact.model,
+              writerIds: assemblerArtifact.writerIds,
             } as AssemblerArtifact);
           }
         }

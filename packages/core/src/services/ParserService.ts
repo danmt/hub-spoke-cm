@@ -1,11 +1,11 @@
 // src/services/ParserService.ts
-import matter from "gray-matter";
 import { Brief } from "../agents/Architect.js";
 import {
   ContentFrontmatter,
   FrontmatterSchema,
   HubBlueprint,
 } from "../types/index.js";
+import { parseFrontmatter } from "../utils/parseFrontmatter.js";
 import { LoggerService } from "./LoggerService.js";
 
 export interface ParsedFile {
@@ -20,9 +20,19 @@ export class ParserService {
    */
   static parseMarkdown(rawContent: string): ParsedFile {
     try {
-      const { data, content } = matter(rawContent);
+      const { data, content } = parseFrontmatter(rawContent);
+      const finalData: Record<string, any> = { ...data };
+
+      if (data.blueprint) {
+        try {
+          finalData.blueprint = JSON.parse(data.blueprint);
+        } catch {
+          finalData.blueprint = {};
+        }
+      }
+
       const frontmatter = FrontmatterSchema.passthrough().parse(
-        data,
+        finalData,
       ) as ContentFrontmatter;
       const sections = this.extractSections(content);
 
@@ -122,7 +132,7 @@ export class ParserService {
   }
 
   static stripInternalMetadata(rawContent: string): string {
-    const { data, content } = matter(rawContent);
+    const { data, content } = parseFrontmatter(rawContent);
 
     const cleanContent = content
       .replace(/\[SECTION id=".*?"\]\n?/gi, "")
