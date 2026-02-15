@@ -3,7 +3,8 @@ import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import Colors from "@/constants/Colors";
 import { useWorkspace } from "@/services/WorkspaceContext";
-import { useNavigation } from "expo-router";
+import { FontAwesome } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React from "react";
 import { Pressable, StyleSheet } from "react-native";
 
@@ -11,7 +12,7 @@ export default function HomeScreen() {
   const { activeWorkspace, isLoading } = useWorkspace();
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
-  const navigation = useNavigation() as any;
+  const router = useRouter();
 
   if (isLoading) return null;
 
@@ -30,7 +31,7 @@ export default function HomeScreen() {
         </Text>
         <Pressable
           style={[styles.linkButton, { marginTop: 20 }]}
-          onPress={() => navigation.navigate("settings")}
+          onPress={() => router.push("/settings")}
         >
           <Text style={{ color: themeColors.tint, fontWeight: "600" }}>
             Go to Workspace Settings →
@@ -56,6 +57,14 @@ export default function HomeScreen() {
           {activeWorkspace}
         </Text>
       </View>
+
+      <Pressable
+        style={[styles.fab, { backgroundColor: themeColors.buttonPrimary }]}
+        onPress={() => router.push("/new-hub")}
+      >
+        <FontAwesome name="plus" size={20} color="#fff" />
+      </Pressable>
+
       <View
         style={styles.separator}
         lightColor="#eee"
@@ -99,4 +108,16 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   linkButton: { padding: 10, backgroundColor: "transparent" },
+  fab: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
 });

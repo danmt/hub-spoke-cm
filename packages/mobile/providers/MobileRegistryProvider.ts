@@ -1,53 +1,56 @@
-// src/services/ExpoRegistryProvider.ts
 import { RegistryProvider } from "@hub-spoke/core";
 import { Directory, File, Paths } from "expo-file-system";
 
 export class MobileRegistryProvider implements RegistryProvider {
   /**
-   * @param workspaceRoot - Usually Paths.document.uri or a subdirectory within it.
+   * @param workspaceRoot - The absolute URI of the active workspace.
    */
   constructor(private workspaceRoot: string = Paths.document.uri) {}
 
   /**
    * Lists files in the specified agent folder.
+   * Core expects filenames (e.g., "tutorial.md"), not absolute URIs.
    */
   async listAgentFiles(folder: string): Promise<string[]> {
-    // Create a Directory object pointing to the agent subfolder
-    const dir = new Directory(this.workspaceRoot, "agents", folder);
+    const agentsDir = new Directory(this.workspaceRoot, "agents", folder);
 
-    if (!dir.exists) {
+    // Idempotent check for directory existence
+    if (!agentsDir.exists) {
       return [];
     }
 
-    // .list() returns an array of File and Directory objects
-    const contents = dir.list();
+    // .list() returns an array of File/Directory objects.
+    // We filter specifically for Files so the RegistryService doesn't try
+    // to parse folders as markdown agents.
+    const contents = agentsDir.list();
 
-    // We filter for Files only (similar to how readdir usually works for flat files)
-    // or simply return the names of all entries.
-    return contents.map((item) => item.name);
+    return contents
+      .filter((item): item is File => item instanceof File)
+      .map((item) => item.name);
   }
 
   /**
    * Reads a specific file from the agent folder as a UTF-8 string.
    */
   async readAgentFile(folder: string, filename: string): Promise<string> {
-    const file = new File(this.workspaceRoot, "agents", folder, filename);
+    const agentsDir = new Directory(this.workspaceRoot, "agents", folder);
+    const file = new File(agentsDir, filename);
 
     if (!file.exists) {
-      throw new Error(`Agent file not found: ${filename}`);
+      throw new Error(`Agent file not found: agents/${folder}/${filename}`);
     }
 
+    // We must await the .text() promise to return the raw content to the RegistryService
     return await file.text();
   }
 
   /**
    * Gets the identifier (filename without extension).
+   * Used as the Agent ID if 'id' is missing in the frontmatter.
    */
   getIdentifier(file: string): string {
     const fileObj = new File(file);
-    // The new API provides a 'name' (filename.ext)
-    // but not a built-in 'stem' (filename) like Python or Node's path.parse.
-    // We can use a simple regex or split to mimic path.parse(file).name.
+    // Standard Node-like behavior: "tutorial.md" -> "tutorial"
     return fileObj.name.replace(/\.[^/.]+$/, "");
   }
 }

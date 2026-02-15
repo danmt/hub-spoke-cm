@@ -15,8 +15,8 @@ export default function WorkspacesScreen() {
   const [workspaces, setWorkspaces] = useState<string[]>([]);
 
   const loadData = async () => {
-    const activeWs = await WorkspaceStorage.getActiveWorkspace();
-    setActiveWorkspace(activeWs);
+    const activeWorkspace = await WorkspaceStorage.getActiveWorkspace();
+    setActiveWorkspace(activeWorkspace);
     setWorkspaces(WorkspaceManager.listWorkspaces());
   };
 
