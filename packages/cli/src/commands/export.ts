@@ -45,14 +45,12 @@ export const exportCommand = new Command("export")
 
       // 2. Parse metadata and strip internal delimiters
       const rawContent = await fs.readFile(sourceFile, "utf-8");
-      const hubMeta = await IoService.readHubMetadata(hubRootDir);
-      const cleanMarkdown = ParserService.stripInternalMetadata(rawContent);
+      const { frontmatter, content: cleanMarkdown } =
+        ParserService.stripInternalMetadata(rawContent);
 
       // 3. Resolve top-level /output path
       const globalOutputDir = path.join(workspaceRoot, "output");
-
-      const fileName = `${hubMeta.hubId}.md`;
-      const outputPath = path.join(globalOutputDir, fileName);
+      const outputPath = path.join(globalOutputDir, `${frontmatter.hubId}.md`);
 
       // 4. Handle Overwrite Confirmation
       if (existsSync(outputPath)) {
@@ -61,7 +59,7 @@ export const exportCommand = new Command("export")
             type: "confirm",
             name: "confirmOverwrite",
             message: chalk.yellow(
-              `File "${fileName}" already exists in /output. Overwrite?`,
+              `File "${outputPath}" already exists in /output. Overwrite?`,
             ),
             default: false,
           },

@@ -78,10 +78,15 @@ export class IoService {
     }
   }
 
-  static async readHub(hubRootDir: string): Promise<ParsedFile> {
+  static async readHubFile(hubRootDir: string): Promise<string> {
     this.ensureProvider();
     const filePath = this.provider.join(hubRootDir, "hub.md");
     const content = await this.provider.readFile(filePath);
+    return content;
+  }
+
+  static async readHub(hubRootDir: string): Promise<ParsedFile> {
+    const content = await this.readHubFile(hubRootDir);
     return ParserService.parseMarkdown(content);
   }
 

@@ -3,7 +3,7 @@
  * Optimized for React Native environments where gray-matter is unavailable.
  */
 export function parseFrontmatter(raw: string): {
-  data: Record<string, any>;
+  data: any;
   content: string;
 } {
   const regex = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
@@ -13,7 +13,7 @@ export function parseFrontmatter(raw: string): {
 
   const yamlBlock = match[1];
   const content = match[2];
-  const data: Record<string, any> = {};
+  const data: any = {};
 
   const lines = yamlBlock.split("\n");
   let activeKey: string | null = null;

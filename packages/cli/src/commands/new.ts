@@ -2,6 +2,7 @@
 import {
   ConfigService,
   IoService,
+  ParserService,
   RegistryService,
   SecretService,
 } from "@hub-spoke/core";
@@ -56,14 +57,13 @@ export const newCommand = new Command("new")
 
       console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));
 
-      const { architecture, filePath, fileContent } =
-        await executeCliCreateHubAction(
-          secret.apiKey,
-          config.model,
-          manifest,
-          agents,
-          workspaceRoot,
-        );
+      const { filePath, fileContent } = await executeCliCreateHubAction(
+        secret.apiKey,
+        config.model,
+        manifest,
+        agents,
+        workspaceRoot,
+      );
 
       const { shouldFill } = await inquirer.prompt([
         {
@@ -78,12 +78,10 @@ export const newCommand = new Command("new")
         return;
       }
 
-      await executeCliFillAction(
-        agents,
-        architecture.brief.personaId,
-        filePath,
-        fileContent,
-      );
+      const { frontmatter, sections } =
+        ParserService.parseMarkdown(fileContent);
+
+      await executeCliFillAction(agents, frontmatter, sections, filePath);
     } catch (error) {
       console.error(chalk.red("\n❌ Command `new` Error:"), error);
     }

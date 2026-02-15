@@ -131,15 +131,19 @@ export class ParserService {
     return `---\n${yaml}\n---\n\n# ${brief.topic}\n\n${body}`;
   }
 
-  static stripInternalMetadata(rawContent: string): string {
-    const { data, content } = parseFrontmatter(rawContent);
+  static stripInternalMetadata(rawContent: string): ParsedFile {
+    const { frontmatter, content, sections } = this.parseMarkdown(rawContent);
 
     const cleanContent = content
       .replace(/\[SECTION id=".*?"\]\n?/gi, "")
       .replace(/\n?\[\/SECTION\]/gi, "")
       .trim();
 
-    return `# ${data.title}\n\n${cleanContent}`;
+    return {
+      content: `# ${frontmatter.title}\n\n${cleanContent}`,
+      frontmatter,
+      sections,
+    };
   }
 
   private static extractSections(markdownBody: string): Record<string, string> {
