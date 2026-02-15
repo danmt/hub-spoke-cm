@@ -1,6 +1,6 @@
 // packages/core/src/services/IoService.ts
 import { ContentFrontmatter } from "../types/index.js";
-import { ParserService } from "./ParserService.js";
+import { ParsedFile, ParserService } from "./ParserService.js";
 
 export interface HubContext {
   rootDir: string;
@@ -78,13 +78,19 @@ export class IoService {
     }
   }
 
+  static async readHub(hubRootDir: string): Promise<ParsedFile> {
+    this.ensureProvider();
+    const filePath = this.provider.join(hubRootDir, "hub.md");
+    const content = await this.provider.readFile(filePath);
+    return ParserService.parseMarkdown(content);
+  }
+
   static async readHubMetadata(
     hubRootDir: string,
   ): Promise<ContentFrontmatter> {
     this.ensureProvider();
-    const filePath = this.provider.join(hubRootDir, "hub.md");
-    const content = await this.provider.readFile(filePath);
-    const { frontmatter } = ParserService.parseMarkdown(content);
+    const { frontmatter } = await this.readHub(hubRootDir);
+
     return frontmatter;
   }
 
