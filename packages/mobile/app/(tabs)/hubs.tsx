@@ -6,8 +6,8 @@ import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { FontAwesome } from "@expo/vector-icons";
 import { IoService } from "@hub-spoke/core";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -15,22 +15,45 @@ import {
   StyleSheet,
 } from "react-native";
 
+interface HubItem {
+  id: string;
+  title: string;
+  canFill: boolean;
+}
+
 export default function HubsScreen() {
   const { activeWorkspace, isLoading: workspaceLoading } = useWorkspace();
   const colorScheme = useColorScheme() ?? "light";
   const themeColors = Colors[colorScheme];
   const router = useRouter();
 
-  const [hubs, setHubs] = useState<string[]>([]);
+  const [hubs, setHubs] = useState<HubItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchHubs = async () => {
     if (!activeWorkspace) return;
     setIsLoading(true);
     try {
-      const workspaceRoot = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-      const hubIds = await IoService.findAllHubsInWorkspace(workspaceRoot.uri);
-      setHubs(hubIds);
+      const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+      const hubIds = await IoService.findAllHubsInWorkspace(workspaceDir.uri);
+
+      const hubItems: HubItem[] = await Promise.all(
+        hubIds.map(async (id) => {
+          try {
+            const workspaceDir =
+              WorkspaceManager.getWorkspaceUri(activeWorkspace);
+            const hubPath = `${workspaceDir.uri}/posts/${id}`;
+            const parsed = await IoService.readHub(hubPath);
+            const canFill = />\s*\*\*?TODO:?\*?\s*/i.test(parsed.content);
+
+            return { id, title: parsed.frontmatter.title, canFill };
+          } catch {
+            return { id, title: id, canFill: false };
+          }
+        }),
+      );
+
+      setHubs(hubItems);
     } catch (err) {
       console.error("Failed to fetch hubs:", err);
     } finally {
@@ -38,11 +61,11 @@ export default function HubsScreen() {
     }
   };
 
-  useEffect(() => {
-    if (!workspaceLoading && activeWorkspace) {
+  useFocusEffect(
+    useCallback(() => {
       fetchHubs();
-    }
-  }, [activeWorkspace, workspaceLoading]);
+    }, [activeWorkspace, workspaceLoading]),
+  );
 
   if (!activeWorkspace) {
     return (
@@ -64,32 +87,60 @@ export default function HubsScreen() {
     <View style={styles.container}>
       <FlatList
         data={hubs}
-        keyExtractor={(item) => item}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <FontAwesome name="file-text-o" size={40} color="#ccc" />
-            <Text style={styles.emptyText}>
-              No hubs found in this workspace.
-            </Text>
+            <Text style={styles.emptyText}>No hubs found.</Text>
           </View>
         }
         renderItem={({ item }) => (
-          <Pressable
+          <View
             style={[
               styles.hubCard,
               { backgroundColor: themeColors.cardBackground },
             ]}
-            onPress={() => {
-              /* Future: Navigate to hub details */
-            }}
           >
-            <View style={styles.hubInfo}>
-              <Text style={styles.hubId}>{item}</Text>
-              <Text style={styles.hubStatus}>Ready for generation</Text>
+            <View style={styles.hubHeader}>
+              <Text style={styles.hubTitle} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={styles.hubId}>ID: {item.id}</Text>
             </View>
-            <FontAwesome name="chevron-right" size={14} color="#888" />
-          </Pressable>
+
+            <View style={styles.actionRow}>
+              <Pressable
+                style={[styles.actionBtn, { borderColor: themeColors.tint }]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/hub-details",
+                    params: { id: item.id },
+                  })
+                }
+              >
+                <FontAwesome name="eye" size={14} color={themeColors.tint} />
+                <Text style={[styles.actionText, { color: themeColors.tint }]}>
+                  View
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.actionBtn,
+                  {
+                    backgroundColor: themeColors.buttonPrimary,
+                    borderWidth: 0,
+                  },
+                ]}
+                onPress={() => console.log("Fill placeholder")}
+                disabled={!item.canFill}
+              >
+                <FontAwesome name="magic" size={14} color="#fff" />
+                <Text style={[styles.actionText, { color: "#fff" }]}>Fill</Text>
+              </Pressable>
+            </View>
+          </View>
         )}
       />
 
@@ -107,17 +158,21 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   listContent: { padding: 20, paddingBottom: 100 },
-  hubCard: {
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 12,
+  hubCard: { padding: 20, borderRadius: 20, marginBottom: 16 },
+  hubHeader: { marginBottom: 15, backgroundColor: "transparent" },
+  hubTitle: { fontSize: 18, fontWeight: "bold" },
+  hubId: { fontSize: 12, opacity: 0.5, marginTop: 2 },
+  actionRow: { flexDirection: "row", gap: 10, backgroundColor: "transparent" },
+  actionBtn: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 6,
   },
-  hubInfo: { backgroundColor: "transparent" },
-  hubId: { fontSize: 17, fontWeight: "bold" },
-  hubStatus: { fontSize: 12, opacity: 0.5, marginTop: 4 },
+  actionText: { fontSize: 13, fontWeight: "700" },
   emptyContainer: {
     alignItems: "center",
     marginTop: 100,
