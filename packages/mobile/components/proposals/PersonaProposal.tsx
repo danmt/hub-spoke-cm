@@ -12,7 +12,7 @@ interface Props {
 }
 
 export function PersonaProposal({ data, onResolve }: Props) {
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
 
   return (

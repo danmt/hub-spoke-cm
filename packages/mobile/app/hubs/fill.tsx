@@ -5,9 +5,10 @@ import { PersonaProposal } from "@/components/proposals/PersonaProposal";
 import { WriterProposal } from "@/components/proposals/WriterProposal";
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { useInteractionDeferrer } from "@/hooks/useInteractionDeferrer";
 import { executeMobileFillAction } from "@/presets/executeMobileFillAction";
+import { useHubs } from "@/services/HubsContext";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { Vibe } from "@/utils/vibe";
@@ -35,12 +36,11 @@ const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
 export default function FillHubScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { activeWorkspace } = useWorkspace();
-  const themeColors = Colors[useColorScheme() ?? "light"];
+  const { activeWorkspace, manifest, updateManifest } = useWorkspace();
+  const { invalidateCache } = useHubs();
+  const themeColors = Colors[useColorScheme() ?? "dark"];
   const router = useRouter();
-
   const { pendingInteraction, ask, handleResolve } = useInteractionDeferrer();
-
   const [state, setState] = useState<ScreenState>("IDLE");
   const [statusMessage, setStatusMessage] = useState("");
   const [activeAgent, setActiveAgent] = useState<{
@@ -51,6 +51,7 @@ export default function FillHubScreen() {
   } | null>(null);
   const [hubData, setHubData] = useState<ParsedFile | null>(null);
   const [hubPathUri, setHubPathUri] = useState<string>("");
+  const [remainingCount, setRemainingCount] = useState(0);
 
   useEffect(() => {
     async function loadHub() {
@@ -61,6 +62,10 @@ export default function FillHubScreen() {
         const hub = await IoService.readHub(hubDir.uri);
         setHubData(hub);
         setHubPathUri(new File(hubDir, "hub.md").uri);
+        const pending = Object.values(hub.sections).filter((s) =>
+          TODO_REGEX.test(s),
+        ).length;
+        setRemainingCount(pending);
       } catch (err: any) {
         setStatusMessage("Failed to load hub data.");
         setState("ERROR");
@@ -79,15 +84,6 @@ export default function FillHubScreen() {
       pending: allIds.filter((sid) => TODO_REGEX.test(hubData.sections[sid])),
     };
   }, [hubData]);
-
-  // Dynamically calculate remaining based on active section
-  const remainingCount = useMemo(() => {
-    if (!activeAgent?.sectionId) return sections.pending.length;
-    const index = sections.pending.indexOf(activeAgent.sectionId);
-    return index === -1
-      ? sections.pending.length
-      : sections.pending.length - index;
-  }, [sections.pending, activeAgent?.sectionId]);
 
   const handleFinish = () => {
     // By using navigate instead of push/replace after dismiss,
@@ -139,6 +135,23 @@ export default function FillHubScreen() {
               sectionId,
             });
           },
+          onSectionComplete: async (hubId, _sectionId, hasRemaining) => {
+            if (!manifest) return;
+
+            const updatedHubs = manifest.hubs.map((h) =>
+              h.id === hubId
+                ? {
+                    ...h,
+                    hasTodo: hasRemaining,
+                    lastModified: new Date().toISOString(),
+                  }
+                : h,
+            );
+
+            await updateManifest({ hubs: updatedHubs });
+            setRemainingCount((prev) => Math.max(0, prev - 1));
+            invalidateCache(hubId);
+          },
         },
       );
 
@@ -157,7 +170,7 @@ export default function FillHubScreen() {
         model={activeAgent.model}
         phase={activeAgent.phase}
         status={statusMessage}
-        progressText={`${remainingCount} SECTIONS REMAINING`}
+        progressText={`${remainingCount}/${Object.keys(hubData?.sections || []).length} SECTIONS REMAINING`}
         color={activeAgent.phase === "styling" ? "#a832a4" : themeColors.tint}
       />
     );

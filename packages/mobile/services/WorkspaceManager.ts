@@ -1,9 +1,4 @@
-import {
-  LogProvider,
-  LoggerService,
-  RegistryProvider,
-  RegistryService,
-} from "@hub-spoke/core";
+import { RegistryProvider, RegistryService } from "@hub-spoke/core";
 import { Directory, Paths } from "expo-file-system";
 import { WorkspaceStorage } from "./WorkspaceStorage";
 
@@ -14,22 +9,10 @@ export class WorkspaceManager {
    */
   static async switchWorkspace(
     workspaceId: string | undefined,
-    providers: { registry: RegistryProvider; logger: LogProvider },
+    providers: { registry: RegistryProvider },
   ) {
     await WorkspaceStorage.setActiveWorkspace(workspaceId);
-
-    // Set the global core providers that were passed in
     RegistryService.setProvider(providers.registry);
-    LoggerService.setProvider(providers.logger);
-  }
-
-  static async clearActiveWorkspace(providers: {
-    registry: RegistryProvider;
-    logger: LogProvider;
-  }) {
-    await WorkspaceStorage.setActiveWorkspace(undefined);
-    RegistryService.setProvider(providers.registry);
-    LoggerService.setProvider(providers.logger);
   }
 
   /**

@@ -2,13 +2,13 @@
 import { SecretSettings } from "@/components/settings/SecretSettings";
 import { View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { SecretService } from "@hub-spoke/core";
 import React, { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 
 export default function SecretsScreen() {
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const [apiKey, setApiKey] = useState("");
 

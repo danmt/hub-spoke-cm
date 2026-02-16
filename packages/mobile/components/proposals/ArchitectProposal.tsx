@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function ArchitectProposal({ data, onResolve }: Props) {
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
 
   return (
     <View style={styles.container}>

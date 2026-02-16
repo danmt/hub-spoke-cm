@@ -1,13 +1,12 @@
 // packages/mobile/app/(tabs)/index.tsx
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
+import { useAgents } from "@/services/AgentsContext";
 import { useWorkspace } from "@/services/WorkspaceContext";
-import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { FontAwesome } from "@expo/vector-icons";
-import { Artifact, IoService, RegistryService } from "@hub-spoke/core";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -16,40 +15,17 @@ import {
 } from "react-native";
 
 export default function HomeScreen() {
-  const { activeWorkspace, isLoading } = useWorkspace();
-  const colorScheme = useColorScheme() ?? "light";
+  const {
+    activeWorkspace,
+    isLoading: workspaceLoading,
+    manifest,
+  } = useWorkspace();
+  const { isLoading: agentsLoading } = useAgents();
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const router = useRouter();
 
-  const [agents, setAgents] = useState<Artifact[]>([]);
-  const [hubCount, setHubCount] = useState(0);
-
-  useEffect(() => {
-    async function syncDashboardData() {
-      if (!isLoading && activeWorkspace) {
-        // 1. Load Agents from primed cache
-        const cachedAgents = RegistryService.getCachedArtifacts();
-        setAgents(cachedAgents);
-
-        // 2. Load Hub Count using the absolute Workspace URI
-        try {
-          const workspaceDir =
-            WorkspaceManager.getWorkspaceUri(activeWorkspace);
-          const hubIds = await IoService.findAllHubsInWorkspace(
-            workspaceDir.uri,
-          );
-          setHubCount(hubIds.length);
-        } catch (err) {
-          console.error("Dashboard sync error:", err);
-          setHubCount(0);
-        }
-
-        console.log(`🏠 Dashboard: [${activeWorkspace}] synced.`);
-      }
-    }
-
-    syncDashboardData();
-  }, [activeWorkspace, isLoading]);
+  const isLoading = workspaceLoading || agentsLoading;
 
   if (isLoading) {
     return (
@@ -60,7 +36,7 @@ export default function HomeScreen() {
     );
   }
 
-  if (!activeWorkspace) {
+  if (!activeWorkspace || !manifest) {
     return (
       <View style={styles.centered}>
         <FontAwesome
@@ -98,7 +74,7 @@ export default function HomeScreen() {
     >
       <View style={styles.header}>
         <View style={{ backgroundColor: "transparent" }}>
-          <Text style={styles.title}>Dashboard 2</Text>
+          <Text style={styles.title}>Dashboard</Text>
           <View style={styles.badgeContainer}>
             <Text
               style={[
@@ -121,7 +97,6 @@ export default function HomeScreen() {
         darkColor="rgba(255,255,255,0.1)"
       />
 
-      {/* Production Layer Summary */}
       <Text style={styles.sectionTitle}>Content Strategy</Text>
       <View
         style={[
@@ -131,7 +106,7 @@ export default function HomeScreen() {
       >
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>{hubCount}</Text>
+            <Text style={styles.statNumber}>{manifest.hubs.length}</Text>
             <Text style={styles.statLabel}>Active Hubs</Text>
           </View>
           <View style={styles.statItem}>
@@ -156,7 +131,6 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* Intelligence Layer Section */}
       <Text style={styles.sectionTitle}>Intelligence Layer</Text>
       <View
         style={[
@@ -167,19 +141,19 @@ export default function HomeScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>
-              {agents.filter((a) => a.type === "persona").length}
+              {manifest.agents.filter((a) => a.type === "persona").length}
             </Text>
             <Text style={styles.statLabel}>Personas</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>
-              {agents.filter((a) => a.type === "writer").length}
+              {manifest.agents.filter((a) => a.type === "writer").length}
             </Text>
             <Text style={styles.statLabel}>Writers</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>
-              {agents.filter((a) => a.type === "assembler").length}
+              {manifest.agents.filter((a) => a.type === "assembler").length}
             </Text>
             <Text style={styles.statLabel}>Assemblers</Text>
           </View>

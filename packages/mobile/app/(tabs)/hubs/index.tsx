@@ -1,13 +1,11 @@
 // packages/mobile/app/(tabs)/hubs/index.tsx
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { useWorkspace } from "@/services/WorkspaceContext";
-import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { FontAwesome } from "@expo/vector-icons";
-import { IoService } from "@hub-spoke/core";
-import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import { useRouter } from "expo-router";
+import React from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -15,55 +13,11 @@ import {
   StyleSheet,
 } from "react-native";
 
-interface HubItem {
-  id: string;
-  title: string;
-  canFill: boolean;
-}
-
 export default function HubsScreen() {
-  const { activeWorkspace, isLoading: workspaceLoading } = useWorkspace();
-  const colorScheme = useColorScheme() ?? "light";
+  const { activeWorkspace, manifest, isLoading } = useWorkspace();
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const router = useRouter();
-
-  const [hubs, setHubs] = useState<HubItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchHubs = async () => {
-    if (!activeWorkspace) return;
-    setIsLoading(true);
-    try {
-      const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-      const hubIds = await IoService.findAllHubsInWorkspace(workspaceDir.uri);
-
-      const hubItems: HubItem[] = await Promise.all(
-        hubIds.map(async (id) => {
-          try {
-            const hubPath = `${workspaceDir.uri}/posts/${id}`;
-            const parsed = await IoService.readHub(hubPath);
-            const canFill = />\s*\*\*?TODO:?\*?\s*/i.test(parsed.content);
-
-            return { id, title: parsed.frontmatter.title, canFill };
-          } catch {
-            return { id, title: id, canFill: false };
-          }
-        }),
-      );
-
-      setHubs(hubItems);
-    } catch (err) {
-      console.error("Failed to fetch hubs:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchHubs();
-    }, [activeWorkspace, workspaceLoading]),
-  );
 
   if (!activeWorkspace) {
     return (
@@ -73,7 +27,7 @@ export default function HubsScreen() {
     );
   }
 
-  if (isLoading || workspaceLoading) {
+  if (isLoading || !manifest) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="small" color={themeColors.tint} />
@@ -84,7 +38,7 @@ export default function HubsScreen() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={hubs}
+        data={manifest.hubs}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
@@ -127,7 +81,7 @@ export default function HubsScreen() {
                 style={[
                   styles.actionBtn,
                   {
-                    backgroundColor: item.canFill
+                    backgroundColor: item.hasTodo
                       ? themeColors.buttonPrimary
                       : "#888",
                     borderWidth: 0,
@@ -139,7 +93,7 @@ export default function HubsScreen() {
                     params: { id: item.id },
                   })
                 }
-                disabled={!item.canFill}
+                disabled={!item.hasTodo}
               >
                 <FontAwesome name="magic" size={14} color="#fff" />
                 <Text style={[styles.actionText, { color: "#fff" }]}>Fill</Text>

@@ -1,9 +1,10 @@
-// packages/mobile/app/(tabs)/settings/_layout.tsx
+// packages/mobile/app/(tabs)/agents/_layout.tsx
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
 import { Stack } from "expo-router";
+import React from "react";
 
-export default function SettingsLayout() {
+export default function AgentsLayout() {
   const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
 
@@ -23,29 +24,16 @@ export default function SettingsLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: "Settings",
-          headerShown: false,
+          title: "Agent Registry",
+          headerShown: true,
         }}
       />
       <Stack.Screen
-        name="workspaces"
+        name="[id]"
         options={{
-          title: "Workspaces",
-          headerTitle: "Manage Workspaces",
-        }}
-      />
-      <Stack.Screen
-        name="secrets"
-        options={{
-          title: "Secrets",
-          headerTitle: "API Keys",
-        }}
-      />
-      <Stack.Screen
-        name="config"
-        options={{
-          title: "Configuration",
-          headerTitle: "Global Config",
+          // Title is set dynamically in [id].tsx via Stack.Screen
+          headerShown: true,
+          headerBackTitle: "Back",
         }}
       />
     </Stack>

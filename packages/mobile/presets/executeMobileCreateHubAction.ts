@@ -28,6 +28,7 @@ export async function executeMobileCreateHubAction(
   handlers: {
     ask: AskHandler;
     onStatus: (message: string, agentId?: string, phase?: string) => void;
+    onComplete: (hubId: string, title: string) => Promise<void>;
   },
 ): Promise<ExecuteMobileCreateHubActionResult> {
   const action = new CreateHubAction(apiKey, model, manifest, baseline, agents)
@@ -59,6 +60,11 @@ export async function executeMobileCreateHubAction(
   );
 
   await IoService.safeWriteFile(filePath, fileContent);
+
+  await handlers.onComplete(
+    result.assembly.blueprint.hubId,
+    result.personification.header,
+  );
 
   return { ...result, filePath, fileContent };
 }

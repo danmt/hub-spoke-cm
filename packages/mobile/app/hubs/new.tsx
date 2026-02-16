@@ -20,9 +20,10 @@ import { ConfirmRetry } from "@/components/proposals/ConfirmRetry";
 import { PersonaProposal } from "@/components/proposals/PersonaProposal";
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { useInteractionDeferrer } from "@/hooks/useInteractionDeferrer";
 import { executeMobileCreateHubAction } from "@/presets/executeMobileCreateHubAction";
+import { useHubs } from "@/services/HubsContext";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { Vibe } from "@/utils/vibe";
@@ -31,12 +32,11 @@ type ScreenState = "IDLE" | "PROCESSING" | "REVIEWING" | "ERROR" | "DONE";
 
 export default function NewHubScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
-  const { activeWorkspace } = useWorkspace();
-
+  const { activeWorkspace, manifest, updateManifest } = useWorkspace();
+  const { invalidateCache } = useHubs();
   const { pendingInteraction, ask, handleResolve } = useInteractionDeferrer();
-
   const [state, setState] = useState<ScreenState>("IDLE");
   const [statusMessage, setStatusMessage] = useState("");
   const [activeAgent, setActiveAgent] = useState<{
@@ -45,7 +45,6 @@ export default function NewHubScreen() {
     phase?: string;
   } | null>(null);
   const [createdHubId, setCreatedHubId] = useState<string | null>(null);
-
   const [baseline, setBaseline] = useState({
     topic: "",
     goal: "",
@@ -82,12 +81,12 @@ export default function NewHubScreen() {
         config.model!,
         artifacts,
       );
-      const manifest = RegistryService.toManifest(agents);
+      const registryManifest = RegistryService.toManifest(agents);
 
       const result = await executeMobileCreateHubAction(
         secret.apiKey,
         config.model!,
-        manifest,
+        registryManifest,
         baseline,
         agents,
         workspaceDir.uri,
@@ -105,6 +104,17 @@ export default function NewHubScreen() {
               model: config.model || "gemini-2.0-flash",
               phase: phase || "planning",
             });
+          },
+          onComplete: async (hubId, title) => {
+            const newEntry = {
+              id: hubId,
+              title: title,
+              hasTodo: true,
+              lastModified: new Date().toISOString(),
+            };
+            const currentHubs = manifest?.hubs || [];
+            await updateManifest({ hubs: [...currentHubs, newEntry] });
+            invalidateCache(hubId);
           },
         },
       );

@@ -2,14 +2,14 @@
 import { SettingsMenu } from "@/components/settings/SettingsMenu";
 import { View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { WorkspaceStorage } from "@/services/WorkspaceStorage";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 
 export default function SettingsScreen() {
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const router = useRouter();
   const [activeWorkspace, setActiveWorkspace] = useState<string | undefined>();

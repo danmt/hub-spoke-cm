@@ -24,7 +24,7 @@ export function ConfirmOrFeedback({
   onFeedback,
   confirmText = "Proceed",
 }: Props) {
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");

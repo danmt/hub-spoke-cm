@@ -1,10 +1,9 @@
 // packages/mobile/app/(tabs)/_layout.tsx
+import { useColorScheme } from "@/components/useColorScheme";
+import { Colors } from "@/constants/Colors";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Tabs, useRouter } from "expo-router";
 import React from "react";
-
-import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
 import { Pressable } from "react-native";
 
 function TabBarIcon(props: {
@@ -15,14 +14,14 @@ function TabBarIcon(props: {
 }
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const router = useRouter();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
+        tabBarActiveTintColor: Colors[colorScheme ?? "dark"].tint,
         headerShown: true,
         headerRight: () => (
           <Pressable onPress={() => router.push("/settings")}>
@@ -63,6 +62,7 @@ export default function TabLayout() {
         name="agents"
         options={{
           title: "Agents",
+          headerShown: false,
           tabBarIcon: ({ color }) => <TabBarIcon name="users" color={color} />,
         }}
       />

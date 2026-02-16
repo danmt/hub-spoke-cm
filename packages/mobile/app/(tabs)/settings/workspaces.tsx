@@ -2,14 +2,14 @@
 import { WorkspaceSettings } from "@/components/settings/WorkspaceSettings";
 import { View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { WorkspaceStorage } from "@/services/WorkspaceStorage";
 import React, { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 
 export default function WorkspacesScreen() {
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const [activeWorkspace, setActiveWorkspace] = useState<string | undefined>();
   const [workspaces, setWorkspaces] = useState<string[]>([]);

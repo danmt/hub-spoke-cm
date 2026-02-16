@@ -2,7 +2,7 @@ const tintColorLight = "#2f95dc";
 const tintColorDark = "#fff";
 const brandPrimary = "#32a852";
 
-export default {
+export const Colors = {
   light: {
     text: "#000",
     background: "#fff",
@@ -24,3 +24,5 @@ export default {
     buttonPrimary: brandPrimary,
   },
 };
+
+export type ThemeColors = typeof Colors.light;

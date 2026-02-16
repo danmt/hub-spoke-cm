@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function ConfirmRetry({ error, onRetry }: Props) {
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
 
   return (

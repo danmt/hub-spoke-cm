@@ -1,13 +1,13 @@
 // packages/mobile/app/(tabs)/hubs/details.tsx
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { ExportService } from "@/services/ExportService";
+import { useHubs } from "@/services/HubsContext";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { FontAwesome } from "@expo/vector-icons";
-import { ContentFrontmatter, IoService } from "@hub-spoke/core";
-import { Directory } from "expo-file-system";
+import { ParsedFile } from "@hub-spoke/core";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -21,27 +21,21 @@ import {
 export default function HubDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace } = useWorkspace();
-  const colorScheme = useColorScheme() ?? "light";
-  const themeColors = Colors[colorScheme];
+  const { getFullHub } = useHubs();
+  const themeColors = Colors[useColorScheme() ?? "dark"];
   const router = useRouter();
 
-  const [metadata, setMetadata] = useState<ContentFrontmatter | null>(null);
-  const [sections, setSections] = useState<Record<string, string>>({});
+  const [hubData, setHubData] = useState<ParsedFile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
-  const [hubRootDir, setHubRootDir] = useState<string>("");
 
   useEffect(() => {
     async function loadHub() {
       if (!activeWorkspace || !id) return;
       try {
-        const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-        const hubDir = new Directory(workspaceDir, "posts", id);
-        const { frontmatter, sections } = await IoService.readHub(hubDir.uri);
-
-        setHubRootDir(hubDir.uri);
-        setMetadata(frontmatter);
-        setSections(sections);
+        // Retrieve data from LRU cache or disk via context
+        const data = await getFullHub(id);
+        setHubData(data);
       } catch (err) {
         console.error("Failed to load hub details:", err);
       } finally {
@@ -49,7 +43,7 @@ export default function HubDetailsScreen() {
       }
     }
     loadHub();
-  }, [id, activeWorkspace]);
+  }, [id, activeWorkspace, getFullHub]);
 
   const toggleSection = (sectionId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -57,17 +51,15 @@ export default function HubDetailsScreen() {
   };
 
   const handleExport = async () => {
-    if (!hubRootDir) return;
+    if (!activeWorkspace || !id) return;
     try {
+      const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+      const hubRootDir = `${workspaceDir.uri}/posts/${id}`;
       await ExportService.exportHub(hubRootDir);
     } catch (err: any) {
       console.error("Export failed:", err.message);
     }
   };
-
-  const hasTodo = Object.values(sections).some((content) =>
-    />\s*\*\*?TODO:?\*?\s*/i.test(content),
-  );
 
   if (isLoading) {
     return (
@@ -77,7 +69,13 @@ export default function HubDetailsScreen() {
     );
   }
 
-  if (!metadata) return null;
+  if (!hubData) return null;
+
+  const { frontmatter: metadata, sections } = hubData;
+
+  const hasTodo = Object.values(sections).some((content) =>
+    />\s*\*\*?TODO:?\*?\s*/i.test(content),
+  );
 
   return (
     <View style={styles.container}>

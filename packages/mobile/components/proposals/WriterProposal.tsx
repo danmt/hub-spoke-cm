@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function WriterProposal({ data, onResolve }: Props) {
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
 
   return (

@@ -27,6 +27,11 @@ export async function executeMobileFillAction(
       agentId?: string,
       phase?: string,
     ) => void;
+    onSectionComplete: (
+      hubId: string,
+      sectionId: string,
+      hasRemainingTodos: boolean,
+    ) => Promise<void>;
   },
 ): Promise<void> {
   const sectionIds = Object.keys(sections);
@@ -68,7 +73,8 @@ export async function executeMobileFillAction(
     .onRetry((err) => handlers.ask("retry", err));
 
   // Sequentially process each pending section
-  for (const sectionId of pendingSectionIds) {
+  for (let i = 0; i < pendingSectionIds.length; i++) {
+    const sectionId = pendingSectionIds[i];
     const blueprint = frontmatter.blueprint[sectionId];
 
     const result = await fillAction.execute({
@@ -91,5 +97,8 @@ export async function executeMobileFillAction(
     );
 
     await IoService.safeWriteFile(filePath, currentProgress);
+
+    const remaining = pendingSectionIds.slice(i + 1).length > 0;
+    await handlers.onSectionComplete(frontmatter.hubId, sectionId, remaining);
   }
 }

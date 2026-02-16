@@ -2,13 +2,13 @@
 import { ConfigSettings } from "@/components/settings/ConfigSettings";
 import { View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { ConfigService } from "@hub-spoke/core";
 import React, { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 
 export default function ConfigScreen() {
-  const colorScheme = useColorScheme() ?? "light";
+  const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const [model, setModel] = useState("");
 
