@@ -54,7 +54,7 @@ export function WorkspaceSettings({
         workspaceRoot.create();
       }
 
-      await IoService.initWorkspace(workspaceRoot.uri, "starter");
+      await IoService.initWorkspace(workspaceRoot.uri, "blank");
       await handleSwitch(slug);
       setIsModalVisible(false);
       setNewName("");
