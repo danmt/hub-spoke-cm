@@ -19,11 +19,12 @@ import {
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as Updates from "expo-updates";
 import { useEffect, useState } from "react";
+import { Alert } from "react-native";
 import "react-native-reanimated";
 import { MobileIoProvider } from "../providers/MobileIoProvider";
 import { MobileLoggerProvider } from "../providers/MobileLoggerProvider";
-
 export { ErrorBoundary } from "expo-router";
 
 SplashScreen.preventAutoHideAsync();
@@ -36,9 +37,33 @@ export default function RootLayout() {
 
   const [isReady, setIsReady] = useState(false);
 
+  async function onFetchUpdateAsync() {
+    try {
+      const update = await Updates.checkForUpdateAsync();
+
+      if (update.isAvailable) {
+        await Updates.fetchUpdateAsync();
+        Alert.alert(
+          "Update Available",
+          "A new version of Hub Spoke is available. Restart now to apply?",
+          [
+            { text: "Later", style: "cancel" },
+            { text: "Restart", onPress: () => Updates.reloadAsync() },
+          ],
+        );
+      }
+    } catch (error) {
+      await LoggerService.error(`OTA Update Error: ${error}`);
+    }
+  }
+
   useEffect(() => {
     async function initializeCore() {
       try {
+        if (!__DEV__) {
+          await onFetchUpdateAsync();
+        }
+
         IoService.setProvider(new MobileIoProvider());
         SecretService.setProvider(new MobileSecretProvider());
         ConfigService.setProvider(new MobileConfigProvider());

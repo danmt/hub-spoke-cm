@@ -11,6 +11,13 @@
     "slug": "hub-spoke-cm-dev",
     "android": {
       "package": "com.danmtorganization.hubspokecmdev"
-    }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/710145d1-eaeb-4117-afc8-95fb9652e288"
+    },
+    "ios": {}
   }
 }
