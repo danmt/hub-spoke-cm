@@ -20,7 +20,7 @@ export class MobileIoProvider implements IoProvider {
       ? filtered[0]
       : `${Paths.document.uri}/${filtered[0]}`;
 
-    return new Directory(base, ...filtered.slice(1)).uri;
+    return Paths.join(base, ...filtered.slice(1));
   }
 
   /**
@@ -55,7 +55,7 @@ export class MobileIoProvider implements IoProvider {
       ? filtered.slice(1)
       : filtered;
 
-    return new Directory(base, ...extra).uri;
+    return Paths.join(base, ...extra);
   }
 
   /**

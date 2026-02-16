@@ -1,3 +1,4 @@
+import { ThemeColors } from "@/constants/Colors";
 import { SecretService } from "@hub-spoke/core";
 import React from "react";
 import { Alert, Pressable, StyleSheet, TextInput } from "react-native";
@@ -6,7 +7,7 @@ import { Text, View } from "../Themed";
 interface Props {
   apiKey: string;
   setApiKey: (k: string) => void;
-  themeColors: any;
+  themeColors: ThemeColors;
   colorScheme: "light" | "dark";
 }
 

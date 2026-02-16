@@ -12,6 +12,7 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   LayoutAnimation,
   Pressable,
   ScrollView,
@@ -21,7 +22,7 @@ import {
 export default function HubDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace } = useWorkspace();
-  const { getFullHub } = useHubs();
+  const { getFullHub, deleteHub } = useHubs();
   const themeColors = Colors[useColorScheme() ?? "dark"];
   const router = useRouter();
 
@@ -33,7 +34,6 @@ export default function HubDetailsScreen() {
     async function loadHub() {
       if (!activeWorkspace || !id) return;
       try {
-        // Retrieve data from LRU cache or disk via context
         const data = await getFullHub(id);
         setHubData(data);
       } catch (err) {
@@ -59,6 +59,25 @@ export default function HubDetailsScreen() {
     } catch (err: any) {
       console.error("Export failed:", err.message);
     }
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Hub",
+      "Are you sure? This will permanently remove the hub and all its content.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            router.dismissAll();
+            router.replace("/(tabs)/hubs");
+            await deleteHub(id!);
+          },
+        },
+      ],
+    );
   };
 
   if (isLoading) {
@@ -160,6 +179,14 @@ export default function HubDetailsScreen() {
             </View>
           );
         })}
+
+        <Pressable
+          style={[styles.deleteButton, { borderColor: "#ff4444" }]}
+          onPress={handleDelete}
+        >
+          <FontAwesome name="trash" size={16} color="#ff4444" />
+          <Text style={styles.deleteButtonText}>Delete Hub</Text>
+        </Pressable>
       </ScrollView>
 
       {hasTodo && (
@@ -192,7 +219,7 @@ function MetaItem({
 }: {
   label: string;
   value: string;
-  icon: any;
+  icon: React.ComponentProps<typeof FontAwesome>["name"];
 }) {
   return (
     <View style={styles.metaItem}>
@@ -208,7 +235,7 @@ function MetaItem({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  content: { padding: 20, paddingBottom: 100 },
+  content: { padding: 20, paddingBottom: 120 },
   infoCard: { padding: 20, borderRadius: 20, marginBottom: 25 },
   description: { fontSize: 16, lineHeight: 22, opacity: 0.8, marginBottom: 20 },
   metaGrid: {
@@ -258,6 +285,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionBody: { fontSize: 14, lineHeight: 20, opacity: 0.7 },
+  deleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 30,
+    gap: 10,
+  },
+  deleteButtonText: { color: "#ff4444", fontWeight: "bold" },
   footer: {
     position: "absolute",
     bottom: 0,

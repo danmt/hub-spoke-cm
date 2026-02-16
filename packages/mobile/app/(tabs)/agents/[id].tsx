@@ -9,14 +9,15 @@ import {
   PersonaArtifact,
   WriterArtifact,
 } from "@hub-spoke/core";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo } from "react";
-import { ScrollView, StyleSheet } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet } from "react-native";
 
 export default function AgentDetailsScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: any }>();
-  const { getAgent } = useAgents();
+  const { getAgent, deleteAgent } = useAgents();
   const themeColors = Colors[useColorScheme() ?? "dark"];
+  const router = useRouter();
 
   const agent = useMemo(() => getAgent(type, id), [id, type, getAgent]);
 
@@ -29,6 +30,29 @@ export default function AgentDetailsScreen() {
   }
 
   const artifact = agent.artifact;
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Agent",
+      `Are you sure you want to delete ${artifact.id}? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              router.dismissAll();
+              router.replace("/(tabs)/agents");
+              await deleteAgent(type, id);
+            } catch (err: any) {
+              Alert.alert("Deletion Error", err.message);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -56,6 +80,14 @@ export default function AgentDetailsScreen() {
         >
           <Text style={styles.contentBody}>{artifact.content}</Text>
         </View>
+
+        <Pressable
+          style={[styles.deleteButton, { borderColor: "#ff4444" }]}
+          onPress={handleDelete}
+        >
+          <FontAwesome name="trash" size={16} color="#ff4444" />
+          <Text style={styles.deleteButtonText}>Delete Agent</Text>
+        </Pressable>
       </ScrollView>
     </View>
   );
@@ -259,4 +291,15 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     opacity: 0.7,
   },
+  deleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 30,
+    gap: 10,
+  },
+  deleteButtonText: { color: "#ff4444", fontWeight: "bold" },
 });

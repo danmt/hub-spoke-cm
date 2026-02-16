@@ -170,6 +170,10 @@ export class RegistryService {
     return allArtifacts;
   }
 
+  static clearCache(): void {
+    this.cachedArtifacts = [];
+  }
+
   static getCachedArtifacts(): Artifact[] {
     return this.cachedArtifacts;
   }

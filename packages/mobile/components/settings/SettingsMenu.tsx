@@ -1,3 +1,4 @@
+import { ThemeColors } from "@/constants/Colors";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React from "react";
 import { Pressable, StyleSheet } from "react-native";
@@ -8,7 +9,7 @@ interface MenuItemProps {
   title: string;
   subtitle?: string;
   onPress: () => void;
-  themeColors: any;
+  themeColors: ThemeColors;
   colorScheme: "light" | "dark";
 }
 
@@ -47,7 +48,7 @@ function SettingsMenuItem({
 interface MenuProps {
   activeWorkspace?: string;
   onNavigate: (view: "workspaces" | "secrets" | "config") => void;
-  themeColors: any;
+  themeColors: ThemeColors;
   colorScheme: "light" | "dark";
 }
 

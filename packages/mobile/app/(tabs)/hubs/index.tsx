@@ -2,12 +2,14 @@
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
+import { useHubs } from "@/services/HubsContext";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { FontAwesome } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -15,6 +17,7 @@ import {
 
 export default function HubsScreen() {
   const { activeWorkspace, manifest, isLoading } = useWorkspace();
+  const { deleteHub } = useHubs();
   const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const router = useRouter();
@@ -34,6 +37,21 @@ export default function HubsScreen() {
       </View>
     );
   }
+
+  const confirmDelete = (id: string) => {
+    Alert.alert(
+      "Delete Hub",
+      `Are you sure you want to delete "${id}"? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => deleteHub(id),
+        },
+      ],
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -55,10 +73,18 @@ export default function HubsScreen() {
             ]}
           >
             <View style={styles.hubHeader}>
-              <Text style={styles.hubTitle} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={styles.hubId}>ID: {item.id}</Text>
+              <View style={{ backgroundColor: "transparent", flex: 1 }}>
+                <Text style={styles.hubTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={styles.hubId}>ID: {item.id}</Text>
+              </View>
+              <Pressable
+                onPress={() => confirmDelete(item.id)}
+                style={styles.trashBtn}
+              >
+                <FontAwesome name="trash-o" size={20} color="#ff4444" />
+              </Pressable>
             </View>
 
             <View style={styles.actionRow}>
@@ -118,9 +144,15 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   listContent: { padding: 20, paddingBottom: 100 },
   hubCard: { padding: 20, borderRadius: 20, marginBottom: 16 },
-  hubHeader: { marginBottom: 15, backgroundColor: "transparent" },
+  hubHeader: {
+    marginBottom: 15,
+    backgroundColor: "transparent",
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
   hubTitle: { fontSize: 18, fontWeight: "bold" },
   hubId: { fontSize: 12, opacity: 0.5, marginTop: 2 },
+  trashBtn: { padding: 5, marginLeft: 10 },
   actionRow: { flexDirection: "row", gap: 10, backgroundColor: "transparent" },
   actionBtn: {
     flexDirection: "row",

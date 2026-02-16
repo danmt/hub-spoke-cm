@@ -88,7 +88,6 @@ export default function AgentEditorScreen() {
   const { activeWorkspace, upsertAgentIndex, manifest } = useWorkspace();
   const { getAgent } = useAgents();
   const themeColors = Colors[useColorScheme() ?? "dark"];
-
   const isEditMode = !!id;
   const [state, setState] = useState<EditorState>(
     isEditMode ? "EDITING" : "SELECTING_TYPE",
@@ -97,13 +96,13 @@ export default function AgentEditorScreen() {
     initialType || "persona",
   );
   const [savedAgentId, setSavedAgentId] = useState<string | null>(null);
-
   const [formData, setFormData] = useState<AgentFormState>({
     id: id || "",
     description: "",
     content: "",
     language: "English",
   });
+  const { refresh } = useAgents();
 
   useEffect(() => {
     if (isEditMode && id) {
@@ -164,7 +163,7 @@ export default function AgentEditorScreen() {
             : undefined,
         description: formData.description,
       });
-
+      await refresh();
       await Vibe.handoff();
 
       if (isEditMode) {

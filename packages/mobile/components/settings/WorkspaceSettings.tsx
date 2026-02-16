@@ -1,3 +1,4 @@
+import { ThemeColors } from "@/constants/Colors";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -18,7 +19,7 @@ interface Props {
   activeWorkspace: string | undefined;
   workspaces: string[];
   onRefresh: () => Promise<void>;
-  themeColors: any;
+  themeColors: ThemeColors;
 }
 
 export function WorkspaceSettings({
