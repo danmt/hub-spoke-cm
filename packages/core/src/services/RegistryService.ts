@@ -94,6 +94,10 @@ export class RegistryService {
     this.provider.setWorkspaceRoot(path);
   }
 
+  static hasProvider(): boolean {
+    return this.provider !== null;
+  }
+
   /**
    * Fetches all artifacts from the workspace.
    */
