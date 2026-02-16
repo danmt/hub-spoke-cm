@@ -21,4 +21,8 @@ export class NodeRegistryProvider implements RegistryProvider {
   getIdentifier(file: string): string {
     return path.parse(file).name;
   }
+
+  setWorkspaceRoot(path: string): void {
+    this.workspaceRoot = path;
+  }
 }

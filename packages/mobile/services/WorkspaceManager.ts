@@ -1,4 +1,4 @@
-import { RegistryProvider, RegistryService } from "@hub-spoke/core";
+import { RegistryService } from "@hub-spoke/core";
 import { Directory, Paths } from "expo-file-system";
 import { WorkspaceStorage } from "./WorkspaceStorage";
 
@@ -7,12 +7,13 @@ export class WorkspaceManager {
    * Orchestrates the switching of a workspace by updating storage and
    * configuring core services with provided (injected) implementation details.
    */
-  static async switchWorkspace(
-    workspaceId: string | undefined,
-    providers: { registry: RegistryProvider },
-  ) {
+  static async switchWorkspace(workspaceId: string | undefined) {
     await WorkspaceStorage.setActiveWorkspace(workspaceId);
-    RegistryService.setProvider(providers.registry);
+
+    if (workspaceId) {
+      const workspaceDir = this.getWorkspaceUri(workspaceId);
+      RegistryService.setWorkspaceRoot(workspaceDir.uri);
+    }
   }
 
   /**

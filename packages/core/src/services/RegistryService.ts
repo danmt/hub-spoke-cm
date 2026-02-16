@@ -73,6 +73,7 @@ export interface RegistryProvider {
   listAgentFiles(folder: string): Promise<string[]>;
   readAgentFile(folder: string, filename: string): Promise<string>;
   getIdentifier(filename: string): string;
+  setWorkspaceRoot(path: string): void;
 }
 
 export class RegistryService {
@@ -81,6 +82,16 @@ export class RegistryService {
 
   static setProvider(provider: RegistryProvider): void {
     this.provider = provider;
+  }
+
+  static setWorkspaceRoot(path: string): void {
+    if (!this.provider) {
+      throw new Error(
+        "RegistryService: Cannot set root before provider is registered.",
+      );
+    }
+    this.cachedArtifacts = [];
+    this.provider.setWorkspaceRoot(path);
   }
 
   /**

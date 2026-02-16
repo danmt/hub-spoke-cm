@@ -1,5 +1,4 @@
 // packages/mobile/services/WorkspaceContext.tsx
-import { MobileRegistryProvider } from "@/providers/MobileRegistryProvider";
 import { WorkspaceManifest, WorkspaceManifestSchema } from "@/types/manifest";
 import { IoService, LoggerService, RegistryService } from "@hub-spoke/core";
 import { Directory, File } from "expo-file-system";
@@ -103,12 +102,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const workspaceDir = WorkspaceManager.getWorkspaceUri(id);
-
       // Charge Core Providers with the platform implementations
-      await WorkspaceManager.switchWorkspace(id, {
-        registry: new MobileRegistryProvider(workspaceDir.uri),
-      });
+      await WorkspaceManager.switchWorkspace(id);
 
       // Load metadata using direct mobile filesystem calls
       const activeManifest = await loadOrCreateManifest(id);

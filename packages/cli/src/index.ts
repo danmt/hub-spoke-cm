@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-import chalk from "chalk";
-import { Command } from "commander";
-import dotenv from "dotenv";
-
-// Import Commands
-// Explicit .js extension is required for NodeNext module resolution
 import {
   ConfigService,
   IoService,
@@ -12,6 +6,9 @@ import {
   RegistryService,
   SecretService,
 } from "@hub-spoke/core";
+import chalk from "chalk";
+import { Command } from "commander";
+import dotenv from "dotenv";
 import { configCommand } from "./commands/config.js";
 import { exportCommand } from "./commands/export.js";
 import { fillCommand } from "./commands/fill.js";

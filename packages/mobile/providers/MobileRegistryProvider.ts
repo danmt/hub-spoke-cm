@@ -53,4 +53,8 @@ export class MobileRegistryProvider implements RegistryProvider {
     // Standard Node-like behavior: "tutorial.md" -> "tutorial"
     return fileObj.name.replace(/\.[^/.]+$/, "");
   }
+
+  setWorkspaceRoot(path: string): void {
+    this.workspaceRoot = path;
+  }
 }
