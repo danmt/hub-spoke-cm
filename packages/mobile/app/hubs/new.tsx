@@ -92,7 +92,7 @@ export default function NewHubScreen() {
         workspaceDir.uri,
         {
           ask: async (type, data) => {
-            await Vibe.handoff(); // Vibrate when agent needs user feedback
+            await Vibe.handoff();
             setState("REVIEWING");
             return await ask(type, data);
           },
@@ -120,7 +120,7 @@ export default function NewHubScreen() {
       );
 
       setCreatedHubId(result.assembly.blueprint.hubId);
-      await Vibe.handoff(); // Success vibration
+      await Vibe.handoff();
       setState("DONE");
     } catch (err: any) {
       setStatusMessage(err.message);
@@ -224,7 +224,7 @@ export default function NewHubScreen() {
           <TextInput
             style={[
               styles.input,
-              { color: themeColors.text, borderColor: themeColors.tint },
+              { color: themeColors.text, borderColor: "rgba(255,255,255,0.4)" },
             ]}
             value={baseline.topic}
             onChangeText={(t) => setBaseline({ ...baseline, topic: t })}
@@ -237,7 +237,7 @@ export default function NewHubScreen() {
           <TextInput
             style={[
               styles.input,
-              { color: themeColors.text, borderColor: themeColors.tint },
+              { color: themeColors.text, borderColor: "rgba(255,255,255,0.4)" },
             ]}
             value={baseline.goal}
             onChangeText={(g) => setBaseline({ ...baseline, goal: g })}
@@ -250,7 +250,7 @@ export default function NewHubScreen() {
           <TextInput
             style={[
               styles.input,
-              { color: themeColors.text, borderColor: themeColors.tint },
+              { color: themeColors.text, borderColor: "rgba(255,255,255,0.4)" },
             ]}
             value={baseline.audience}
             onChangeText={(a) => setBaseline({ ...baseline, audience: a })}
@@ -258,6 +258,39 @@ export default function NewHubScreen() {
             placeholderTextColor="#888"
           />
         </View>
+
+        {/* Language Selection */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Language</Text>
+          <View style={styles.selectorRow}>
+            {["English", "Spanish"].map((lang) => {
+              const isSelected = baseline.language === lang;
+              return (
+                <Pressable
+                  key={lang}
+                  style={[
+                    styles.langOption,
+                    isSelected && {
+                      backgroundColor: themeColors.buttonPrimary,
+                      borderColor: themeColors.buttonPrimary,
+                    },
+                  ]}
+                  onPress={() => setBaseline({ ...baseline, language: lang })}
+                >
+                  <Text
+                    style={[
+                      styles.langOptionText,
+                      isSelected && { color: "#fff", opacity: 1 },
+                    ]}
+                  >
+                    {lang}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
         <Pressable
           style={[
             styles.primaryButton,
@@ -280,7 +313,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 40,
   },
-  formContent: { padding: 25, paddingTop: 60 },
+  formContent: { padding: 25, paddingTop: 60, paddingBottom: 100 },
   headerRow: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
   backBtn: { marginRight: 20, padding: 5 },
   title: { fontSize: 32, fontWeight: "bold" },
@@ -292,11 +325,28 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     marginBottom: 8,
     textTransform: "uppercase",
+    letterSpacing: 1.2,
   },
-  input: { height: 50, borderBottomWidth: 2, fontSize: 18, paddingVertical: 5 },
+  input: { borderBottomWidth: 1, fontSize: 18, paddingVertical: 12 },
+  selectorRow: { flexDirection: "row", gap: 12, marginTop: 5 },
+  langOption: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+  },
+  langOptionText: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#fff",
+    opacity: 0.7,
+  },
   primaryButton: {
-    height: 60,
-    borderRadius: 16,
+    height: 64,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
     width: "100%",
