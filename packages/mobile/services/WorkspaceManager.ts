@@ -1,3 +1,4 @@
+import { MobileRegistryProvider } from "@/providers/MobileRegistryProvider";
 import { RegistryService } from "@hub-spoke/core";
 import { Directory, Paths } from "expo-file-system";
 import { WorkspaceStorage } from "./WorkspaceStorage";
@@ -12,7 +13,14 @@ export class WorkspaceManager {
 
     if (workspaceId) {
       const workspaceDir = this.getWorkspaceUri(workspaceId);
-      RegistryService.setWorkspaceRoot(workspaceDir.uri);
+
+      if (RegistryService.hasProvider()) {
+        RegistryService.setWorkspaceRoot(workspaceDir.uri);
+      } else {
+        RegistryService.setProvider(
+          new MobileRegistryProvider(workspaceDir.uri),
+        );
+      }
     }
   }
 

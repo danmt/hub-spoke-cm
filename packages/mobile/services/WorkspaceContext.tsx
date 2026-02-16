@@ -1,5 +1,9 @@
 // packages/mobile/services/WorkspaceContext.tsx
-import { WorkspaceManifest, WorkspaceManifestSchema } from "@/types/manifest";
+import {
+  AgentIndexEntry,
+  WorkspaceManifest,
+  WorkspaceManifestSchema,
+} from "@/types/manifest";
 import { IoService, LoggerService, RegistryService } from "@hub-spoke/core";
 import { Directory, File } from "expo-file-system";
 import React, {
@@ -19,6 +23,7 @@ interface WorkspaceContextType {
   isLoading: boolean;
   reindex: () => Promise<void>;
   updateManifest: (changes: Partial<WorkspaceManifest>) => Promise<void>;
+  upsertAgentIndex: (entry: AgentIndexEntry) => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(
@@ -30,15 +35,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [manifest, setManifest] = useState<WorkspaceManifest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  /**
-   * Directly uses expo-file-system to manage the shadow index.
-   */
   const crawlAndIndex = async (
     workspaceId: string,
   ): Promise<WorkspaceManifest> => {
     const workspaceDir = WorkspaceManager.getWorkspaceUri(workspaceId);
 
-    // 1. Index Agents (using RegistryService for parsing logic)
     const artifacts = await RegistryService.getAllArtifacts(workspaceDir.uri);
     const agentEntries = artifacts.map((a) => ({
       id: a.id,
@@ -47,7 +48,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       description: a.description,
     }));
 
-    // 2. Index Hubs (using IoService to identify valid hub directories)
     const hubIds = await IoService.findAllHubsInWorkspace(workspaceDir.uri);
     const hubEntries = await Promise.all(
       hubIds.map(async (hubId) => {
@@ -68,7 +68,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       lastSynced: new Date().toISOString(),
     };
 
-    // Use native File class for mobile-specific manifest storage
     const manifestFile = new File(workspaceDir, ".hub", "workspace.json");
     if (!manifestFile.parentDirectory?.exists) {
       manifestFile.parentDirectory?.create();
@@ -102,10 +101,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Charge Core Providers with the platform implementations
       await WorkspaceManager.switchWorkspace(id);
 
-      // Load metadata using direct mobile filesystem calls
       const activeManifest = await loadOrCreateManifest(id);
       setManifest(activeManifest);
       setActiveWorkspace(id);
@@ -138,6 +135,23 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const upsertAgentIndex = async (entry: AgentIndexEntry) => {
+    if (!activeWorkspace || !manifest) return;
+
+    const existingAgents = manifest.agents || [];
+    const index = existingAgents.findIndex((a) => a.id === entry.id);
+
+    let newAgents;
+    if (index > -1) {
+      newAgents = [...existingAgents];
+      newAgents[index] = entry;
+    } else {
+      newAgents = [...existingAgents, entry];
+    }
+
+    await updateManifest({ agents: newAgents });
+  };
+
   useEffect(() => {
     WorkspaceStorage.getActiveWorkspace().then(syncWorkspaceData);
   }, []);
@@ -154,6 +168,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             ? crawlAndIndex(activeWorkspace).then(setManifest)
             : Promise.resolve(),
         updateManifest,
+        upsertAgentIndex,
       }}
     >
       {children}
