@@ -1,6 +1,6 @@
 // packages/mobile/components/proposals/ConfirmOrFeedback.tsx
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import React, { useState } from "react";
 import {
   ActivityIndicator,

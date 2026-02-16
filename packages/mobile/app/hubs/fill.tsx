@@ -85,9 +85,7 @@ export default function FillHubScreen() {
     };
   }, [hubData]);
 
-  const handleFinish = () => {
-    // By using navigate instead of push/replace after dismiss,
-    // Expo Router handles the transition back into the existing stack context properly.
+  const handleViewHubDetails = () => {
     router.dismissAll();
     router.navigate({
       pathname: "/(tabs)/hubs/details",
@@ -207,7 +205,7 @@ export default function FillHubScreen() {
               styles.primaryButton,
               { backgroundColor: themeColors.buttonPrimary },
             ]}
-            onPress={handleFinish}
+            onPress={handleViewHubDetails}
           >
             <Text style={styles.btnText}>View Finished Hub</Text>
           </Pressable>

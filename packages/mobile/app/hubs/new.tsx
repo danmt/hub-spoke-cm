@@ -128,6 +128,14 @@ export default function NewHubScreen() {
     }
   };
 
+  const handleViewHubDetails = () => {
+    router.dismissAll();
+    router.navigate({
+      pathname: "/(tabs)/hubs/details",
+      params: { id: createdHubId },
+    });
+  };
+
   if (state === "PROCESSING" && activeAgent) {
     return (
       <AgentThinkingOverlay
@@ -188,12 +196,7 @@ export default function NewHubScreen() {
           </Pressable>
           <Pressable
             style={[styles.secondaryButton, { borderColor: themeColors.tint }]}
-            onPress={() =>
-              router.replace({
-                pathname: "/(tabs)/hubs/details",
-                params: { id: createdHubId },
-              })
-            }
+            onPress={handleViewHubDetails}
           >
             <Text style={{ color: themeColors.tint, fontWeight: "bold" }}>
               View Scaffold

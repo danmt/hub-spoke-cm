@@ -1,5 +1,5 @@
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { FontAwesome } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, StyleSheet } from "react-native";

@@ -1,5 +1,5 @@
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { PersonaResponse } from "@hub-spoke/core";
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";

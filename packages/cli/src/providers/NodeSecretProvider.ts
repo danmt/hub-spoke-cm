@@ -16,7 +16,6 @@ export class NodeSecretProvider implements SecretProvider {
   private async ensureDir() {
     const dir = path.dirname(this.secretsPath);
 
-    console.log(dir);
     if (!existsSync(dir)) {
       await fs.mkdir(dir, { recursive: true });
     }

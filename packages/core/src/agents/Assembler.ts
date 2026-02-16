@@ -193,8 +193,6 @@ export class Assembler {
       const writerId = extractTag(block, "WRITER_ID");
       const bridge = extractTag(block, "BRIDGE");
 
-      console.log(`\n${block}`);
-
       const missing = [];
       if (!id) missing.push("ID");
       if (!header) missing.push("HEADER");

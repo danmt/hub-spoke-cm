@@ -1,5 +1,5 @@
 import { useColorScheme } from "@/components/useColorScheme";
-import Colors from "@/constants/Colors";
+import { Colors } from "@/constants/Colors";
 import { AssembleResponse } from "@hub-spoke/core";
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
@@ -69,6 +69,7 @@ const styles = StyleSheet.create({
     borderLeftColor: "#32a852",
   },
   sectionHeader: {
+    backgroundColor: "transparent",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",

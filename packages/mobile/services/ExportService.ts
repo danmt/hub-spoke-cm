@@ -27,8 +27,6 @@ export class ExportService {
       const { frontmatter, content: cleanMarkdown } =
         ParserService.stripInternalMetadata(hubFile);
 
-      console.log("\n\ncleanMarkdown: ", cleanMarkdown);
-
       // 3. Prepare the temporary file in the cache directory
       // Using Paths.cache ensures the OS can clean this up later
       const fileName = `${frontmatter.hubId || "exported-hub"}.md`;
@@ -40,8 +38,6 @@ export class ExportService {
       }
 
       tempFile.write(cleanMarkdown);
-
-      console.log("hub front matter title", frontmatter.title);
 
       // 5. Trigger native share sheet
       const isSharingAvailable = await Sharing.isAvailableAsync();
