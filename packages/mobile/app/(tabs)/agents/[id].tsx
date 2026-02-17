@@ -54,9 +54,25 @@ export default function AgentDetailsScreen() {
     );
   };
 
+  const handleEdit = () => {
+    router.push({
+      pathname: "/agents/editor",
+      params: { id: artifact.id, type: artifact.type },
+    });
+  };
+
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: artifact.id }} />
+      <Stack.Screen
+        options={{
+          title: artifact.id,
+          headerRight: () => (
+            <Pressable onPress={handleEdit} style={{ padding: 8 }}>
+              <FontAwesome name="pencil" size={20} color={themeColors.tint} />
+            </Pressable>
+          ),
+        }}
+      />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Polymorphic Body */}
@@ -195,17 +211,28 @@ function AssemblerDisplay({
       </View>
 
       <View style={styles.metaSection}>
-        <Text style={styles.sectionTitle}>Orchestration Chain</Text>
-        <Text style={styles.label}>Supported Writers:</Text>
+        <Text style={styles.sectionTitle}>Writers</Text>
         <View style={styles.tagRow}>
-          {artifact.writerIds?.map((wId: string) => (
-            <View
-              key={wId}
-              style={[styles.tag, { backgroundColor: theme.tint + "20" }]}
-            >
-              <Text style={[styles.tagText, { color: theme.tint }]}>{wId}</Text>
+          {artifact.writerIds.length === 0 ? (
+            <View style={[styles.tag, { backgroundColor: theme.tint + "20" }]}>
+              <Text
+                style={[styles.tagText, { color: theme.tint, opacity: 0.6 }]}
+              >
+                Assembler has an empty list of writers.
+              </Text>
             </View>
-          ))}
+          ) : (
+            artifact.writerIds.map((wId: string) => (
+              <View
+                key={wId}
+                style={[styles.tag, { backgroundColor: theme.tint + "20" }]}
+              >
+                <Text style={[styles.tagText, { color: theme.tint }]}>
+                  {wId}
+                </Text>
+              </View>
+            ))
+          )}
         </View>
       </View>
     </>
@@ -283,7 +310,6 @@ const styles = StyleSheet.create({
   tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   tag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   tagText: { fontSize: 12, fontWeight: "bold" },
-  label: { fontSize: 12, fontWeight: "bold", opacity: 0.6 },
   contentCard: { padding: 20, borderRadius: 20 },
   contentBody: {
     fontSize: 14,

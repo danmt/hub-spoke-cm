@@ -53,10 +53,6 @@ export class Assembler {
     strategyPrompt: string,
     writerIds: string[],
   ) {
-    if (writerIds.length === 0) {
-      throw new Error(`Assembler "${id}" has an empty list of writers.`);
-    }
-
     const writerConstraint = writerIds.join("|");
 
     this.systemInstruction = `

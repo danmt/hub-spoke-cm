@@ -288,6 +288,14 @@ export class RegistryService {
     const availableWriterIds = new Set(writers.map((w) => w.artifact.id));
 
     for (const assembler of assemblers) {
+      if (assembler.artifact.writerIds.length === 0) {
+        const errorMsg = `Assembler "${assembler.artifact.id}" has an empty list of writers`;
+        LoggerService.error("Registry Integrity Error", {
+          assemblerId: assembler.artifact.id,
+        });
+        throw new Error(errorMsg);
+      }
+
       const missing = assembler.artifact.writerIds.filter(
         (id) => !availableWriterIds.has(id),
       );

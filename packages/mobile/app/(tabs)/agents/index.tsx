@@ -19,6 +19,8 @@ export default function AgentsScreen() {
   const themeColors = Colors[useColorScheme() ?? "dark"];
   const router = useRouter();
 
+  console.log(manifest);
+
   if (isLoading || !manifest) {
     return (
       <View style={styles.centered}>

@@ -31,8 +31,8 @@ export function HubsProvider({ children }: { children: React.ReactNode }) {
     }
 
     const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-    const hubPath = `${workspaceDir.uri}/posts/${id}`;
-    const data = await IoService.readHub(hubPath);
+    const hubDir = new Directory(workspaceDir, "posts", id);
+    const data = await IoService.readHub(hubDir.uri);
 
     setCache((prev) => {
       const next = new Map(prev);

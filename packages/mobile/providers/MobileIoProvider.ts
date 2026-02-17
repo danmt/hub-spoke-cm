@@ -18,7 +18,7 @@ export class MobileIoProvider implements IoProvider {
     // If the first part isn't already a file URI, make it absolute
     const base = filtered[0].startsWith("file://")
       ? filtered[0]
-      : `${Paths.document.uri}/${filtered[0]}`;
+      : Paths.join(Paths.document.uri, filtered[0]);
 
     return Paths.join(base, ...filtered.slice(1));
   }

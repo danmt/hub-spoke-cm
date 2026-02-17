@@ -2,7 +2,7 @@
 import { FontAwesome } from "@expo/vector-icons";
 import { ConfigService, RegistryService, SecretService } from "@hub-spoke/core";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -23,6 +23,7 @@ import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
 import { useInteractionDeferrer } from "@/hooks/useInteractionDeferrer";
 import { executeMobileCreateHubAction } from "@/presets/executeMobileCreateHubAction";
+import { useAgents } from "@/services/AgentsContext";
 import { useHubs } from "@/services/HubsContext";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
@@ -35,6 +36,7 @@ export default function NewHubScreen() {
   const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const { activeWorkspace, manifest, updateManifest } = useWorkspace();
+  const { agents, isLoading: agentsLoading } = useAgents(); // Accessing global agents state
   const { invalidateCache } = useHubs();
   const { pendingInteraction, ask, handleResolve } = useInteractionDeferrer();
   const [state, setState] = useState<ScreenState>("IDLE");
@@ -52,14 +54,23 @@ export default function NewHubScreen() {
     language: "English",
   });
 
+  useEffect(() => {
+    if (!agentsLoading && agents.length > 0) {
+      try {
+        RegistryService.validateIntegrity(agents);
+      } catch (err: any) {
+        setStatusMessage(err.message);
+        setState("ERROR");
+      }
+    } else if (!agentsLoading && agents.length === 0 && activeWorkspace) {
+      setStatusMessage("No agents discovered in the current workspace.");
+      setState("ERROR");
+    }
+  }, [agents, agentsLoading, activeWorkspace]);
+
   const startGeneration = async () => {
     if (!baseline.topic.trim()) {
       Alert.alert("Required", "Please provide a main topic.");
-      return;
-    }
-
-    if (!activeWorkspace) {
-      Alert.alert("Error", "No active workspace selected.");
       return;
     }
 
@@ -75,12 +86,6 @@ export default function NewHubScreen() {
       }
 
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-      const artifacts = await RegistryService.getAllArtifacts(workspaceDir.uri);
-      const agents = RegistryService.initializeAgents(
-        secret.apiKey,
-        config.model!,
-        artifacts,
-      );
       const registryManifest = RegistryService.toManifest(agents);
 
       const result = await executeMobileCreateHubAction(
@@ -136,6 +141,11 @@ export default function NewHubScreen() {
     });
   };
 
+  const handleGoToRegistry = () => {
+    router.dismissAll();
+    router.navigate("/(tabs)/agents");
+  };
+
   if (state === "PROCESSING" && activeAgent) {
     return (
       <AgentThinkingOverlay
@@ -165,6 +175,38 @@ export default function NewHubScreen() {
         {type === "retry" && (
           <ConfirmRetry error={data} onRetry={handleResolve} />
         )}
+      </View>
+    );
+  }
+
+  if (state === "ERROR") {
+    return (
+      <View style={styles.centered}>
+        <FontAwesome name="exclamation-triangle" size={60} color="#ff4444" />
+        <Text style={[styles.title, { marginTop: 20 }]}>Registry Conflict</Text>
+        <Text style={[styles.description, { textAlign: "center" }]}>
+          {statusMessage}
+        </Text>
+        <View style={styles.victoryActions}>
+          <Pressable
+            style={[
+              styles.primaryButton,
+              { backgroundColor: themeColors.buttonPrimary },
+            ]}
+            onPress={handleGoToRegistry}
+          >
+            <FontAwesome name="users" size={18} color="#fff" />
+            <Text style={styles.buttonText}>Manage Agents</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.secondaryButton, { borderColor: themeColors.tint }]}
+            onPress={() => router.back()}
+          >
+            <Text style={{ color: themeColors.tint, fontWeight: "bold" }}>
+              Go Back
+            </Text>
+          </Pressable>
+        </View>
       </View>
     );
   }

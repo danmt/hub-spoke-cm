@@ -9,6 +9,7 @@ import {
   ParserService,
   PersonaResponse,
 } from "@hub-spoke/core";
+import { File } from "expo-file-system";
 
 export interface ExecuteMobileCreateHubActionResult {
   architecture: ArchitectResponse;
@@ -51,7 +52,7 @@ export async function executeMobileCreateHubAction(
     result.assembly.blueprint.hubId,
   );
 
-  const filePath = `${hubDir}/hub.md`;
+  const filePath = new File(hubDir, "hub.md");
   const fileContent = ParserService.generateScaffold(
     result.architecture.brief,
     result.assembly.blueprint,
@@ -59,12 +60,12 @@ export async function executeMobileCreateHubAction(
     result.personification.content,
   );
 
-  await IoService.safeWriteFile(filePath, fileContent);
+  await IoService.safeWriteFile(filePath.uri, fileContent);
 
   await handlers.onComplete(
     result.assembly.blueprint.hubId,
     result.personification.header,
   );
 
-  return { ...result, filePath, fileContent };
+  return { ...result, filePath: filePath.uri, fileContent };
 }

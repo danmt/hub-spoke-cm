@@ -8,6 +8,7 @@ import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { FontAwesome } from "@expo/vector-icons";
 import { ParsedFile } from "@hub-spoke/core";
+import { Directory } from "expo-file-system";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -54,8 +55,8 @@ export default function HubDetailsScreen() {
     if (!activeWorkspace || !id) return;
     try {
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-      const hubRootDir = `${workspaceDir.uri}/posts/${id}`;
-      await ExportService.exportHub(hubRootDir);
+      const hubDir = new Directory(workspaceDir, "posts", id);
+      await ExportService.exportHub(hubDir.uri);
     } catch (err: any) {
       console.error("Export failed:", err.message);
     }
