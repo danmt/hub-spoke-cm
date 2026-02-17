@@ -1,19 +1,14 @@
 import { ThemeColors } from "@/constants/Colors";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
+import { computeSlug } from "@/utils/computeSlug";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { IoService } from "@hub-spoke/core";
 import { Directory, Paths } from "expo-file-system";
 import React, { useState } from "react";
-import {
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-} from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet } from "react-native";
 import { Text, View } from "../Themed";
+import { InputField } from "../form/InputField";
 
 interface Props {
   activeWorkspace: string | undefined;
@@ -31,6 +26,7 @@ export function WorkspaceSettings({
   const { switchWorkspace } = useWorkspace();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [newName, setNewName] = useState("");
+  const displayedSlug = computeSlug(newName || "");
 
   const handleSwitch = async (id: string | undefined) => {
     await switchWorkspace(id);
@@ -152,17 +148,50 @@ export function WorkspaceSettings({
             ]}
           >
             <Text style={styles.modalTitle}>New Workspace</Text>
-            <TextInput
-              style={[
-                styles.input,
-                { color: themeColors.text, borderColor: themeColors.tint },
-              ]}
+            <InputField
+              label="Workspace ID"
               value={newName}
               onChangeText={setNewName}
               placeholder="workspace-slug"
               placeholderTextColor="#888"
               autoFocus
             />
+
+            {(!displayedSlug || displayedSlug === newName) && (
+              <Text
+                style={{
+                  marginTop: -16,
+                  marginBottom: 28,
+                  paddingHorizontal: 4,
+                  fontSize: 13,
+                  color: themeColors.text + "80",
+                  fontStyle: "italic",
+                  opacity: 0.7,
+                }}
+              >
+                Enter the unique ID that will be used.
+              </Text>
+            )}
+
+            {displayedSlug && displayedSlug !== newName && (
+              <Text
+                style={{
+                  marginTop: -16,
+                  marginBottom: 28,
+                  paddingHorizontal: 4,
+                  fontSize: 13,
+                  color: themeColors.text + "80",
+                  fontStyle: "italic",
+                  opacity: 0.7,
+                }}
+              >
+                Actual ID that will be used:{" "}
+                <Text style={{ fontWeight: "600", color: themeColors.tint }}>
+                  {displayedSlug}
+                </Text>
+              </Text>
+            )}
+
             <View
               style={[
                 styles.modalButtons,

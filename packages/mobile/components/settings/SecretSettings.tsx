@@ -1,8 +1,9 @@
 import { ThemeColors } from "@/constants/Colors";
 import { SecretService } from "@hub-spoke/core";
 import React from "react";
-import { Alert, Pressable, StyleSheet, TextInput } from "react-native";
+import { Alert, Pressable, StyleSheet } from "react-native";
 import { Text, View } from "../Themed";
+import { InputField } from "../form/InputField";
 
 interface Props {
   apiKey: string;
@@ -33,16 +34,13 @@ export function SecretSettings({
         { backgroundColor: colorScheme === "dark" ? "#1a1a1a" : "#f2f2f2" },
       ]}
     >
-      <Text style={styles.label}>Gemini API Key</Text>
-      <TextInput
-        style={[
-          styles.input,
-          { color: themeColors.text, borderColor: themeColors.tint },
-        ]}
+      <InputField
+        label="Gemini API Key"
         value={apiKey}
         onChangeText={setApiKey}
         placeholder="Enter API Key"
         secureTextEntry
+        placeholderTextColor="#888"
       />
       <Pressable
         style={[styles.button, { backgroundColor: themeColors.buttonPrimary }]}

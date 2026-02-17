@@ -10,10 +10,10 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
 } from "react-native";
 
 import { AgentThinkingOverlay } from "@/components/AgentThinkingOverlay";
+import { InputField } from "@/components/form/InputField";
 import { ArchitectProposal } from "@/components/proposals/ArchitectProposal";
 import { AssemblerProposal } from "@/components/proposals/AssemblerProposal";
 import { ConfirmRetry } from "@/components/proposals/ConfirmRetry";
@@ -222,45 +222,34 @@ export default function NewHubScreen() {
         <Text style={styles.description}>
           Provide the initial context for the Architect Agent.
         </Text>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Main Topic</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { color: themeColors.text, borderColor: "rgba(255,255,255,0.4)" },
-            ]}
-            value={baseline.topic}
-            onChangeText={(t) => setBaseline({ ...baseline, topic: t })}
-            placeholder="e.g. React Native Architecture"
-            placeholderTextColor="#888"
-          />
-        </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Goal</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { color: themeColors.text, borderColor: "rgba(255,255,255,0.4)" },
-            ]}
-            value={baseline.goal}
-            onChangeText={(g) => setBaseline({ ...baseline, goal: g })}
-            placeholder="What should readers learn?"
-            placeholderTextColor="#888"
-          />
-        </View>
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Target Audience</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { color: themeColors.text, borderColor: "rgba(255,255,255,0.4)" },
-            ]}
-            value={baseline.audience}
-            onChangeText={(a) => setBaseline({ ...baseline, audience: a })}
-            placeholder="Who is this for?"
-            placeholderTextColor="#888"
-          />
-        </View>
+
+        <InputField
+          label="Main Topic"
+          value={baseline.topic}
+          onChangeText={(t) => setBaseline({ ...baseline, topic: t })}
+          placeholder="e.g. React Native Architecture"
+          required
+          autoCapitalize="sentences"
+        />
+
+        <InputField
+          label="Goal"
+          value={baseline.goal}
+          onChangeText={(g) => setBaseline({ ...baseline, goal: g })}
+          placeholder="What should readers learn?"
+          required
+          multiline
+          numberOfLines={2}
+        />
+
+        <InputField
+          label="Target Audience"
+          value={baseline.audience}
+          onChangeText={(a) => setBaseline({ ...baseline, audience: a })}
+          placeholder="Who is this for? (e.g. mobile developers, beginners...)"
+          multiline
+          numberOfLines={2}
+        />
 
         {/* Language Selection */}
         <View style={styles.inputGroup}>

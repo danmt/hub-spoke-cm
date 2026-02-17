@@ -1,4 +1,5 @@
 // packages/mobile/app/agents/editor.tsx
+import { InputField } from "@/components/form/InputField";
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
@@ -6,6 +7,7 @@ import { useAgents } from "@/services/AgentsContext";
 import { AgentsStorage } from "@/services/AgentsStorage";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
+import { computeSlug } from "@/utils/computeSlug";
 import { Vibe } from "@/utils/vibe";
 import { FontAwesome } from "@expo/vector-icons";
 import {
@@ -24,8 +26,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
-  TextInputProps,
 } from "react-native";
 
 type EditorState = "SELECTING_TYPE" | "EDITING" | "SAVING" | "DONE";
@@ -34,50 +34,6 @@ type AgentFormState =
   | Partial<PersonaArtifact>
   | Partial<WriterArtifact>
   | Partial<AssemblerArtifact>;
-
-interface InputFieldProps extends TextInputProps {
-  label: string;
-  disabled?: boolean;
-}
-
-function InputField({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  multiline,
-  disabled,
-  style,
-  ...rest
-}: InputFieldProps) {
-  const themeColors = Colors[useColorScheme() ?? "dark"];
-
-  return (
-    <View style={styles.inputGroup}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        {...rest}
-        style={[
-          styles.input,
-          {
-            color: themeColors.text,
-            borderColor: "rgba(255,255,255,0.4)",
-            backgroundColor: "rgba(255,255,255,0.08)",
-          },
-          multiline && { height: 80, textAlignVertical: "top" },
-          disabled && { opacity: 0.5 },
-          style,
-        ]}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#aaa"
-        multiline={multiline}
-        editable={!disabled}
-      />
-    </View>
-  );
-}
 
 export default function AgentEditorScreen() {
   const router = useRouter();
@@ -102,6 +58,7 @@ export default function AgentEditorScreen() {
     content: "",
     language: "English",
   });
+  const displayedSlug = computeSlug(formData.id || "");
   const { refresh } = useAgents();
 
   useEffect(() => {
@@ -123,6 +80,16 @@ export default function AgentEditorScreen() {
     }
 
     if (!activeWorkspace) return;
+
+    const slugifiedId = computeSlug(formData.id);
+
+    if (!slugifiedId) {
+      Alert.alert(
+        "Invalid ID",
+        "The ID must contain at least some letters or numbers.",
+      );
+      return;
+    }
 
     setState("SAVING");
     try {
@@ -285,15 +252,50 @@ export default function AgentEditorScreen() {
         <InputField
           label="Agent ID (Slug)"
           value={formData.id}
-          onChangeText={(v) =>
+          onChangeText={(value) =>
             setFormData({
               ...formData,
-              id: v.toLowerCase().replace(/\s/g, "-"),
+              id: value,
             })
           }
           placeholder="e.g. technical-prose"
-          disabled={isEditMode}
+          editable={!isEditMode}
         />
+
+        {(!displayedSlug || displayedSlug === formData.id) && (
+          <Text
+            style={{
+              marginTop: -16,
+              marginBottom: 28,
+              paddingHorizontal: 4,
+              fontSize: 13,
+              color: themeColors.text + "80",
+              fontStyle: "italic",
+              opacity: 0.7,
+            }}
+          >
+            Enter the unique ID that will be used.
+          </Text>
+        )}
+
+        {displayedSlug && displayedSlug !== formData.id && (
+          <Text
+            style={{
+              marginTop: -16,
+              marginBottom: 28,
+              paddingHorizontal: 4,
+              fontSize: 13,
+              color: themeColors.text + "80",
+              fontStyle: "italic",
+              opacity: 0.7,
+            }}
+          >
+            Actual ID that will be used:{" "}
+            <Text style={{ fontWeight: "600", color: themeColors.tint }}>
+              {displayedSlug}
+            </Text>
+          </Text>
+        )}
 
         <InputField
           label="Role Description (For AI)"

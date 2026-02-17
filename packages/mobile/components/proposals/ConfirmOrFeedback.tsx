@@ -9,9 +9,9 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  TextInput,
 } from "react-native";
 import { Text, View } from "../Themed";
+import { InputField } from "../form/InputField";
 
 interface Props {
   onConfirm: () => void;
@@ -88,39 +88,40 @@ export function ConfirmOrFeedback({
             <Text style={styles.modalSubtitle}>
               Tell the AI what you'd like to change.
             </Text>
-            <TextInput
-              style={[
-                styles.input,
-                { color: themeColors.text, borderColor: themeColors.tint },
-              ]}
+            <InputField
+              aria-label="Feedback"
               value={feedbackText}
               onChangeText={setFeedbackText}
-              placeholder="e.g. Make it more technical..."
-              placeholderTextColor="#888"
+              placeholder="e.g. Make it more technical, add examples, shorten it..."
+              variant="bordered"
               multiline
               autoFocus
             />
             <View style={styles.modalButtons}>
-              <Pressable onPress={() => setIsModalVisible(false)}>
-                <Text
-                  style={{ color: "#888", marginRight: 25, fontWeight: "600" }}
-                >
-                  Cancel
-                </Text>
-              </Pressable>
               <Pressable
+                style={[styles.button, styles.secondaryButton]}
+                onPress={() => setIsModalVisible(false)}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.buttonText}>Cancel</Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.button,
+                  { backgroundColor: themeColors.buttonPrimary },
+                ]}
                 onPress={handleSubmitFeedback}
                 disabled={!feedbackText.trim() || isSubmitting}
               >
-                <Text
-                  style={{
-                    color: themeColors.tint,
-                    fontWeight: "bold",
-                    opacity: feedbackText.trim() ? 1 : 0.5,
-                  }}
-                >
-                  Send to AI
-                </Text>
+                {isSubmitting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.buttonText}>Send to AI</Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -169,5 +170,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     alignItems: "center",
+    backgroundColor: "transparent",
+    gap: 16,
   },
 });

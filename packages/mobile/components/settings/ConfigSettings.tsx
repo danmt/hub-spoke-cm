@@ -1,8 +1,9 @@
 import { ThemeColors } from "@/constants/Colors";
 import { ConfigService } from "@hub-spoke/core";
 import React from "react";
-import { Alert, Pressable, StyleSheet, TextInput } from "react-native";
+import { Alert, Pressable, StyleSheet } from "react-native";
 import { Text, View } from "../Themed";
+import { InputField } from "../form/InputField";
 
 interface Props {
   model: string;
@@ -33,15 +34,12 @@ export function ConfigSettings({
         { backgroundColor: colorScheme === "dark" ? "#1a1a1a" : "#f2f2f2" },
       ]}
     >
-      <Text style={styles.label}>Default AI Model</Text>
-      <TextInput
-        style={[
-          styles.input,
-          { color: themeColors.text, borderColor: themeColors.tint },
-        ]}
+      <InputField
+        label="Default AI Model"
         value={model}
         onChangeText={setModel}
         placeholder="e.g. gemini-2.0-flash"
+        placeholderTextColor="#888"
       />
       <Pressable
         style={[styles.button, { backgroundColor: themeColors.buttonPrimary }]}
