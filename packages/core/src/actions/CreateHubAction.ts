@@ -15,6 +15,7 @@ import {
   PersonaInteractionHandler,
   PersonaResponse,
 } from "../agents/Persona.js";
+import { Writer } from "../agents/Writer.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { AgentPair, getAgentsByType } from "../services/RegistryService.js";
 
@@ -35,6 +36,7 @@ export class CreateHubAction {
 
   private architect: Architect;
   private assemblers: Assembler[];
+  private writers: Writer[];
   private personas: Persona[];
 
   constructor(
@@ -56,6 +58,12 @@ export class CreateHubAction {
 
     if (this.personas.length === 0) {
       throw new Error("CreateHubAction: No personas found in the registry.");
+    }
+
+    this.writers = getAgentsByType(agents, "writer").map((a) => a.agent);
+
+    if (this.writers.length === 0) {
+      throw new Error("CreateHubAction: No writers found in the registry.");
     }
   }
 
@@ -118,6 +126,9 @@ export class CreateHubAction {
       topic: architecture.brief.topic,
       goal: architecture.brief.goal,
       audience: architecture.brief.audience,
+      allowedWriters: this.writers.filter((writer) =>
+        architecture.brief.allowedWriterIds.includes(writer.id),
+      ),
       interact: this._onAssembler,
       onThinking: () => this._onAssembling?.(assemblerId),
       onRetry: this._onRetry,

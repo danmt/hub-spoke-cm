@@ -68,6 +68,9 @@ export async function executeCliCreateHubAction(
       console.log(`${chalk.yellow("Audience:")} ${brief.audience}`);
       console.log(`${chalk.yellow("Assembler:")} ${brief.assemblerId}`);
       console.log(`${chalk.yellow("Persona:")}   ${brief.personaId}\n`);
+      console.log(
+        `${chalk.yellow("Allowed Writers:")}   ${brief.allowedWriterIds.join(", ")}\n`,
+      );
       return confirmOrFeedback();
     })
     .onAssembling((assemblerId) =>

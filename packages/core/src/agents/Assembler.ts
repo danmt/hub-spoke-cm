@@ -21,6 +21,7 @@ export interface AssembleContext {
   topic: string;
   goal: string;
   audience: string;
+  allowedWriters: WriterInfo[];
   interact?: AssemblerInteractionHandler;
   onRetry?: (error: Error) => Promise<boolean>;
   onThinking?: () => void;
@@ -34,7 +35,13 @@ export interface AssemblerGenerateContext {
   topic: string;
   goal: string;
   audience: string;
+  allowedWriters: WriterInfo[];
   feedback?: string;
+}
+
+export interface WriterInfo {
+  id: string;
+  description: string;
 }
 
 export interface AssemblerGenerateResponse {
@@ -51,10 +58,7 @@ export class Assembler {
     public id: string,
     public description: string,
     strategyPrompt: string,
-    writerIds: string[],
   ) {
-    const writerConstraint = writerIds.join("|");
-
     this.systemInstruction = `
       You are a Lead Content Architect. Your mission is to decompose a high-level project into a surgical, sequential execution blueprint.
 
@@ -72,13 +76,17 @@ export class Assembler {
       It must mentions all the concepts that have been covered so far.
 
       EXECUTION RULES:
-      1. WRITER SELECTION: Select exactly ONE Writer ID from: [${writerConstraint}]. Choose the writer that best fits the specific nature of that section.
-      2. LANGUAGE ENFORCEMENT: Write the blueprint 'header' and 'intent' blocks in English for clarity.
+      1. WRITER SELECTION: For every [COMPONENT], you MUST select exactly ONE Writer ID from the provided [ALLOWED_WRITERS] list. 
+      2. LANGUAGE: Write blueprint headers and intents in English.
 
       INPUT FORMAT:
       [TOPIC]Topic of the blueprint[/TOPIC]
       [GOAL]Goal of the blueprint[/GOAL]
       [AUDIENCE]Audience of the blueprint[/AUDIENCE]
+      [ALLOWED_WRITERS]
+        - id1: Writer with ID 1
+        - id2: Writer to do XYZ
+      [/ALLOWED_WRITERS]
 
       OUTPUT FORMAT (Use these exact delimiters):
       [HUB_ID]slugified-topic-id[/HUB_ID]
@@ -87,7 +95,7 @@ export class Assembler {
       [ID]unique-section-id[/ID]
       [HEADER]Section Title[/HEADER]
       [INTENT]Detailed micro-brief focusing on the [TOPIC] for the [AUDIENCE][/INTENT]
-      [WRITER_ID]prose, code or custom writer IDs[/WRITER_ID]
+      [WRITER_ID]id1[/WRITER_ID]
       [BRIDGE]Context of the concepts already covered so far[/BRIDGE]
       [/COMPONENT]
 
@@ -106,6 +114,7 @@ export class Assembler {
           audience: ctx.audience,
           goal: ctx.goal,
           topic: ctx.topic,
+          allowedWriters: ctx.allowedWriters,
           feedback: currentFeedback,
         });
 
@@ -147,10 +156,17 @@ export class Assembler {
   async generate(
     ctx: AssemblerGenerateContext,
   ): Promise<AssemblerGenerateResponse> {
+    const workforceManifest = ctx.allowedWriters
+      .map((w) => `- ${w.id}: ${w.description}`)
+      .join("\n");
+
     const basePrompt = `
         [TOPIC]${ctx.topic}[/TOPIC]
         [GOAL]${ctx.goal}[/GOAL]
         [AUDIENCE]${ctx.audience}[/AUDIENCE]
+        [ALLOWED_WRITERS]
+        ${workforceManifest}
+        [/ALLOWED_WRITERS]
       `;
 
     const prompt = ctx.feedback
@@ -173,6 +189,7 @@ export class Assembler {
   }
 
   private parse(text: string): AssembleResponse {
+    console.log(text);
     const hubIdMatch = text.match(/\[HUB_ID\]([\s\S]*?)\[\/HUB_ID\]/i);
     const hubId = hubIdMatch ? hubIdMatch[1].trim() : "generated-hub";
 

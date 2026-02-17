@@ -31,7 +31,6 @@ export interface WriterArtifact extends BaseArtifact {
 
 export interface AssemblerArtifact extends BaseArtifact {
   type: "assembler";
-  writerIds: string[];
 }
 
 export type Artifact = PersonaArtifact | WriterArtifact | AssemblerArtifact;
@@ -156,7 +155,6 @@ export class RegistryService {
               description: assemblerArtifact.description,
               id: assemblerArtifact.id,
               model: assemblerArtifact.model,
-              writerIds: assemblerArtifact.writerIds,
             } as AssemblerArtifact);
           }
         }
@@ -229,7 +227,6 @@ export class RegistryService {
               artifact.id,
               artifact.description,
               artifact.content,
-              (artifact as AssemblerArtifact).writerIds,
             ),
           };
       }
@@ -276,7 +273,6 @@ export class RegistryService {
         .map((a) => ({
           id: a.artifact.id,
           description: a.artifact.description,
-          supportedWriters: a.artifact.writerIds,
         })),
     };
     return JSON.stringify(manifest, null, 2);
@@ -285,28 +281,24 @@ export class RegistryService {
   static validateIntegrity(agents: AgentPair[]): void {
     const writers = getAgentsByType(agents, "writer");
     const assemblers = getAgentsByType(agents, "assembler");
-    const availableWriterIds = new Set(writers.map((w) => w.artifact.id));
+    const personas = getAgentsByType(agents, "persona");
 
-    for (const assembler of assemblers) {
-      if (assembler.artifact.writerIds.length === 0) {
-        const errorMsg = `Assembler "${assembler.artifact.id}" has an empty list of writers`;
-        LoggerService.error("Registry Integrity Error", {
-          assemblerId: assembler.artifact.id,
-        });
-        throw new Error(errorMsg);
-      }
+    if (writers.length === 0) {
+      const errorMsg = "Registry has an empty list of writers";
+      LoggerService.error(`RegistryService: ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
 
-      const missing = assembler.artifact.writerIds.filter(
-        (id) => !availableWriterIds.has(id),
-      );
-      if (missing.length > 0) {
-        const errorMsg = `Assembler "${assembler.artifact.id}" missing writers: [${missing.join(", ")}]`;
-        LoggerService.error("Registry Integrity Error", {
-          assemblerId: assembler.artifact.id,
-          missing,
-        });
-        throw new Error(errorMsg);
-      }
+    if (assemblers.length === 0) {
+      const errorMsg = "Registry has an empty list of assemblers";
+      LoggerService.error(`RegistryService: ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+
+    if (personas.length === 0) {
+      const errorMsg = "Registry has an empty list of personas";
+      LoggerService.error(`RegistryService: ${errorMsg}`);
+      throw new Error(errorMsg);
     }
   }
 }

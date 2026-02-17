@@ -20,6 +20,7 @@ export class ParserService {
    */
   static parseMarkdown(rawContent: string): ParsedFile {
     try {
+      console.log(rawContent);
       const { data, content } = parseFrontmatter(rawContent);
       const finalData: Record<string, any> = { ...data };
 
@@ -113,9 +114,9 @@ export class ParserService {
       date: new Date().toISOString().split("T")[0],
       personaId: brief.personaId,
       blueprint: blueprintData,
+      assemblerId: brief.assemblerId,
+      allowedWriterIds: brief.allowedWriterIds.join(","),
     };
-
-    frontmatter.assemblerId = brief.assemblerId;
 
     const body = blueprint.components
       .map((c) => {

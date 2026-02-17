@@ -45,6 +45,15 @@ export function ArchitectProposal({ data, onResolve }: Props) {
               <Text style={styles.value}>{data.brief.assemblerId}</Text>
             </View>
           </View>
+
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Writers</Text>
+              <Text style={styles.value}>
+                {data.brief.allowedWriterIds.join(", ")}
+              </Text>
+            </View>
+          </View>
         </View>
       </ScrollView>
 

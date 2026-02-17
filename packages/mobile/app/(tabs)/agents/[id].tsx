@@ -201,41 +201,13 @@ function AssemblerDisplay({
   theme: ThemeColors;
 }) {
   return (
-    <>
-      <View
-        style={[styles.headerCard, { backgroundColor: theme.cardBackground }]}
-      >
-        <Text style={styles.typeLabel}>Assembler</Text>
-        <Text style={styles.title}>{artifact.id}</Text>
-        <Text style={styles.description}>{artifact.description}</Text>
-      </View>
-
-      <View style={styles.metaSection}>
-        <Text style={styles.sectionTitle}>Writers</Text>
-        <View style={styles.tagRow}>
-          {artifact.writerIds.length === 0 ? (
-            <View style={[styles.tag, { backgroundColor: theme.tint + "20" }]}>
-              <Text
-                style={[styles.tagText, { color: theme.tint, opacity: 0.6 }]}
-              >
-                Assembler has an empty list of writers.
-              </Text>
-            </View>
-          ) : (
-            artifact.writerIds.map((wId: string) => (
-              <View
-                key={wId}
-                style={[styles.tag, { backgroundColor: theme.tint + "20" }]}
-              >
-                <Text style={[styles.tagText, { color: theme.tint }]}>
-                  {wId}
-                </Text>
-              </View>
-            ))
-          )}
-        </View>
-      </View>
-    </>
+    <View
+      style={[styles.headerCard, { backgroundColor: theme.cardBackground }]}
+    >
+      <Text style={styles.typeLabel}>Assembler</Text>
+      <Text style={styles.title}>{artifact.id}</Text>
+      <Text style={styles.description}>{artifact.description}</Text>
+    </View>
   );
 }
 

@@ -128,6 +128,16 @@ export default function HubDetailsScreen() {
             <MetaItem label="Audience" value={metadata.audience} icon="users" />
             <MetaItem label="Goal" value={metadata.goal} icon="flag" />
             <MetaItem label="Persona" value={metadata.personaId} icon="user" />
+            <MetaItem
+              label="Assembler"
+              value={metadata.assemblerId}
+              icon="sitemap"
+            />
+            <MetaItem
+              label="Writers"
+              value={metadata.allowedWriterIds.split(",").join(", ")}
+              icon="pencil"
+            />
           </View>
         </View>
 

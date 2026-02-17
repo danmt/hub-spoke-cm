@@ -38,6 +38,7 @@ export interface Brief {
   language: string;
   assemblerId: string;
   personaId: string;
+  allowedWriterIds: string[];
 }
 
 export class Architect {
@@ -64,11 +65,14 @@ export class Architect {
 
       PROTOCOL:
       1. Review the baseline. Ask follow-up questions if it's too vague.
-      2. Provide a [MESSAGE] block with explanation/questions.
-      3. Provide a [BRIEF] block with the current structured Brief.
-      4. If tools are missing, explain in [MESSAGE] and propose the closest match in [BRIEF].
-      5. The [MESSAGE] should be in the user's language.
-      6. The [TOPIC], [GOAL] and [AUDIENCE] should be ALWAYS in English.
+      2. Select exactly ONE Assembler and ONE Persona from the manifest.
+      3. WORKFORCE SELECTION: Select one or more Writer IDs from the manifest that are permitted to work on this Hub. 
+         - If technical code is involved, ensure a code-capable writer is included.
+         - If narrative flow is key, include a prose writer.
+      4. Provide a [MESSAGE] block with explanation/questions.
+      5. Provide a [BRIEF] block with the current structured Brief.
+      6. The [MESSAGE] should be in the user's language.
+      7. The [TOPIC], [GOAL] and [AUDIENCE] should be ALWAYS in English.
 
       OUTPUT FORMAT:
       [MESSAGE]Your message to the user.[/MESSAGE]
@@ -79,6 +83,7 @@ export class Architect {
       [LANGUAGE]Target Language[/LANGUAGE]
       [ASSEMBLER_ID]id[/ASSEMBLER_ID]
       [PERSONA_ID]id[/PERSONA_ID]
+      [ALLOWED_WRITER_IDS]id1,id2[/ALLOWED_WRITER_IDS]
       [/BRIEF]
     `.trim();
   }
@@ -155,6 +160,10 @@ export class Architect {
     const message =
       text.match(/\[MESSAGE\]([\s\S]*?)\[\/MESSAGE\]/i)?.[1].trim() || text;
     const brief = text.match(/\[BRIEF\]([\s\S]*?)\[\/BRIEF\]/i)?.[1] || "";
+    const allowedWriterIdsRaw =
+      brief.match(
+        /\[ALLOWED_WRITER_IDS\](.*?)\[\/ALLOWED_WRITER_IDS\]/i,
+      )?.[1] || "";
 
     return {
       message,
@@ -171,6 +180,10 @@ export class Architect {
           "",
         personaId:
           brief.match(/\[PERSONA_ID\](.*?)\[\/PERSONA_ID\]/i)?.[1].trim() || "",
+        allowedWriterIds: allowedWriterIdsRaw
+          .split(",")
+          .map((id) => id.trim())
+          .filter(Boolean),
       },
     };
   }

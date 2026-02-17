@@ -168,7 +168,7 @@ export default function FillHubScreen() {
         model={activeAgent.model}
         phase={activeAgent.phase}
         status={statusMessage}
-        progressText={`${remainingCount}/${Object.keys(hubData?.sections || []).length} SECTIONS REMAINING`}
+        progressText={`${Object.keys(hubData?.sections || []).length - remainingCount + 1}/${Object.keys(hubData?.sections || []).length} SECTIONS REMAINING`}
         color={activeAgent.phase === "styling" ? "#a832a4" : themeColors.tint}
       />
     );

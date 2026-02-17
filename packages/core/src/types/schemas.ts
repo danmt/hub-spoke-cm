@@ -42,6 +42,7 @@ export const FrontmatterSchema = z.object({
   // Agentic Hierarchy Metadata
   assemblerId: z.string(),
   personaId: z.string(),
+  allowedWriterIds: z.string(),
 
   // Persists the structural plan
   blueprint: z.record(z.string(), SectionBlueprintSchema),

@@ -41,7 +41,7 @@ export default function AgentEditorScreen() {
     id: string;
     type: ArtifactType;
   }>();
-  const { activeWorkspace, upsertAgentIndex, manifest } = useWorkspace();
+  const { activeWorkspace, upsertAgentIndex } = useWorkspace();
   const { getAgent, agents: currentRegistry } = useAgents();
   const themeColors = Colors[useColorScheme() ?? "dark"];
   const isEditMode = !!id;
@@ -119,17 +119,6 @@ export default function AgentEditorScreen() {
       }
     }
 
-    if (agentType === "assembler") {
-      const a = formData as Partial<AssemblerArtifact>;
-      if (!a.writerIds || a.writerIds.length === 0) {
-        Alert.alert(
-          "Integrity Error",
-          "Assemblers must have at least one allowed Writer to generate content.",
-        );
-        return false;
-      }
-    }
-
     if (!formData.content?.trim()) {
       Alert.alert(
         "Validation Error",
@@ -162,9 +151,6 @@ export default function AgentEditorScreen() {
         frontmatter.tone = p.tone || "Neutral";
         frontmatter.accent = p.accent || "Standard";
         frontmatter.language = p.language || "English";
-      } else if (agentType === "assembler") {
-        const a = formData as Partial<AssemblerArtifact>;
-        frontmatter.writerIds = a.writerIds || [];
       }
 
       await AgentsStorage.saveAgentToFile({
@@ -410,53 +396,6 @@ export default function AgentEditorScreen() {
               Choose the langue your agent will use.
             </Text>
           </>
-        )}
-
-        {agentType === "assembler" && manifest?.agents && (
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-              Allowed Writers (Select at least one) *
-            </Text>
-            <View style={styles.tagCloud}>
-              {manifest.agents
-                .filter((a) => a.type === "writer")
-                .map((w) => {
-                  const currentIds =
-                    (formData as AssemblerArtifact).writerIds || [];
-                  const selected = currentIds.includes(w.id);
-                  return (
-                    <Pressable
-                      key={w.id}
-                      style={[
-                        styles.tag,
-                        selected && {
-                          backgroundColor: themeColors.buttonPrimary,
-                          borderColor: themeColors.buttonPrimary,
-                        },
-                      ]}
-                      onPress={() => {
-                        const next = selected
-                          ? currentIds.filter((i) => i !== w.id)
-                          : [...currentIds, w.id];
-                        setFormData({
-                          ...formData,
-                          writerIds: next,
-                        } as AssemblerArtifact);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.tagText,
-                          selected && { color: "#ffffff", opacity: 1 },
-                        ]}
-                      >
-                        {w.id}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-            </View>
-          </View>
         )}
 
         <InputField
