@@ -3,20 +3,18 @@ import { WorkspaceSettings } from "@/components/settings/WorkspaceSettings";
 import { View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
+import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
-import { WorkspaceStorage } from "@/services/WorkspaceStorage";
 import React, { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 
 export default function WorkspacesScreen() {
   const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
-  const [activeWorkspace, setActiveWorkspace] = useState<string | undefined>();
   const [workspaces, setWorkspaces] = useState<string[]>([]);
+  const { activeWorkspace } = useWorkspace();
 
   const loadData = async () => {
-    const activeWorkspace = await WorkspaceStorage.getActiveWorkspace();
-    setActiveWorkspace(activeWorkspace);
     setWorkspaces(WorkspaceManager.listWorkspaces());
   };
 
