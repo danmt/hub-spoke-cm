@@ -1,19 +1,25 @@
 #!/usr/bin/env node
+import {
+  ConfigService,
+  IoService,
+  LoggerService,
+  RegistryService,
+  SecretService,
+} from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
 import dotenv from "dotenv";
-
-// Import Commands
-// Explicit .js extension is required for NodeNext module resolution
-import { IoService, LoggerService } from "@hub-spoke/core";
-import { checkCommand } from "./commands/check.js";
 import { configCommand } from "./commands/config.js";
 import { exportCommand } from "./commands/export.js";
 import { fillCommand } from "./commands/fill.js";
 import { initCommand } from "./commands/init.js";
 import { newCommand } from "./commands/new.js";
 import { registryCommand } from "./commands/registry.js";
-import { WinstonLoggerProvider } from "./services/WinstonLoggerProvider.js";
+import { NodeConfigProvider } from "./providers/NodeConfigProvider.js";
+import { NodeIoProvider } from "./providers/NodeIoProvider.js";
+import { NodeLoggerProvider } from "./providers/NodeLoggerProvider.js";
+import { NodeRegistryProvider } from "./providers/NodeRegistryProvider.js";
+import { NodeSecretProvider } from "./providers/NodeSecretProvider.js";
 
 // Load environment variables
 dotenv.config();
@@ -22,9 +28,15 @@ const program = new Command();
 
 async function main() {
   const currentDir = process.cwd();
+
+  IoService.setProvider(new NodeIoProvider());
+  SecretService.setProvider(new NodeSecretProvider());
+  ConfigService.setProvider(new NodeConfigProvider());
+
   const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
 
-  LoggerService.setProvider(new WinstonLoggerProvider(workspaceRoot));
+  LoggerService.setProvider(new NodeLoggerProvider(workspaceRoot));
+  RegistryService.setProvider(new NodeRegistryProvider(workspaceRoot));
 
   await LoggerService.info("CLI initialized in workspace", { workspaceRoot });
 
@@ -40,7 +52,6 @@ async function main() {
   program.addCommand(initCommand);
   program.addCommand(registryCommand);
   program.addCommand(newCommand);
-  program.addCommand(checkCommand);
   program.addCommand(fillCommand);
   program.addCommand(configCommand);
   program.addCommand(exportCommand);

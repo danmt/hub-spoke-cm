@@ -1,11 +1,16 @@
 // src/commands/new.ts
-import { IoService, RegistryService } from "@hub-spoke/core";
+import {
+  ConfigService,
+  IoService,
+  ParserService,
+  RegistryService,
+  SecretService,
+} from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import { executeCliCreateHubAction } from "../presets/executeCliCreateHubAction.js";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
-import { ConfigStorage } from "../services/ConfigStorage.js";
 
 export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")
@@ -13,10 +18,10 @@ export const newCommand = new Command("new")
     try {
       const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
       const rawArtifacts = await RegistryService.getAllArtifacts(workspaceRoot);
+      const config = await ConfigService.getConfig();
+      const secret = await SecretService.getSecret();
 
-      const config = await ConfigStorage.load();
-
-      if (!config.apiKey) {
+      if (!secret.apiKey) {
         console.error(
           chalk.red(
             "Error: API Key not found. Run 'hub config set-key' first.",
@@ -35,7 +40,7 @@ export const newCommand = new Command("new")
       }
 
       const agents = RegistryService.initializeAgents(
-        config.apiKey,
+        secret.apiKey,
         config.model,
         rawArtifacts,
       );
@@ -52,14 +57,13 @@ export const newCommand = new Command("new")
 
       console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));
 
-      const { architecture, filePath, fileContent } =
-        await executeCliCreateHubAction(
-          config.apiKey,
-          config.model,
-          manifest,
-          agents,
-          workspaceRoot,
-        );
+      const { filePath, fileContent } = await executeCliCreateHubAction(
+        secret.apiKey,
+        config.model,
+        manifest,
+        agents,
+        workspaceRoot,
+      );
 
       const { shouldFill } = await inquirer.prompt([
         {
@@ -74,12 +78,10 @@ export const newCommand = new Command("new")
         return;
       }
 
-      await executeCliFillAction(
-        agents,
-        architecture.brief.personaId,
-        filePath,
-        fileContent,
-      );
+      const { frontmatter, sections } =
+        ParserService.parseMarkdown(fileContent);
+
+      await executeCliFillAction(agents, frontmatter, sections, filePath);
     } catch (error) {
       console.error(chalk.red("\n❌ Command `new` Error:"), error);
     }

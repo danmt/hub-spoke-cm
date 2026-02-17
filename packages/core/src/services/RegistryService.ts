@@ -1,11 +1,10 @@
 // src/services/RegistryService.ts
-import { existsSync } from "fs";
-import fs from "fs/promises";
-import matter from "gray-matter";
-import path from "path";
 import { Assembler } from "../agents/Assembler.js";
 import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
+import { parseAssemblerArtifact } from "../utils/parseAssemblerArtifact.js";
+import { parsePersonaArtifact } from "../utils/parsePersonaArtifact.js";
+import { parseWriterArtifact } from "../utils/parseWriterArtifact.js";
 import { LoggerService } from "./LoggerService.js";
 
 export type ArtifactType = "persona" | "writer" | "assembler";
@@ -70,11 +69,43 @@ export function getAgent<T extends AgentPair["type"]>(
   );
 }
 
+export interface RegistryProvider {
+  listAgentFiles(folder: string): Promise<string[]>;
+  readAgentFile(folder: string, filename: string): Promise<string>;
+  getIdentifier(filename: string): string;
+  setWorkspaceRoot(path: string): void;
+}
+
 export class RegistryService {
+  private static provider: RegistryProvider | null = null;
+  private static cachedArtifacts: Artifact[] = [];
+
+  static setProvider(provider: RegistryProvider): void {
+    this.provider = provider;
+  }
+
+  static setWorkspaceRoot(path: string): void {
+    if (!this.provider) {
+      throw new Error(
+        "RegistryService: Cannot set root before provider is registered.",
+      );
+    }
+    this.cachedArtifacts = [];
+    this.provider.setWorkspaceRoot(path);
+  }
+
+  static hasProvider(): boolean {
+    return this.provider !== null;
+  }
+
   /**
    * Fetches all artifacts from the workspace.
    */
-  static async getAllArtifacts(workspaceRoot: string): Promise<Artifact[]> {
+  static async sync(workspaceRoot: string): Promise<Artifact[]> {
+    if (!this.provider) {
+      throw new Error("RegistryService: RegistryProvider not registered.");
+    }
+
     const folders: Record<string, ArtifactType> = {
       personas: "persona",
       writers: "writer",
@@ -86,39 +117,46 @@ export class RegistryService {
       await LoggerService.debug("Scanning registry folders", { workspaceRoot });
 
       for (const [folder, type] of Object.entries(folders)) {
-        const dir = path.join(workspaceRoot, "agents", folder);
-        if (!existsSync(dir)) continue;
+        const files = await this.provider.listAgentFiles(folder);
+        const mdFiles = files.filter((f) => f.endsWith(".md"));
 
-        const files = (await fs.readdir(dir)).filter((f) => f.endsWith(".md"));
-        for (const file of files) {
-          const raw = await fs.readFile(path.join(dir, file), "utf-8");
-          const { data, content } = matter(raw);
-          const id = data.id || path.parse(file).name;
-
-          const base = {
-            id,
-            type,
-            description: data.description || "",
-            content: content.trim(),
-            model: data.model,
-          };
+        for (const file of mdFiles) {
+          const raw = await this.provider.readAgentFile(folder, file);
 
           if (type === "persona") {
+            const personaArtifact = parsePersonaArtifact(raw);
+
             allArtifacts.push({
-              ...base,
-              type: "persona",
-              name: data.name || id,
-              language: data.language || "English",
-              tone: data.tone || "Neutral",
-              accent: data.accent || "Standard",
-            } as PersonaArtifact);
+              id: personaArtifact.id,
+              type,
+              description: personaArtifact.description || "",
+              content: personaArtifact.content.trim(),
+              model: personaArtifact.model,
+              name: personaArtifact.name,
+              language: personaArtifact.language || "English",
+              tone: personaArtifact.tone || "Neutral",
+              accent: personaArtifact.accent || "Standard",
+            });
           } else if (type === "writer") {
-            allArtifacts.push({ ...base, type: "writer" } as WriterArtifact);
-          } else {
+            const writerArtifact = parseWriterArtifact(raw);
+
             allArtifacts.push({
-              ...base,
-              writerIds: data.writerIds || [],
-              type: "assembler",
+              type,
+              content: writerArtifact.content,
+              description: writerArtifact.description,
+              id: writerArtifact.id,
+              model: writerArtifact.model,
+            });
+          } else {
+            const assemblerArtifact = parseAssemblerArtifact(raw);
+
+            allArtifacts.push({
+              type,
+              content: assemblerArtifact.content,
+              description: assemblerArtifact.description,
+              id: assemblerArtifact.id,
+              model: assemblerArtifact.model,
+              writerIds: assemblerArtifact.writerIds,
             } as AssemblerArtifact);
           }
         }
@@ -128,7 +166,22 @@ export class RegistryService {
         error: e.message,
       });
     }
+
     return allArtifacts;
+  }
+
+  static clearCache(): void {
+    this.cachedArtifacts = [];
+  }
+
+  static getCachedArtifacts(): Artifact[] {
+    return this.cachedArtifacts;
+  }
+
+  static async getAllArtifacts(workspaceRoot: string): Promise<Artifact[]> {
+    if (this.cachedArtifacts.length > 0) return this.cachedArtifacts;
+    this.cachedArtifacts = await this.sync(workspaceRoot);
+    return this.cachedArtifacts;
   }
 
   static initializeAgents(

@@ -54,11 +54,6 @@ The CLI manages your Gemini API credentials and model preferences globally.
 These commands allow you to inspect how the CLI is "seeing" your local agents before you run a heavy AI action.
 
 - **`hub registry`**: Scans the `agents/` directory and displays a table of all discovered Personas, Writers, and Assemblers.
-- **`hub check`**: The "System Health" command.
-  - Validates the workspace structure.
-  - Checks if the Gemini API Key is set and valid.
-  - Verifies that at least one of each agent type is present.
-  - Checks the `.hub/logs` permissions.
 
 ### 📦 Portability & Output
 
@@ -71,7 +66,7 @@ The CLI bridges the gap between your local environment and the agnostic Core.
 1. **Context Loading**: The CLI identifies the `workspaceRoot` and loads the global API key.
 2. **Agent Charging**: The CLI reads markdown artifacts from `agents/` and "charges" them by passing the API key into the `RegistryService`.
 3. **UI Interleaving**: The CLI provides callbacks to Core Actions. When the Core needs user feedback (e.g., "Do you like this blueprint?"), the CLI triggers an `inquirer` prompt.
-4. **Logging**: The CLI initializes a `WinstonLoggerProvider` that directs all `@hub-spoke/core` trace logs into `.hub/logs/hub-trace-YYYY-MM-DD.log`.
+4. **Logging**: The CLI initializes a `NodeLoggerProvider` that directs all `@hub-spoke/core` trace logs into `.hub/logs/hub-trace-YYYY-MM-DD.log`.
 
 ## 📂 Configuration Storage
 

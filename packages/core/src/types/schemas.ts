@@ -59,6 +59,9 @@ export const HubBlueprintSchema = z.object({
 });
 
 export const HubConfigSchema = z.object({
-  apiKey: z.string().min(1, "API Key is required"),
-  model: z.string().default("gemini-2.0-flash"),
+  model: z.string().default("gemini-2.0-flash").optional(),
+});
+
+export const HubSecretSchema = z.object({
+  apiKey: z.string().optional(),
 });

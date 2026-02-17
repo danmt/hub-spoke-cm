@@ -94,6 +94,8 @@ export class Assembler {
       [WRITER_ID]prose, code or custom writer IDs[/WRITER_ID]
       [BRIDGE]Context of the concepts already covered so far[/BRIDGE]
       [/COMPONENT]
+
+      Remember: Every [COMPONENT] must include [ID], [HEADER], [INTENT], [WRITER_ID], and [BRIDGE] tags. Always include a closing tag.
     `.trim();
   }
 

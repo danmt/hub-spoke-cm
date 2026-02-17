@@ -1,34 +1,61 @@
 // packages/core/src/services/IoService.ts
-import { existsSync } from "fs";
-import fs from "fs/promises";
-import matter from "gray-matter";
-import path from "path";
-import { ContentFrontmatter, FrontmatterSchema } from "../types/index.js";
+import { ContentFrontmatter } from "../types/index.js";
+import { ParsedFile, ParserService } from "./ParserService.js";
 
 export interface HubContext {
   rootDir: string;
   hubId: string;
 }
 
+export interface IoProvider {
+  join(...parts: string[]): string;
+  dirname(path: string): string;
+  basename(path: string): string;
+  resolve(...parts: string[]): string;
+  exists(path: string): Promise<boolean>;
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+  readDir(path: string): Promise<{ name: string; isDirectory: boolean }[]>;
+  makeDir(path: string, recursive?: boolean): Promise<void>;
+}
+
 export class IoService {
+  private static provider: IoProvider;
+
+  static setProvider(provider: IoProvider): void {
+    this.provider = provider;
+  }
+
+  private static ensureProvider() {
+    if (!this.provider) {
+      throw new Error(
+        "IoService: IoProvider not registered. Please call setProvider first.",
+      );
+    }
+  }
+
   /**
    * Checks if a specific directory is the root of a Hub (contains hub.md).
    */
   static async isHubDirectory(dir: string): Promise<boolean> {
-    return existsSync(path.join(dir, "hub.md"));
+    this.ensureProvider();
+    return this.provider.exists(this.provider.join(dir, "hub.md"));
   }
 
   /**
    * Searches up the tree to find the Workspace Root (.hub folder).
    */
   static async findWorkspaceRoot(startDir: string): Promise<string> {
-    let current = path.resolve(startDir);
-    while (current !== path.parse(current).root) {
-      const workspaceMarker = path.join(current, ".hub");
-      if (existsSync(workspaceMarker)) {
+    this.ensureProvider();
+    let current = this.provider.resolve(startDir);
+
+    // Logic: walk up until we find the .hub marker or hit system root
+    while (current) {
+      const workspaceMarker = this.provider.join(current, ".hub");
+      if (await this.provider.exists(workspaceMarker)) {
         return current;
       }
-      const parent = path.dirname(current);
+      const parent = this.provider.dirname(current);
       if (parent === current) break;
       current = parent;
     }
@@ -41,47 +68,50 @@ export class IoService {
   static async findAllHubsInWorkspace(
     workspaceRoot: string,
   ): Promise<string[]> {
-    const postsDir = path.join(workspaceRoot, "posts");
+    this.ensureProvider();
+    const postsDir = this.provider.join(workspaceRoot, "posts");
     try {
-      const entries = await fs.readdir(postsDir, { withFileTypes: true });
-      return entries
-        .filter((dirent) => dirent.isDirectory())
-        .map((dirent) => dirent.name);
-    } catch (error) {
+      const entries = await this.provider.readDir(postsDir);
+      return entries.filter((e) => e.isDirectory).map((e) => e.name);
+    } catch {
       return [];
     }
+  }
+
+  static async readHubFile(hubRootDir: string): Promise<string> {
+    this.ensureProvider();
+    const filePath = this.provider.join(hubRootDir, "hub.md");
+    const content = await this.provider.readFile(filePath);
+    return content;
+  }
+
+  static async readHub(hubRootDir: string): Promise<ParsedFile> {
+    const content = await this.readHubFile(hubRootDir);
+    return ParserService.parseMarkdown(content);
   }
 
   static async readHubMetadata(
     hubRootDir: string,
   ): Promise<ContentFrontmatter> {
-    const filePath = path.join(hubRootDir, "hub.md");
-    const content = await fs.readFile(filePath, "utf-8");
-    const { data } = matter(content);
-    return FrontmatterSchema.parse(data);
+    this.ensureProvider();
+    const { frontmatter } = await this.readHub(hubRootDir);
+
+    return frontmatter;
   }
 
   static async writeMarkdown(filePath: string, content: string): Promise<void> {
-    const dir = path.dirname(filePath);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(filePath, content, "utf-8");
+    this.ensureProvider();
+    await this.provider.writeFile(filePath, content);
   }
 
   static async createHubDirectory(
     workspaceRoot: string,
     hubId: string,
   ): Promise<string> {
-    const dirPath = path.join(workspaceRoot, "posts", hubId);
-    await fs.mkdir(dirPath, { recursive: true });
+    this.ensureProvider();
+    const dirPath = this.provider.join(workspaceRoot, "posts", hubId);
+    await this.provider.makeDir(dirPath, true);
     return dirPath;
-  }
-
-  static async safeWriteFile(filePath: string, content: string): Promise<void> {
-    const dir = path.dirname(filePath);
-    if (!existsSync(dir)) {
-      await fs.mkdir(dir, { recursive: true });
-    }
-    await fs.writeFile(filePath, content, "utf-8");
   }
 
   /**
@@ -91,10 +121,12 @@ export class IoService {
     rootDir: string,
     type: "starter" | "blank",
   ): Promise<void> {
+    this.ensureProvider();
     const dirs = [
       ".hub",
       ".hub/logs",
       "posts",
+      "agents",
       "agents/personas",
       "agents/writers",
       "agents/assemblers",
@@ -102,10 +134,13 @@ export class IoService {
     ];
 
     for (const d of dirs) {
-      await fs.mkdir(path.join(rootDir, d), { recursive: true });
+      await this.provider.makeDir(this.provider.join(rootDir, d), true);
     }
 
-    await fs.writeFile(path.join(rootDir, "output/.keep"), "", "utf-8");
+    await this.provider.writeFile(
+      this.provider.join(rootDir, "output/.keep"),
+      "",
+    );
 
     if (type === "starter") {
       await this.seedStarterArtifacts(rootDir);
@@ -116,16 +151,17 @@ export class IoService {
    * Detects hub context starting from a specific directory.
    */
   static async detectCurrentHub(startDir: string): Promise<HubContext | null> {
+    this.ensureProvider();
     try {
-      let current = path.resolve(startDir);
-      while (current !== path.parse(current).root) {
-        if (await IoService.isHubDirectory(current)) {
+      let current = this.provider.resolve(startDir);
+      while (current) {
+        if (await this.isHubDirectory(current)) {
           return {
             rootDir: current,
-            hubId: path.basename(current),
+            hubId: this.provider.basename(current),
           };
         }
-        const parent = path.dirname(current);
+        const parent = this.provider.dirname(current);
         if (parent === current) break;
         current = parent;
       }
@@ -153,9 +189,20 @@ export class IoService {
 
     const selectedId = await picker(hubs);
     return {
-      rootDir: path.join(workspaceRoot, "posts", selectedId),
+      rootDir: this.provider.join(workspaceRoot, "posts", selectedId),
       hubId: selectedId,
     };
+  }
+
+  static async safeWriteFile(filePath: string, content: string): Promise<void> {
+    this.ensureProvider();
+    const dir = this.provider.dirname(filePath);
+
+    if (!(await this.provider.exists(dir))) {
+      await this.provider.makeDir(dir, true);
+    }
+
+    await this.provider.writeFile(filePath, content);
   }
 
   private static async seedStarterArtifacts(rootDir: string) {
@@ -186,20 +233,23 @@ description: "General narrative writing strategy."
 ---
 Focus on narrative flow, clarity, and transitions. Avoid code blocks unless absolutely necessary to illustrate a point. Ensure the tone remains consistent with the chosen Persona.`;
 
-    await this.safeWriteFile(
-      path.join(rootDir, "agents/personas/standard.md"),
+    await this.provider.writeFile(
+      this.provider.join(rootDir, "agents/personas/standard.md"),
       standardPersona,
     );
-    await this.safeWriteFile(
-      path.join(rootDir, "agents/assemblers/tutorial.md"),
+    await this.provider.writeFile(
+      this.provider.join(rootDir, "agents/assemblers/tutorial.md"),
       tutorialAssembler,
     );
-    await this.safeWriteFile(
-      path.join(rootDir, "agents/writers/prose.md"),
+    await this.provider.writeFile(
+      this.provider.join(rootDir, "agents/writers/prose.md"),
       proseWriter,
     );
 
     const gitignore = ".hub/tmp/*\n.hub/logs/*\noutput/*\n!output/.keep";
-    await fs.writeFile(path.join(rootDir, ".gitignore"), gitignore, "utf-8");
+    await this.provider.writeFile(
+      this.provider.join(rootDir, ".gitignore"),
+      gitignore,
+    );
   }
 }
