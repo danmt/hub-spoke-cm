@@ -3,20 +3,15 @@ import { SettingsMenu } from "@/components/settings/SettingsMenu";
 import { View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
-import { WorkspaceStorage } from "@/services/WorkspaceStorage";
+import { useWorkspace } from "@/services/WorkspaceContext";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const router = useRouter();
-  const [activeWorkspace, setActiveWorkspace] = useState<string | undefined>();
-
-  useEffect(() => {
-    WorkspaceStorage.getActiveWorkspace().then(setActiveWorkspace);
-  }, []);
+  const { activeWorkspace } = useWorkspace();
 
   return (
     <View style={styles.container}>
