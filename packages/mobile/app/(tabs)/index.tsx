@@ -73,21 +73,19 @@ export default function HomeScreen() {
       contentContainerStyle={{ paddingBottom: 40 }}
     >
       <View style={styles.header}>
-        <View style={{ backgroundColor: "transparent" }}>
-          <Text style={styles.title}>Dashboard</Text>
-          <View style={styles.badgeContainer}>
-            <Text
-              style={[
-                styles.badge,
-                {
-                  backgroundColor: themeColors.buttonPrimary + "20",
-                  color: themeColors.buttonPrimary,
-                },
-              ]}
-            >
-              {activeWorkspace}
-            </Text>
-          </View>
+        <Text style={styles.title}>Dashboard</Text>
+        <View style={styles.badgeContainer}>
+          <Text
+            style={[
+              styles.badge,
+              {
+                backgroundColor: themeColors.buttonPrimary + "20",
+                color: themeColors.buttonPrimary,
+              },
+            ]}
+          >
+            {activeWorkspace}
+          </Text>
         </View>
       </View>
 
@@ -184,11 +182,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "transparent",
   },
   badgeContainer: {
     flexDirection: "row",
-    backgroundColor: "transparent",
     marginTop: 5,
   },
   badge: {
@@ -216,9 +212,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     alignItems: "center",
     marginBottom: 20,
-    backgroundColor: "transparent",
   },
-  statItem: { alignItems: "center", backgroundColor: "transparent" },
+  statItem: { alignItems: "center" },
   statNumber: { fontSize: 28, fontWeight: "bold" },
   statLabel: { fontSize: 12, opacity: 0.6, marginTop: 4 },
   iconCircle: {
@@ -230,7 +225,7 @@ const styles = StyleSheet.create({
   },
   viewMoreButton: {
     alignItems: "center",
-    paddingVertical: 10,
+    paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: "rgba(128,128,128,0.1)",
   },

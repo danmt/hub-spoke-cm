@@ -73,7 +73,7 @@ export default function HubsScreen() {
             ]}
           >
             <View style={styles.hubHeader}>
-              <View style={{ backgroundColor: "transparent", flex: 1 }}>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.hubTitle} numberOfLines={1}>
                   {item.title}
                 </Text>
@@ -146,14 +146,13 @@ const styles = StyleSheet.create({
   hubCard: { padding: 20, borderRadius: 20, marginBottom: 16 },
   hubHeader: {
     marginBottom: 15,
-    backgroundColor: "transparent",
     flexDirection: "row",
     alignItems: "flex-start",
   },
   hubTitle: { fontSize: 18, fontWeight: "bold" },
   hubId: { fontSize: 12, opacity: 0.5, marginTop: 2 },
   trashBtn: { padding: 5, marginLeft: 10 },
-  actionRow: { flexDirection: "row", gap: 10, backgroundColor: "transparent" },
+  actionRow: { flexDirection: "row", gap: 10 },
   actionBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -167,7 +166,6 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: "center",
     marginTop: 100,
-    backgroundColor: "transparent",
   },
   emptyText: { marginTop: 15, opacity: 0.5, fontSize: 16 },
   fab: {

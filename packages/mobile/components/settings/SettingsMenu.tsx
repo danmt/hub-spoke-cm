@@ -91,20 +91,18 @@ export function SettingsMenu({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "transparent" },
+  container: { flex: 1 },
   title: { fontSize: 34, fontWeight: "bold", marginBottom: 30 },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 15,
-    backgroundColor: "transparent",
   },
   pressed: { opacity: 0.7 },
   menuItemLeft: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "transparent",
   },
   iconCircle: {
     width: 40,

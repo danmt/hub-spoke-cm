@@ -243,9 +243,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 15,
-    backgroundColor: "transparent",
   },
-  metaItem: { width: "45%", backgroundColor: "transparent" },
+  metaItem: { width: "45%" },
   metaLabel: {
     fontSize: 10,
     fontWeight: "bold",
@@ -270,7 +269,6 @@ const styles = StyleSheet.create({
   sectionTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "transparent",
     gap: 10,
   },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
@@ -278,7 +276,6 @@ const styles = StyleSheet.create({
   expandedContent: {
     padding: 18,
     paddingTop: 0,
-    backgroundColor: "transparent",
   },
   divider: {
     height: 1,
@@ -303,7 +300,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 20,
-    backgroundColor: "transparent",
   },
   fillButton: {
     height: 56,

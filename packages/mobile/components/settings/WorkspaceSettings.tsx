@@ -100,7 +100,7 @@ export function WorkspaceSettings({
               activeWorkspace === workspace && styles.activeCard,
             ]}
           >
-            <View style={{ flex: 1, backgroundColor: "transparent" }}>
+            <View style={{ flex: 1 }}>
               <Text style={styles.workspaceName}>{workspace}</Text>
               <Text style={styles.workspaceStatus}>
                 {activeWorkspace === workspace ? "Active" : "Inactive"}
@@ -215,7 +215,7 @@ export function WorkspaceSettings({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "transparent" },
+  container: { flex: 1 },
   card: {
     flexDirection: "row",
     padding: 20,
@@ -230,14 +230,12 @@ const styles = StyleSheet.create({
   workspaceName: {
     fontSize: 18,
     fontWeight: "bold",
-    backgroundColor: "transparent",
   },
   workspaceStatus: {
     fontSize: 12,
     color: "#888",
-    backgroundColor: "transparent",
   },
-  workspaceActions: { flexDirection: "row", backgroundColor: "transparent" },
+  workspaceActions: { flexDirection: "row" },
   workspaceIcon: { marginLeft: 20 },
   actionButton: {
     height: 55,

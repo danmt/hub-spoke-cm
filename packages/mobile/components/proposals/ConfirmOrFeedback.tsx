@@ -132,7 +132,7 @@ export function ConfirmOrFeedback({
 }
 
 const styles = StyleSheet.create({
-  container: { backgroundColor: "transparent" },
+  container: {},
   actions: { flexDirection: "row", gap: 12, paddingTop: 10, paddingBottom: 20 },
   button: {
     flex: 1,
@@ -170,7 +170,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     alignItems: "center",
-    backgroundColor: "transparent",
     gap: 16,
   },
 });

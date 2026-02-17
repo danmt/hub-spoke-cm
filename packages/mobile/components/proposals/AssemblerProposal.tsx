@@ -69,7 +69,6 @@ const styles = StyleSheet.create({
     borderLeftColor: "#32a852",
   },
   sectionHeader: {
-    backgroundColor: "transparent",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",

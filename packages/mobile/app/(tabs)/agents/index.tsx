@@ -117,7 +117,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
     gap: 10,
-    backgroundColor: "transparent",
   },
   sectionTitle: {
     fontSize: 12,
@@ -133,7 +132,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
-  cardInfo: { flex: 1, backgroundColor: "transparent" },
+  cardInfo: { flex: 1 },
   agentName: { fontSize: 17, fontWeight: "bold", marginBottom: 4 },
   agentDesc: { fontSize: 13, opacity: 0.6, lineHeight: 18 },
   fab: {

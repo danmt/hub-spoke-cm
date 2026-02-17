@@ -487,7 +487,7 @@ function TypeCard({ title, desc, icon, onPress, theme }: any) {
       >
         <FontAwesome name={icon} size={22} color={theme.buttonPrimary} />
       </View>
-      <View style={{ flex: 1, backgroundColor: "transparent" }}>
+      <View style={{ flex: 1 }}>
         <Text style={styles.typeTitle}>{title}</Text>
         <Text style={styles.typeDesc}>{desc}</Text>
       </View>
