@@ -36,7 +36,7 @@ export default function NewHubScreen() {
   const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
   const { activeWorkspace, manifest, updateManifest } = useWorkspace();
-  const { agents, isLoading: agentsLoading } = useAgents(); // Accessing global agents state
+  const { agents, isLoading: agentsLoading } = useAgents();
   const { invalidateCache } = useHubs();
   const { pendingInteraction, ask, handleResolve } = useInteractionDeferrer();
   const [state, setState] = useState<ScreenState>("IDLE");
@@ -55,41 +55,77 @@ export default function NewHubScreen() {
   });
 
   useEffect(() => {
-    if (!agentsLoading && agents.length > 0) {
-      try {
-        RegistryService.validateIntegrity(agents);
-      } catch (err: any) {
-        setStatusMessage(err.message);
+    async function checkPrerequisites() {
+      const secret = await SecretService.getSecret();
+      if (!secret.apiKey) {
+        setStatusMessage(
+          "Gemini API Key is missing. Please set it in Settings > Secrets.",
+        );
         setState("ERROR");
+        return;
       }
-    } else if (!agentsLoading && agents.length === 0 && activeWorkspace) {
-      setStatusMessage("No agents discovered in the current workspace.");
-      setState("ERROR");
+
+      if (!agentsLoading) {
+        if (agents.length > 0) {
+          try {
+            RegistryService.validateIntegrity(agents);
+          } catch (err: any) {
+            setStatusMessage(err.message);
+            setState("ERROR");
+          }
+        } else if (activeWorkspace) {
+          setStatusMessage("No agents discovered in the current workspace.");
+          setState("ERROR");
+        }
+      }
     }
+
+    checkPrerequisites();
   }, [agents, agentsLoading, activeWorkspace]);
 
-  const startGeneration = async () => {
+  /**
+   * Validates that all required inputs and credentials are ready.
+   */
+  const validateBaseline = async (): Promise<boolean> => {
     if (!baseline.topic.trim()) {
-      Alert.alert("Required", "Please provide a main topic.");
-      return;
+      Alert.alert(
+        "Required Field",
+        "Please provide a main topic for the content hub.",
+      );
+      return false;
     }
+    if (!baseline.goal.trim()) {
+      Alert.alert(
+        "Required Field",
+        "Please specify the goal readers should achieve.",
+      );
+      return false;
+    }
+    if (!baseline.audience.trim()) {
+      Alert.alert(
+        "Required Field",
+        "Please define who the target audience is.",
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  const startGeneration = async () => {
+    const isValid = await validateBaseline();
+    if (!isValid) return;
 
     setState("PROCESSING");
     try {
       const config = await ConfigService.getConfig();
       const secret = await SecretService.getSecret();
 
-      if (!secret.apiKey) {
-        throw new Error(
-          "Gemini API Key is missing. Please set it in Settings.",
-        );
-      }
-
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
       const registryManifest = RegistryService.toManifest(agents);
 
       const result = await executeMobileCreateHubAction(
-        secret.apiKey,
+        secret.apiKey!,
         config.model!,
         registryManifest,
         baseline,
@@ -289,11 +325,11 @@ export default function NewHubScreen() {
           value={baseline.audience}
           onChangeText={(a) => setBaseline({ ...baseline, audience: a })}
           placeholder="Who is this for? (e.g. mobile developers, beginners...)"
+          required
           multiline
           numberOfLines={2}
         />
 
-        {/* Language Selection */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Language</Text>
           <View style={styles.selectorRow}>
@@ -361,7 +397,6 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.2,
   },
-  input: { borderBottomWidth: 1, fontSize: 18, paddingVertical: 12 },
   selectorRow: { flexDirection: "row", gap: 12, marginTop: 5 },
   langOption: {
     flex: 1,

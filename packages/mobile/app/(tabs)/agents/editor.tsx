@@ -1,4 +1,4 @@
-// packages/mobile/app/agents/editor.tsx
+// packages/mobile/app/(tabs)/agents/editor.tsx
 import { InputField } from "@/components/form/InputField";
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
@@ -42,7 +42,7 @@ export default function AgentEditorScreen() {
     type: ArtifactType;
   }>();
   const { activeWorkspace, upsertAgentIndex, manifest } = useWorkspace();
-  const { getAgent } = useAgents();
+  const { getAgent, agents: currentRegistry } = useAgents();
   const themeColors = Colors[useColorScheme() ?? "dark"];
   const isEditMode = !!id;
   const [state, setState] = useState<EditorState>(
@@ -70,31 +70,85 @@ export default function AgentEditorScreen() {
     }
   }, [id, isEditMode, agentType, getAgent]);
 
+  const validateForm = (): boolean => {
+    if (!formData.id?.trim()) {
+      Alert.alert("Validation Error", "Agent ID is required.");
+      return false;
+    }
+
+    const slug = computeSlug(formData.id);
+    if (!slug) {
+      Alert.alert("Validation Error", "The ID must contain valid characters.");
+      return false;
+    }
+
+    // Check for duplicates only when creating a new agent
+    if (!isEditMode) {
+      const exists = currentRegistry.some(
+        (a) => a.artifact.id.toLowerCase() === slug.toLowerCase(),
+      );
+      if (exists) {
+        Alert.alert(
+          "Duplicate ID",
+          `An agent with the ID "${slug}" already exists.`,
+        );
+        return false;
+      }
+    }
+
+    if (!formData.description?.trim()) {
+      Alert.alert(
+        "Validation Error",
+        "Role description is required for the AI context.",
+      );
+      return false;
+    }
+
+    if (agentType === "persona") {
+      const p = formData as Partial<PersonaArtifact>;
+      if (!p.name?.trim()) {
+        Alert.alert("Validation Error", "Persona needs a display name.");
+        return false;
+      }
+      if (!p.tone?.trim()) {
+        Alert.alert(
+          "Validation Error",
+          "Please define the tone for this persona.",
+        );
+        return false;
+      }
+    }
+
+    if (agentType === "assembler") {
+      const a = formData as Partial<AssemblerArtifact>;
+      if (!a.writerIds || a.writerIds.length === 0) {
+        Alert.alert(
+          "Integrity Error",
+          "Assemblers must have at least one allowed Writer to generate content.",
+        );
+        return false;
+      }
+    }
+
+    if (!formData.content?.trim()) {
+      Alert.alert(
+        "Validation Error",
+        "System instructions (the strategy) cannot be empty.",
+      );
+      return false;
+    }
+
+    return true;
+  };
+
   const handleSave = async () => {
-    if (!formData.id || !formData.description || !formData.content) {
-      Alert.alert(
-        "Required",
-        "ID, Description, and Instructions are required.",
-      );
-      return;
-    }
-
+    if (!validateForm()) return;
     if (!activeWorkspace) return;
-
-    const slugifiedId = computeSlug(formData.id);
-
-    if (!slugifiedId) {
-      Alert.alert(
-        "Invalid ID",
-        "The ID must contain at least some letters or numbers.",
-      );
-      return;
-    }
 
     setState("SAVING");
     try {
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-      const targetId = formData.id;
+      const targetId = computeSlug(formData.id!);
 
       const frontmatter: Record<string, any> = {
         id: targetId,
@@ -104,7 +158,7 @@ export default function AgentEditorScreen() {
 
       if (agentType === "persona") {
         const p = formData as Partial<PersonaArtifact>;
-        frontmatter.name = p.name || p.id;
+        frontmatter.name = p.name || targetId;
         frontmatter.tone = p.tone || "Neutral";
         frontmatter.accent = p.accent || "Standard";
         frontmatter.language = p.language || "English";
@@ -118,7 +172,7 @@ export default function AgentEditorScreen() {
         type: agentType,
         id: targetId,
         frontmatter,
-        content: formData.content,
+        content: formData.content!,
       });
 
       await upsertAgentIndex({
@@ -128,8 +182,9 @@ export default function AgentEditorScreen() {
           agentType === "persona"
             ? (formData as PersonaArtifact).name
             : undefined,
-        description: formData.description,
+        description: formData.description!,
       });
+
       await refresh();
       await Vibe.handoff();
 
@@ -260,50 +315,31 @@ export default function AgentEditorScreen() {
           }
           placeholder="e.g. technical-prose"
           editable={!isEditMode}
+          required
         />
 
-        {(!displayedSlug || displayedSlug === formData.id) && (
-          <Text
-            style={{
-              marginTop: -16,
-              marginBottom: 28,
-              paddingHorizontal: 4,
-              fontSize: 13,
-              color: themeColors.text + "80",
-              fontStyle: "italic",
-              opacity: 0.7,
-            }}
-          >
-            Enter the unique ID that will be used.
-          </Text>
-        )}
-
-        {displayedSlug && displayedSlug !== formData.id && (
-          <Text
-            style={{
-              marginTop: -16,
-              marginBottom: 28,
-              paddingHorizontal: 4,
-              fontSize: 13,
-              color: themeColors.text + "80",
-              fontStyle: "italic",
-              opacity: 0.7,
-            }}
-          >
-            Actual ID that will be used:{" "}
-            <Text style={{ fontWeight: "600", color: themeColors.tint }}>
-              {displayedSlug}
+        {!isEditMode &&
+          (displayedSlug !== formData.id ? (
+            <Text style={styles.helperText}>
+              Actual ID:{" "}
+              <Text style={{ color: themeColors.tint }}>{displayedSlug}</Text>
             </Text>
-          </Text>
-        )}
+          ) : (
+            <Text style={styles.helperText}>Enter a unique ID.</Text>
+          ))}
 
         <InputField
-          label="Role Description (For AI)"
+          label="Role Description"
           value={formData.description}
           onChangeText={(v) => setFormData({ ...formData, description: v })}
           placeholder="Describe the agent's specific purpose..."
           multiline
+          required
         />
+
+        <Text style={styles.helperText}>
+          This tells the architects when to use this agent.
+        </Text>
 
         {agentType === "persona" && (
           <>
@@ -314,7 +350,11 @@ export default function AgentEditorScreen() {
                 setFormData({ ...formData, name: v } as PersonaArtifact)
               }
               placeholder="e.g. Lead Storyteller"
+              required
             />
+
+            <Text style={styles.helperText}>Give a name to your agent.</Text>
+
             <InputField
               label="Tone"
               value={(formData as PersonaArtifact).tone}
@@ -322,7 +362,12 @@ export default function AgentEditorScreen() {
                 setFormData({ ...formData, tone: v } as PersonaArtifact)
               }
               placeholder="e.g. Sarcastic, Concise"
+              required
             />
+
+            <Text style={styles.helperText}>
+              Describe the tone of your agent.
+            </Text>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Output Language</Text>
@@ -360,12 +405,18 @@ export default function AgentEditorScreen() {
                 })}
               </View>
             </View>
+
+            <Text style={styles.helperText}>
+              Choose the langue your agent will use.
+            </Text>
           </>
         )}
 
         {agentType === "assembler" && manifest?.agents && (
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Allowed Writers</Text>
+            <Text style={styles.label}>
+              Allowed Writers (Select at least one) *
+            </Text>
             <View style={styles.tagCloud}>
               {manifest.agents
                 .filter((a) => a.type === "writer")
@@ -415,6 +466,7 @@ export default function AgentEditorScreen() {
           placeholder="Detailed behavior strategy..."
           multiline
           style={{ height: 250 }}
+          required
         />
       </ScrollView>
     </KeyboardAvoidingView>
@@ -497,12 +549,13 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1.2,
   },
-  input: {
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 17,
-    borderRadius: 12,
+  helperText: {
+    marginTop: -16,
+    marginBottom: 28,
+    paddingHorizontal: 4,
+    fontSize: 13,
+    opacity: 0.7,
+    fontStyle: "italic",
   },
   primaryButton: {
     height: 60,

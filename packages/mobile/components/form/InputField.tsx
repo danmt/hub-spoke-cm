@@ -27,6 +27,7 @@ export function InputField({
   const theme = Colors[colorScheme];
 
   const isError = !!error;
+  const isEditable = textInputProps.editable !== false;
 
   const inputStyle = [
     styles.inputBase,
@@ -42,6 +43,7 @@ export function InputField({
       height: 96,
       textAlignVertical: "top" as const,
     },
+    !isEditable && { opacity: 0.6 },
     textInputProps.style,
   ];
 
