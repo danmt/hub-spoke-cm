@@ -4,12 +4,12 @@ import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
 import { useAgents } from "@/services/AgentsContext";
-import { AgentsStorage } from "@/services/AgentsStorage";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { Vibe } from "@/utils/vibe";
 import { FontAwesome } from "@expo/vector-icons";
 import {
+  AgentService,
   AgentTruth,
   Artifact,
   ArtifactType,
@@ -178,8 +178,7 @@ export default function AgentEditorScreen() {
         existingTruths,
       );
 
-      await AgentsStorage.saveAgentPackage({
-        workspaceUri: workspaceDir.uri,
+      await AgentService.saveAgent(workspaceDir.uri, {
         identity: {
           id: targetId,
           type: agentType,

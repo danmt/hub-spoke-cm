@@ -1,7 +1,7 @@
 // src/actions/FillAction.ts
 import { Persona, PersonaInteractionHandler } from "../agents/Persona.js";
 import { Writer, WriterInteractionHandler } from "../agents/Writer.js";
-import { IoService } from "../services/IoService.js";
+import { AgentService } from "../services/AgentService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import {
   AgentPair,
@@ -124,28 +124,23 @@ export class FillAction {
         };
 
         if (interaction.action === "feedback") {
-          await IoService.appendAgentInteraction(
-            this.workspaceRoot,
-            "writer",
-            params.agentId,
-            "action",
-            "feedback",
-            writerThreadId,
-            writerTurn,
-            interaction.feedback,
-          );
           writerTurn++;
-        } else {
-          await IoService.appendAgentInteraction(
-            this.workspaceRoot,
-            "writer",
-            params.agentId,
-            "action",
-            "accepted",
-            writerThreadId,
-            writerTurn,
-          );
         }
+
+        await AgentService.appendFeedback(
+          this.workspaceRoot,
+          "writer",
+          params.agentId,
+          {
+            source: "action",
+            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
+            threadId: writerThreadId,
+            turn: writerTurn,
+            ...(interaction.action === "feedback"
+              ? { text: interaction.feedback }
+              : {}),
+          },
+        );
 
         return interaction;
       },
@@ -166,28 +161,23 @@ export class FillAction {
         };
 
         if (interaction.action === "feedback") {
-          await IoService.appendAgentInteraction(
-            this.workspaceRoot,
-            "persona",
-            params.agentId,
-            "action",
-            "feedback",
-            personaThreadId,
-            personaTurn,
-            interaction.feedback,
-          );
           personaTurn++;
-        } else {
-          await IoService.appendAgentInteraction(
-            this.workspaceRoot,
-            "persona",
-            params.agentId,
-            "action",
-            "accepted",
-            personaThreadId,
-            personaTurn,
-          );
         }
+
+        await AgentService.appendFeedback(
+          this.workspaceRoot,
+          "persona",
+          params.agentId,
+          {
+            source: "action",
+            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
+            threadId: personaThreadId,
+            turn: personaTurn,
+            ...(interaction.action === "feedback"
+              ? { text: interaction.feedback }
+              : {}),
+          },
+        );
 
         return interaction;
       },

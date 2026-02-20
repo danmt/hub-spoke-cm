@@ -16,7 +16,7 @@ import {
   PersonaResponse,
 } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
-import { IoService } from "../services/IoService.js";
+import { AgentService } from "../services/AgentService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { AgentPair, getAgentsByType } from "../services/RegistryService.js";
 
@@ -124,8 +124,8 @@ export class CreateHubAction {
     }
 
     // 2. Assembler Phase (Generate the Blueprint)
-    const assembleThreadId = `create-assemble-${Date.now()}`;
-    let assembleTurn = 0;
+    const assemblerThreadId = `create-assemble-${Date.now()}`;
+    let assemblerTurn = 0;
 
     const assembly = await assembler.assemble({
       topic: architecture.brief.topic,
@@ -140,28 +140,23 @@ export class CreateHubAction {
         };
 
         if (interaction.action === "feedback") {
-          await IoService.appendAgentInteraction(
-            this.workspaceRoot,
-            "assembler",
-            params.agentId,
-            "action",
-            "feedback",
-            assembleThreadId,
-            assembleTurn,
-            interaction.feedback,
-          );
-          assembleTurn++;
-        } else {
-          await IoService.appendAgentInteraction(
-            this.workspaceRoot,
-            "assembler",
-            params.agentId,
-            "action",
-            "accepted",
-            assembleThreadId,
-            assembleTurn,
-          );
+          assemblerTurn++;
         }
+
+        await AgentService.appendFeedback(
+          this.workspaceRoot,
+          "assembler",
+          params.agentId,
+          {
+            source: "action",
+            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
+            threadId: assemblerThreadId,
+            turn: assemblerTurn,
+            ...(interaction.action === "feedback"
+              ? { text: interaction.feedback }
+              : {}),
+          },
+        );
 
         return interaction;
       },
@@ -170,8 +165,8 @@ export class CreateHubAction {
     });
 
     // 3. Rephrasing phase
-    const styleThreadId = `create-style-${Date.now()}`;
-    let styleTurn = 0;
+    const personaThreadId = `create-style-${Date.now()}`;
+    let personaTurn = 0;
     const personaId = architecture.brief.personaId;
     const persona = this.personas.find((p) => p.id === personaId);
 
@@ -190,28 +185,23 @@ export class CreateHubAction {
         };
 
         if (interaction.action === "feedback") {
-          await IoService.appendAgentInteraction(
-            this.workspaceRoot,
-            "persona",
-            params.agentId,
-            "action",
-            "feedback",
-            styleThreadId,
-            styleTurn,
-            interaction.feedback,
-          );
-          styleTurn++;
-        } else {
-          await IoService.appendAgentInteraction(
-            this.workspaceRoot,
-            "persona",
-            params.agentId,
-            "action",
-            "accepted",
-            styleThreadId,
-            styleTurn,
-          );
+          personaTurn++;
         }
+
+        await AgentService.appendFeedback(
+          this.workspaceRoot,
+          "persona",
+          params.agentId,
+          {
+            source: "action",
+            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
+            threadId: personaThreadId,
+            turn: personaTurn,
+            ...(interaction.action === "feedback"
+              ? { text: interaction.feedback }
+              : {}),
+          },
+        );
 
         return interaction;
       },

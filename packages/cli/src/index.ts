@@ -3,8 +3,8 @@ import {
   ConfigService,
   IoService,
   LoggerService,
-  RegistryService,
   SecretService,
+  WorkspaceService,
 } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
@@ -18,7 +18,6 @@ import { registryCommand } from "./commands/registry.js";
 import { NodeConfigProvider } from "./providers/NodeConfigProvider.js";
 import { NodeIoProvider } from "./providers/NodeIoProvider.js";
 import { NodeLoggerProvider } from "./providers/NodeLoggerProvider.js";
-import { NodeRegistryProvider } from "./providers/NodeRegistryProvider.js";
 import { NodeSecretProvider } from "./providers/NodeSecretProvider.js";
 
 // Load environment variables
@@ -32,11 +31,9 @@ async function main() {
   IoService.setProvider(new NodeIoProvider());
   SecretService.setProvider(new NodeSecretProvider());
   ConfigService.setProvider(new NodeConfigProvider());
+  LoggerService.setProvider(new NodeLoggerProvider());
 
-  const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
-
-  LoggerService.setProvider(new NodeLoggerProvider(workspaceRoot));
-  RegistryService.setProvider(new NodeRegistryProvider(workspaceRoot));
+  const workspaceRoot = await WorkspaceService.findRoot(currentDir);
 
   await LoggerService.info("CLI initialized in workspace", { workspaceRoot });
 

@@ -4,6 +4,7 @@ import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
 import { AgentTruth } from "../types/index.js";
 import { AgentIdentitySchema, AgentKnowledgeSchema } from "../types/schemas.js";
+import { IoService } from "./IoService.js";
 import { LoggerService } from "./LoggerService.js";
 
 export type ArtifactType = "persona" | "writer" | "assembler";
@@ -67,50 +68,13 @@ export function getAgent<T extends AgentPair["type"]>(
   );
 }
 
-export interface RegistryProvider {
-  listAgentFolders(typeFolder: string): Promise<string[]>;
-  readAgentPackage(
-    typeFolder: string,
-    folderName: string,
-  ): Promise<{
-    identity: string;
-    behavior: string;
-    knowledge: string;
-  }>;
-  getIdentifier(filename: string): string;
-  setWorkspaceRoot(path: string): void;
-}
-
 export class RegistryService {
-  private static provider: RegistryProvider | null = null;
   private static cachedArtifacts: Artifact[] = [];
-
-  static setProvider(provider: RegistryProvider): void {
-    this.provider = provider;
-  }
-
-  static setWorkspaceRoot(path: string): void {
-    if (!this.provider) {
-      throw new Error(
-        "RegistryService: Cannot set root before provider is registered.",
-      );
-    }
-    this.cachedArtifacts = [];
-    this.provider.setWorkspaceRoot(path);
-  }
-
-  static hasProvider(): boolean {
-    return this.provider !== null;
-  }
 
   /**
    * Fetches all artifacts from the workspace.
    */
   static async sync(workspaceRoot: string): Promise<Artifact[]> {
-    if (!this.provider) {
-      throw new Error("RegistryService: RegistryProvider not registered.");
-    }
-
     const folders: Record<string, ArtifactType> = {
       personas: "persona",
       writers: "writer",
@@ -122,13 +86,40 @@ export class RegistryService {
       await LoggerService.debug("Scanning registry folders", { workspaceRoot });
 
       for (const [folder, type] of Object.entries(folders)) {
-        const agentFolders = await this.provider.listAgentFolders(folder);
+        const categoryPath = IoService.join(workspaceRoot, "agents", folder);
+
+        if (!(await IoService.exists(categoryPath))) continue;
+
+        const entries = await IoService.readDir(categoryPath);
+        const agentFolders = entries
+          .filter((e) => e.isDirectory)
+          .map((e) => e.name);
 
         for (const agentDir of agentFolders) {
-          const raw = await this.provider.readAgentPackage(folder, agentDir);
-          const identity = AgentIdentitySchema.parse(JSON.parse(raw.identity));
+          const pkgDir = IoService.join(categoryPath, agentDir);
+
+          const identityPath = IoService.join(pkgDir, "agent.json");
+          const behaviorPath = IoService.join(pkgDir, "behavior.md");
+          const knowledgePath = IoService.join(pkgDir, "knowledge.json");
+
+          if (
+            !(await IoService.exists(identityPath)) ||
+            !(await IoService.exists(behaviorPath)) ||
+            !(await IoService.exists(knowledgePath))
+          ) {
+            await LoggerService.warn(
+              `Incomplete agent package skipped: ${agentDir}`,
+            );
+            continue;
+          }
+
+          const identityRaw = await IoService.readFile(identityPath);
+          const behavior = await IoService.readFile(behaviorPath);
+          const knowledgeRaw = await IoService.readFile(knowledgePath);
+
+          const identity = AgentIdentitySchema.parse(JSON.parse(identityRaw));
           const knowledge = AgentKnowledgeSchema.parse(
-            JSON.parse(raw.knowledge),
+            JSON.parse(knowledgeRaw),
           );
 
           if (type === "persona") {
@@ -136,7 +127,7 @@ export class RegistryService {
               id: identity.id,
               type,
               description: knowledge.description || "",
-              content: raw.behavior,
+              content: behavior,
               displayName: identity.displayName,
               truths: knowledge.truths,
               language: identity.metadata?.language || "English",
@@ -146,7 +137,7 @@ export class RegistryService {
           } else {
             allArtifacts.push({
               type,
-              content: raw.behavior,
+              content: behavior,
               description: knowledge.description,
               truths: knowledge.truths,
               id: identity.id,

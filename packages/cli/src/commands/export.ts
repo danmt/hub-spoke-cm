@@ -1,5 +1,10 @@
 // src/commands/export.ts
-import { IoService, ParserService } from "@hub-spoke/core";
+import {
+  HubService,
+  IoService,
+  ParserService,
+  WorkspaceService,
+} from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
 import { existsSync } from "fs";
@@ -15,7 +20,7 @@ export const exportCommand = new Command("export")
   .action(async (options) => {
     try {
       const currentDir = process.cwd();
-      const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
+      const workspaceRoot = await WorkspaceService.findRoot(currentDir);
 
       let sourceFile: string;
       let hubRootDir: string;
@@ -24,7 +29,7 @@ export const exportCommand = new Command("export")
         sourceFile = path.resolve(currentDir, options.file);
         hubRootDir = path.dirname(sourceFile);
       } else {
-        const context = await IoService.resolveHubContext(
+        const context = await HubService.resolveHubContext(
           workspaceRoot,
           currentDir,
           async (hubs) => {
@@ -71,7 +76,7 @@ export const exportCommand = new Command("export")
         }
       }
 
-      await IoService.safeWriteFile(outputPath, cleanMarkdown);
+      await IoService.writeFile(outputPath, cleanMarkdown);
 
       console.log(
         chalk.green(

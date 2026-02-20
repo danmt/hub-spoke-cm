@@ -3,14 +3,13 @@ import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors, ThemeColors } from "@/constants/Colors";
 import { useAgents } from "@/services/AgentsContext";
-import { AgentsStorage } from "@/services/AgentsStorage";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
 import { FontAwesome } from "@expo/vector-icons";
 import {
   AgentInteractionEntry,
+  AgentService,
   AssemblerArtifact,
-  IoService,
   PersonaArtifact,
   WriterArtifact,
 } from "@hub-spoke/core";
@@ -47,11 +46,7 @@ export default function AgentDetailsScreen() {
 
   const loadLearningData = async () => {
     const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-    const data = await AgentsStorage.getAgentFeedback(
-      workspaceDir.uri,
-      type,
-      id,
-    );
+    const data = await AgentService.getFeedback(workspaceDir.uri, type, id);
     setHistory(data);
   };
 
@@ -107,13 +102,15 @@ export default function AgentDetailsScreen() {
 
     try {
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-      await IoService.appendAgentInteraction(
+      await AgentService.appendFeedback(
         workspaceDir.uri,
         artifact.type,
         artifact.id,
-        "manual",
-        "feedback",
-        manualInstruction,
+        {
+          source: "manual",
+          outcome: "feedback",
+          text: manualInstruction,
+        },
       );
       setManualInstruction("");
       setShowTeachModal(false);
@@ -157,7 +154,7 @@ export default function AgentDetailsScreen() {
         )}
 
         {/* System Instructions Section */}
-        <Text style={styles.sectionTitle}>System Instruction (Behavior)</Text>
+        <Text style={styles.sectionTitle}>Behaviour</Text>
         <View
           style={[
             styles.contentCard,

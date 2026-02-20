@@ -69,6 +69,6 @@ export async function executeCliFillAction(
       frontmatter,
       updatedSections,
     );
-    await IoService.safeWriteFile(filePath, currentProgress);
+    await IoService.writeFile(filePath, currentProgress);
   }
 }

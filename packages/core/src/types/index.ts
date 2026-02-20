@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   AgentBirthSchema,
   AgentIdentitySchema,
+  AgentIndexEntrySchema,
   AgentKnowledgeSchema,
   AgentTruthSchema,
   EvolutionAnalysisSchema,
@@ -11,8 +12,10 @@ import {
   HubBlueprintSchema,
   HubComponentSchema,
   HubConfigSchema,
+  HubIndexEntrySchema,
   HubSecretSchema,
   SectionBlueprintSchema,
+  WorkspaceManifestSchema,
 } from "./schemas.js";
 
 // Export Inferred Types
@@ -28,11 +31,15 @@ export type AgentKnowledge = z.infer<typeof AgentKnowledgeSchema>;
 export type AgentTruth = z.infer<typeof AgentTruthSchema>;
 export type EvolutionAnalysis = z.infer<typeof EvolutionAnalysisSchema>;
 export type EvolutionProposal = z.infer<typeof EvolutionProposalSchema>;
+export type HubIndexEntry = z.infer<typeof HubIndexEntrySchema>;
+export type AgentIndexEntry = z.infer<typeof AgentIndexEntrySchema>;
+export type WorkspaceManifest = z.infer<typeof WorkspaceManifestSchema>;
 
 // Re-export Schemas for validation use
 export {
   AgentBirthSchema,
   AgentIdentitySchema,
+  AgentIndexEntrySchema,
   AgentKnowledgeSchema,
   AgentTruthSchema,
   EvolutionAnalysisSchema,
@@ -41,6 +48,8 @@ export {
   HubBlueprintSchema,
   HubComponentSchema,
   HubConfigSchema,
+  HubIndexEntrySchema,
   HubSecretSchema,
   SectionBlueprintSchema,
+  WorkspaceManifestSchema,
 } from "./schemas.js";

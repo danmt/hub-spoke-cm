@@ -1,10 +1,10 @@
 // src/commands/new.ts
 import {
   ConfigService,
-  IoService,
   ParserService,
   RegistryService,
   SecretService,
+  WorkspaceService,
 } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
@@ -16,7 +16,7 @@ export const newCommand = new Command("new")
   .description("Create a new Hub inside the workspace /posts directory")
   .action(async () => {
     try {
-      const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
+      const workspaceRoot = await WorkspaceService.findRoot(process.cwd());
       const rawArtifacts = await RegistryService.getAllArtifacts(workspaceRoot);
       const config = await ConfigService.getConfig();
       const secret = await SecretService.getSecret();

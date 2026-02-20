@@ -4,6 +4,7 @@ import {
   ArchitectResponse,
   AssembleResponse,
   CreateHubAction,
+  HubService,
   IoService,
   ParserService,
 } from "@hub-spoke/core";
@@ -116,7 +117,7 @@ export async function executeCliCreateHubAction(
 
   const { assembly, architecture, personification } = await action.execute();
 
-  const hubDir = await IoService.createHubDirectory(
+  const hubDir = await HubService.createHubDirectory(
     workspaceRoot,
     assembly.blueprint.hubId,
   );
@@ -127,7 +128,7 @@ export async function executeCliCreateHubAction(
     personification.header,
     personification.content,
   );
-  await IoService.safeWriteFile(filePath, fileContent);
+  await IoService.writeFile(filePath, fileContent);
 
   console.log(
     chalk.bold.green(
