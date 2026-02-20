@@ -81,7 +81,13 @@ export const newCommand = new Command("new")
       const { frontmatter, sections } =
         ParserService.parseMarkdown(fileContent);
 
-      await executeCliFillAction(agents, frontmatter, sections, filePath);
+      await executeCliFillAction(
+        workspaceRoot,
+        agents,
+        frontmatter,
+        sections,
+        filePath,
+      );
     } catch (error) {
       console.error(chalk.red("\n❌ Command `new` Error:"), error);
     }

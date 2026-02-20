@@ -8,6 +8,7 @@ import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
 import { useInteractionDeferrer } from "@/hooks/useInteractionDeferrer";
 import { executeMobileFillAction } from "@/presets/executeMobileFillAction";
+import { useAgents } from "@/services/AgentsContext";
 import { useHubs } from "@/services/HubsContext";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
@@ -37,6 +38,7 @@ const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 export default function FillHubScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace, manifest, updateManifest } = useWorkspace();
+  const { getAgent } = useAgents(); // Access registry lookup
   const { invalidateCache } = useHubs();
   const themeColors = Colors[useColorScheme() ?? "dark"];
   const router = useRouter();
@@ -74,6 +76,15 @@ export default function FillHubScreen() {
     loadHub();
   }, [id, activeWorkspace]);
 
+  // Resolve the Persona Display Name
+  const personaDisplayName = useMemo(() => {
+    if (!hubData) return "Loading...";
+    return (
+      getAgent("persona", hubData.frontmatter.personaId)?.artifact
+        .displayName || hubData.frontmatter.personaId
+    );
+  }, [hubData, getAgent]);
+
   const sections = useMemo(() => {
     if (!hubData) return { completed: [], pending: [] };
     const allIds = Object.keys(hubData.sections);
@@ -103,13 +114,15 @@ export default function FillHubScreen() {
       const config = await ConfigService.getConfig();
       const secret = await SecretService.getSecret();
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+      const artifacts = await RegistryService.getAllArtifacts(workspaceDir.uri);
       const agents = RegistryService.initializeAgents(
         secret.apiKey!,
         config.model!,
-        await RegistryService.getAllArtifacts(workspaceDir.uri),
+        artifacts,
       );
 
       await executeMobileFillAction(
+        workspaceDir.uri,
         agents,
         hubData.frontmatter,
         hubData.sections,
@@ -227,7 +240,7 @@ export default function FillHubScreen() {
             </View>
             <View style={styles.personaBadge}>
               <Text style={styles.personaBadgeText}>
-                Style Agent: {hubData.frontmatter.personaId}
+                Style Agent: {personaDisplayName}
               </Text>
             </View>
             <Text style={styles.description}>
@@ -257,14 +270,28 @@ export default function FillHubScreen() {
               </View>
             </View>
             <Text style={styles.sectionHeader}>Queue</Text>
-            {sections.pending.map((sid) => (
-              <View key={sid} style={styles.queueItem}>
-                <FontAwesome name="circle-o" size={14} color="#ffcc00" />
-                <Text style={styles.queueText}>
-                  {hubData.frontmatter.blueprint[sid]?.header || sid}
-                </Text>
-              </View>
-            ))}
+            {sections.pending.map((sid) => {
+              const component = hubData.frontmatter.blueprint[sid];
+              // Resolve the writer's display name for the queue list
+              const writerName =
+                getAgent("writer", component?.writerId)?.artifact.displayName ||
+                component?.writerId ||
+                "Unknown Writer";
+
+              return (
+                <View key={sid} style={styles.queueItem}>
+                  <FontAwesome name="circle-o" size={14} color="#ffcc00" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.queueText}>
+                      {component?.header || sid}
+                    </Text>
+                    <Text style={styles.queueSubtext}>
+                      assigned to {writerName}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
           </ScrollView>
           <View style={styles.footer}>
             <Pressable
@@ -336,6 +363,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(128,128,128,0.05)",
   },
   queueText: { fontSize: 15, fontWeight: "500", opacity: 0.8 },
+  queueSubtext: {
+    fontSize: 11,
+    opacity: 0.4,
+    marginTop: 2,
+    fontStyle: "italic",
+  },
   footer: {
     padding: 20,
     borderTopWidth: 1,

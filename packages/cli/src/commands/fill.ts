@@ -97,6 +97,7 @@ export const fillCommand = new Command("fill")
       );
 
       await executeCliFillAction(
+        workspaceRoot,
         agents,
         hub.frontmatter,
         hub.sections,

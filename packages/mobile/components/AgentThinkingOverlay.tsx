@@ -1,7 +1,8 @@
 // packages/mobile/components/AgentThinkingOverlay.tsx
+import { useAgents } from "@/services/AgentsContext";
 import { Vibe } from "@/utils/vibe";
 import { FontAwesome } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Animated, StyleSheet } from "react-native";
 import { Text, View } from "./Themed";
 
@@ -24,15 +25,29 @@ export function AgentThinkingOverlay({
 }: Props) {
   const [seconds, setSeconds] = useState(0);
   const pulse = new Animated.Value(1);
+  const { getAgent } = useAgents();
+
+  // Resolve display name based on phase/type
+  const resolvedDisplayName = useMemo(() => {
+    // Special case for Architect which is a system agent not in registry
+    if (agentId === "Architect") return "Workspace Architect";
+
+    const typeMap: Record<string, "persona" | "writer" | "assembler"> = {
+      styling: "persona",
+      writing: "writer",
+      assembling: "assembler",
+    };
+
+    const type = phase ? typeMap[phase] : null;
+    if (!type) return agentId;
+
+    return getAgent(type, agentId)?.artifact.displayName || agentId;
+  }, [agentId, phase, getAgent]);
 
   useEffect(() => {
-    // Start elapsed timer
     const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
-
-    // Tactile signal that a new agent has taken the floor
     Vibe.agentHeartbeat();
 
-    // Visual pulse animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
@@ -97,7 +112,7 @@ export function AgentThinkingOverlay({
 
       <View style={styles.agentMeta}>
         <Text style={styles.emoji}>{getAgentEmoji()}</Text>
-        <Text style={styles.agentTitle}>@{agentId}</Text>
+        <Text style={styles.agentTitle}>{resolvedDisplayName}</Text>
         <Text style={[styles.modelTag, { color }]}>{model.toUpperCase()}</Text>
       </View>
 
@@ -153,7 +168,12 @@ const styles = StyleSheet.create({
   },
   agentMeta: { alignItems: "center", marginBottom: 60 },
   emoji: { fontSize: 32, marginBottom: 10 },
-  agentTitle: { fontSize: 28, fontWeight: "bold", color: "#fff" },
+  agentTitle: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#fff",
+    textAlign: "center",
+  },
   modelTag: {
     fontSize: 11,
     fontWeight: "800",

@@ -2,6 +2,16 @@
 import { ContentFrontmatter } from "../types/index.js";
 import { ParsedFile, ParserService } from "./ParserService.js";
 
+export type AgentInteractionSource = "action" | "manual";
+export type AgentInteractionOutcome = "accepted" | "feedback";
+
+export interface AgentInteractionEntry {
+  timestamp: string;
+  source: AgentInteractionSource;
+  outcome: AgentInteractionOutcome;
+  text: string;
+}
+
 export interface HubContext {
   rootDir: string;
   hubId: string;
@@ -112,6 +122,39 @@ export class IoService {
     const dirPath = this.provider.join(workspaceRoot, "posts", hubId);
     await this.provider.makeDir(dirPath, true);
     return dirPath;
+  }
+
+  static async appendAgentInteraction(
+    workspaceRoot: string,
+    type: string,
+    id: string,
+    source: AgentInteractionSource,
+    outcome: AgentInteractionOutcome,
+    text?: string,
+  ): Promise<void> {
+    this.ensureProvider();
+    const filePath = this.provider.join(
+      workspaceRoot,
+      "agents",
+      `${type}s`,
+      id,
+      "feedback.jsonl",
+    );
+
+    const entry: AgentInteractionEntry = {
+      timestamp: new Date().toISOString(),
+      source,
+      outcome,
+      text: text || "",
+    };
+
+    const current = (await this.provider.exists(filePath))
+      ? await this.provider.readFile(filePath)
+      : "";
+    await this.provider.writeFile(
+      filePath,
+      current + JSON.stringify(entry) + "\n",
+    );
   }
 
   /**

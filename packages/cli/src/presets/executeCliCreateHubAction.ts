@@ -56,7 +56,14 @@ export async function executeCliCreateHubAction(
     },
   ]);
 
-  const action = new CreateHubAction(apiKey, model, manifest, baseline, agents)
+  const action = new CreateHubAction(
+    workspaceRoot,
+    apiKey,
+    model,
+    manifest,
+    baseline,
+    agents,
+  )
     .onArchitecting(() =>
       console.log(chalk.blue("\n🧠 Architect is thinking...")),
     )

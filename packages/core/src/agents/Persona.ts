@@ -21,7 +21,7 @@ export interface PersonaContext {
   header: string;
   content: string;
   interact?: PersonaInteractionHandler;
-  onThinking?: () => void;
+  onThinking?: (agentId: string) => void;
   onRetry?: (error: Error) => Promise<boolean>;
 }
 
@@ -32,6 +32,7 @@ export interface PersonaGenerateContext {
 }
 
 export interface PersonaResponse {
+  agentId: string;
   header: string;
   content: string;
 }
@@ -98,7 +99,7 @@ export class Persona {
 
     while (true) {
       try {
-        if (ctx.onThinking) ctx.onThinking();
+        if (ctx.onThinking) ctx.onThinking(this.id);
 
         const generated = await this.generate({
           header: ctx.header,
@@ -181,6 +182,7 @@ export class Persona {
     }
 
     return {
+      agentId: this.id,
       header: hMatch[1].trim(),
       content: cMatch[1].trim(),
     };

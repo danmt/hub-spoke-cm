@@ -1,6 +1,7 @@
 // src/actions/FillAction.ts
 import { Persona, PersonaInteractionHandler } from "../agents/Persona.js";
 import { Writer, WriterInteractionHandler } from "../agents/Writer.js";
+import { IoService } from "../services/IoService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import {
   AgentPair,
@@ -31,7 +32,11 @@ export class FillAction {
   private persona: Persona;
   private writers: Writer[];
 
-  constructor(personaId: string, agents: AgentPair[]) {
+  constructor(
+    public workspaceRoot: string,
+    personaId: string,
+    agents: AgentPair[],
+  ) {
     const persona = getAgent(agents, "persona", personaId);
 
     if (!persona) {
@@ -111,20 +116,70 @@ export class FillAction {
       bridge: blueprint.bridge,
       isFirst,
       isLast,
-      interact: this._onWrite,
+      interact: async (params) => {
+        const interaction = (await this._onWrite?.(params)) || {
+          action: "proceed",
+        };
+
+        if (interaction.action === "feedback") {
+          await IoService.appendAgentInteraction(
+            this.workspaceRoot,
+            "writer",
+            params.agentId,
+            "action",
+            "feedback",
+            interaction.feedback,
+          );
+        } else {
+          await IoService.appendAgentInteraction(
+            this.workspaceRoot,
+            "writer",
+            params.agentId,
+            "action",
+            "accepted",
+          );
+        }
+
+        return interaction;
+      },
       onRetry: this._onRetry,
-      onThinking: () =>
-        this._onWriting?.({ id: sectionId, writerId: writer.id }),
+      onThinking: (agentId) =>
+        this._onWriting?.({ id: sectionId, writerId: agentId }),
     });
 
     // 2. Persona Rephrasing Phase
     const rephrased = await this.persona.rephrase({
       header: neutral.header,
       content: neutral.content,
-      interact: this._onRephrase,
+      interact: async (params) => {
+        const interaction = (await this._onRephrase?.(params)) || {
+          action: "proceed",
+        };
+
+        if (interaction.action === "feedback") {
+          await IoService.appendAgentInteraction(
+            this.workspaceRoot,
+            "persona",
+            params.agentId,
+            "action",
+            "feedback",
+            interaction.feedback,
+          );
+        } else {
+          await IoService.appendAgentInteraction(
+            this.workspaceRoot,
+            "persona",
+            params.agentId,
+            "action",
+            "accepted",
+          );
+        }
+
+        return interaction;
+      },
       onRetry: this._onRetry,
-      onThinking: () =>
-        this._onRephrasing?.({ id: sectionId, personaId: this.persona.id }),
+      onThinking: (agentId) =>
+        this._onRephrasing?.({ id: sectionId, personaId: agentId }),
     });
 
     await LoggerService.info("FillAction: Execution finished");

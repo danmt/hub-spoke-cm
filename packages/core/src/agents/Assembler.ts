@@ -25,10 +25,11 @@ export interface AssembleContext {
   allowedWriters: WriterInfo[];
   interact?: AssemblerInteractionHandler;
   onRetry?: (error: Error) => Promise<boolean>;
-  onThinking?: () => void;
+  onThinking?: (agentId: string) => void;
 }
 
 export interface AssembleResponse {
+  agentId: string;
   blueprint: HubBlueprint;
 }
 
@@ -46,6 +47,7 @@ export interface WriterInfo {
 }
 
 export interface AssemblerGenerateResponse {
+  agentId: string;
   blueprint: HubBlueprint;
 }
 
@@ -119,7 +121,7 @@ export class Assembler {
 
     while (true) {
       try {
-        if (ctx.onThinking) ctx.onThinking();
+        if (ctx.onThinking) ctx.onThinking(this.id);
 
         const generated = await this.generate({
           audience: ctx.audience,
@@ -245,6 +247,6 @@ export class Assembler {
       );
     }
 
-    return { blueprint: { hubId, components } };
+    return { agentId: this.id, blueprint: { hubId, components } };
   }
 }

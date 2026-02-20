@@ -1,4 +1,6 @@
+// packages/mobile/components/proposals/ArchitectProposal.tsx
 import { useColorScheme } from "@/components/useColorScheme";
+import { useAgents } from "@/services/AgentsContext";
 import { ArchitectResponse } from "@hub-spoke/core";
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
@@ -12,6 +14,18 @@ interface Props {
 
 export function ArchitectProposal({ data, onResolve }: Props) {
   const colorScheme = useColorScheme() ?? "dark";
+  const { getAgent } = useAgents();
+
+  const personaName =
+    getAgent("persona", data.brief.personaId)?.artifact.displayName ||
+    data.brief.personaId;
+  const assemblerName =
+    getAgent("assembler", data.brief.assemblerId)?.artifact.displayName ||
+    data.brief.assemblerId;
+
+  const writerNames = data.brief.allowedWriterIds
+    .map((id) => getAgent("writer", id)?.artifact.displayName || id)
+    .join(", ");
 
   return (
     <View style={styles.container}>
@@ -38,26 +52,23 @@ export function ArchitectProposal({ data, onResolve }: Props) {
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>Persona</Text>
-              <Text style={styles.value}>{data.brief.personaId}</Text>
+              <Text style={styles.value}>{personaName}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>Assembler</Text>
-              <Text style={styles.value}>{data.brief.assemblerId}</Text>
+              <Text style={styles.value}>{assemblerName}</Text>
             </View>
           </View>
 
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>Writers</Text>
-              <Text style={styles.value}>
-                {data.brief.allowedWriterIds.join(", ")}
-              </Text>
+              <Text style={styles.value}>{writerNames}</Text>
             </View>
           </View>
         </View>
       </ScrollView>
 
-      {/* Shared interaction component with the feedback modal logic */}
       <ConfirmOrFeedback
         confirmText="🚀 Approve"
         onConfirm={() => onResolve({ action: "proceed" })}

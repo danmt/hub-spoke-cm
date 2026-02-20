@@ -57,6 +57,9 @@ export default function AgentEditorScreen() {
     initialType || "persona",
   );
   const [savedAgentId, setSavedAgentId] = useState<string | null>(null);
+  const [savedAgentDisplayName, setSavedAgentDisplayName] = useState<
+    string | null
+  >(null);
   const [formData, setFormData] = useState<AgentFormState>({
     id: id || "",
     description: "",
@@ -160,8 +163,6 @@ export default function AgentEditorScreen() {
       let existingTruths: AgentTruth[] = [];
       let targetId = id;
 
-      const uuid = Crypto.randomUUID();
-
       if (isEditMode && id) {
         const existing = getAgent(agentType, id);
         existingTruths = (existing?.artifact as Artifact)?.truths || [];
@@ -180,7 +181,7 @@ export default function AgentEditorScreen() {
       await AgentsStorage.saveAgentPackage({
         workspaceUri: workspaceDir.uri,
         identity: {
-          id: uuid,
+          id: targetId,
           type: agentType,
           displayName: formData.displayName!,
           metadata:
@@ -203,18 +204,19 @@ export default function AgentEditorScreen() {
         id: targetId,
         type: agentType,
         displayName: formData.displayName,
-        description: formData.description!,
+        description,
       });
 
       await refresh();
       await Vibe.handoff();
 
       if (isEditMode) {
-        Alert.alert("Success", `Agent @${targetId} updated.`, [
+        Alert.alert("Success", `Agent ${formData.displayName} updated.`, [
           { text: "OK", onPress: () => router.back() },
         ]);
       } else {
         setSavedAgentId(targetId);
+        setSavedAgentDisplayName(formData.displayName!);
         setState("DONE");
       }
     } catch (err: any) {
@@ -302,14 +304,14 @@ export default function AgentEditorScreen() {
     );
   }
 
-  if (state === "DONE" && savedAgentId) {
+  if (state === "DONE" && savedAgentId && savedAgentDisplayName) {
     return (
       <View style={styles.centered}>
         <Stack.Screen options={{ headerRight: undefined }} />
         <Text style={styles.victoryEmoji}>🚀</Text>
         <Text style={styles.title}>Agent Deployed</Text>
         <Text style={styles.doneSub}>
-          Agent @{savedAgentId} is ready for action.
+          Agent {savedAgentDisplayName} is ready for action.
         </Text>
         <Pressable
           style={[

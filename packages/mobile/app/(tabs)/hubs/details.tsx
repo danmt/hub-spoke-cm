@@ -2,6 +2,7 @@
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
+import { useAgents } from "@/services/AgentsContext"; // Import agents context
 import { ExportService } from "@/services/ExportService";
 import { useHubs } from "@/services/HubsContext";
 import { useWorkspace } from "@/services/WorkspaceContext";
@@ -10,7 +11,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import { ParsedFile } from "@hub-spoke/core";
 import { Directory } from "expo-file-system";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -24,6 +25,7 @@ export default function HubDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { activeWorkspace } = useWorkspace();
   const { getFullHub, deleteHub } = useHubs();
+  const { getAgent } = useAgents(); // Access registry lookup
   const themeColors = Colors[useColorScheme() ?? "dark"];
   const router = useRouter();
 
@@ -45,6 +47,34 @@ export default function HubDetailsScreen() {
     }
     loadHub();
   }, [id, activeWorkspace, getFullHub]);
+
+  // Resolve Display Names for Meta Grid
+  const resolvedPersona = useMemo(() => {
+    if (!hubData) return "";
+    return (
+      getAgent("persona", hubData.frontmatter.personaId)?.artifact
+        .displayName || hubData.frontmatter.personaId
+    );
+  }, [hubData, getAgent]);
+
+  const resolvedAssembler = useMemo(() => {
+    if (!hubData) return "";
+    return (
+      getAgent("assembler", hubData.frontmatter.assemblerId)?.artifact
+        .displayName || hubData.frontmatter.assemblerId
+    );
+  }, [hubData, getAgent]);
+
+  const resolvedWriters = useMemo(() => {
+    if (!hubData) return "";
+    return hubData.frontmatter.allowedWriterIds
+      .split(",")
+      .map(
+        (wid) =>
+          getAgent("writer", wid.trim())?.artifact.displayName || wid.trim(),
+      )
+      .join(", ");
+  }, [hubData, getAgent]);
 
   const toggleSection = (sectionId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -127,17 +157,14 @@ export default function HubDetailsScreen() {
             <MetaItem label="Topic" value={metadata.topic} icon="tag" />
             <MetaItem label="Audience" value={metadata.audience} icon="users" />
             <MetaItem label="Goal" value={metadata.goal} icon="flag" />
-            <MetaItem label="Persona" value={metadata.personaId} icon="user" />
+            {/* Resolved Names */}
+            <MetaItem label="Persona" value={resolvedPersona} icon="user" />
             <MetaItem
               label="Assembler"
-              value={metadata.assemblerId}
+              value={resolvedAssembler}
               icon="sitemap"
             />
-            <MetaItem
-              label="Writers"
-              value={metadata.allowedWriterIds.split(",").join(", ")}
-              icon="pencil"
-            />
+            <MetaItem label="Writers" value={resolvedWriters} icon="pencil" />
           </View>
         </View>
 
@@ -242,7 +269,7 @@ function MetaItem({
     </View>
   );
 }
-
+// Styles remain unchanged
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },

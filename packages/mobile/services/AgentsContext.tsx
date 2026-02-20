@@ -80,6 +80,12 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
   }, [activeWorkspace, workspaceLoading, syncAgents]);
 
   const getAgent = <T extends AgentPair["type"]>(type: T, id: string) => {
+    console.log(agents, type, id);
+
+    agents.forEach((agent) =>
+      console.log(agent.agent.id, agent.artifact.id, id),
+    );
+
     return agents.find(
       (a) => a.type === type && a.artifact.id === id,
     ) as Extract<AgentPair, { type: T }> | null;
@@ -87,18 +93,6 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
 
   const deleteAgent = async (type: AgentPair["type"], id: string) => {
     if (!activeWorkspace || !manifest) return;
-
-    if (type === "writer") {
-      const dependentAssembler = agents.find(
-        (a) => a.type === "assembler" && a.artifact.writerIds.includes(id),
-      );
-
-      if (dependentAssembler) {
-        throw new Error(
-          `Integrity Error: Writer "${id}" is required by assembler "${dependentAssembler.artifact.id}".`,
-        );
-      }
-    }
 
     const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
     const folderName = `${type}s`;

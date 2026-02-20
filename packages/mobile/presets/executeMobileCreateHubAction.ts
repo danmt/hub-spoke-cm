@@ -32,7 +32,14 @@ export async function executeMobileCreateHubAction(
     onComplete: (hubId: string, title: string) => Promise<void>;
   },
 ): Promise<ExecuteMobileCreateHubActionResult> {
-  const action = new CreateHubAction(apiKey, model, manifest, baseline, agents)
+  const action = new CreateHubAction(
+    workspaceRoot,
+    apiKey,
+    model,
+    manifest,
+    baseline,
+    agents,
+  )
     .onArchitecting(() =>
       handlers.onStatus("Architect is planning...", "Architect", "planning"),
     )

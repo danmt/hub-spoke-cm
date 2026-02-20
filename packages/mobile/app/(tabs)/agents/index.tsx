@@ -93,7 +93,7 @@ function AgentSection({ title, icon, data, theme, router }: any) {
           }
         >
           <View style={styles.cardInfo}>
-            <Text style={styles.agentName}>{item.id}</Text>
+            <Text style={styles.agentName}>{item.displayName}</Text>
             <Text style={styles.agentDesc} numberOfLines={2}>
               {item.description}
             </Text>

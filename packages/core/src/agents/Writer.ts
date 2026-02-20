@@ -26,7 +26,7 @@ export interface WriterContext {
   isFirst: boolean;
   isLast: boolean;
   interact?: WriterInteractionHandler;
-  onThinking?: () => void;
+  onThinking?: (agentId: string) => void;
   onRetry?: (error: Error) => Promise<boolean>;
 }
 
@@ -42,6 +42,7 @@ export interface WriterGenerateContext {
 }
 
 export interface WriterResponse {
+  agentId: string;
   header: string;
   content: string;
 }
@@ -112,7 +113,7 @@ export class Writer {
 
     while (true) {
       try {
-        if (ctx.onThinking) ctx.onThinking();
+        if (ctx.onThinking) ctx.onThinking(this.id);
 
         const generated = await this.generate({
           audience: ctx.audience,
@@ -198,6 +199,7 @@ export class Writer {
     }
 
     return {
+      agentId: this.id,
       header: headerMatch[1].trim(),
       content: contentMatch[1].trim(),
     };

@@ -16,6 +16,7 @@ import {
   PersonaResponse,
 } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
+import { IoService } from "../services/IoService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { AgentPair, getAgentsByType } from "../services/RegistryService.js";
 
@@ -40,6 +41,7 @@ export class CreateHubAction {
   private personas: Persona[];
 
   constructor(
+    public workspaceRoot: string,
     apiKey: string,
     model: string,
     manifest: string,
@@ -129,8 +131,33 @@ export class CreateHubAction {
       allowedWriters: this.writers.filter((writer) =>
         architecture.brief.allowedWriterIds.includes(writer.id),
       ),
-      interact: this._onAssembler,
-      onThinking: () => this._onAssembling?.(assemblerId),
+      interact: async (params) => {
+        const interaction = (await this._onAssembler?.(params)) || {
+          action: "proceed",
+        };
+
+        if (interaction.action === "feedback") {
+          await IoService.appendAgentInteraction(
+            this.workspaceRoot,
+            "assembler",
+            params.agentId,
+            "action",
+            "feedback",
+            interaction.feedback,
+          );
+        } else {
+          await IoService.appendAgentInteraction(
+            this.workspaceRoot,
+            "assembler",
+            params.agentId,
+            "action",
+            "accepted",
+          );
+        }
+
+        return interaction;
+      },
+      onThinking: (agentId) => this._onAssembling?.(agentId),
       onRetry: this._onRetry,
     });
 
@@ -147,8 +174,34 @@ export class CreateHubAction {
     const personification = await persona.rephrase({
       header: architecture.brief.topic,
       content: `Write an engaging one sentence long description for this content hub. Topic: ${architecture.brief.topic}. Goal: ${architecture.brief.goal}.`,
-      interact: this._onRephrase,
-      onThinking: () => this._onRephrasing?.(personaId),
+      interact: async (params) => {
+        const interaction = (await this._onRephrase?.(params)) || {
+          action: "proceed",
+        };
+
+        if (interaction.action === "feedback") {
+          await IoService.appendAgentInteraction(
+            this.workspaceRoot,
+            "persona",
+            params.agentId,
+            "action",
+            "feedback",
+            interaction.feedback,
+          );
+        } else {
+          await IoService.appendAgentInteraction(
+            this.workspaceRoot,
+            "persona",
+            params.agentId,
+            "action",
+            "accepted",
+          );
+        }
+
+        return interaction;
+      },
+
+      onThinking: (agentId) => this._onRephrasing?.(agentId),
       onRetry: this._onRetry,
     });
 

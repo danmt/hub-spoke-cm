@@ -1,4 +1,8 @@
-import { AgentIdentity, AgentKnowledge } from "@hub-spoke/core";
+import {
+  AgentIdentity,
+  AgentInteractionEntry,
+  AgentKnowledge,
+} from "@hub-spoke/core";
 import { Directory, File } from "expo-file-system";
 
 export interface SaveAgentPackageParams {
@@ -56,6 +60,41 @@ export class AgentsStorage {
           2,
         ),
       );
+    }
+  }
+
+  /**
+   * Retrieves the complete interaction history for an agent.
+   * Parses the JSONL buffer and returns newest items first.
+   */
+  static async getAgentFeedback(
+    workspaceUri: string,
+    type: string,
+    id: string,
+  ): Promise<AgentInteractionEntry[]> {
+    const agentDir = new Directory(workspaceUri, "agents", `${type}s`, id);
+    const feedbackFile = new File(agentDir, "feedback.jsonl");
+
+    if (!feedbackFile.exists) return [];
+
+    try {
+      const content = await feedbackFile.text();
+      return content
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => {
+          const parsed = JSON.parse(line);
+          return {
+            timestamp: parsed.timestamp,
+            source: parsed.source || "action",
+            outcome: parsed.outcome,
+            text: parsed.text || "",
+          };
+        })
+        .reverse(); // Newest first for the Learning History list
+    } catch (error) {
+      console.error("AgentsStorage: Failed to read feedback buffer", error);
+      return [];
     }
   }
 }
