@@ -89,6 +89,8 @@ export class AgentsStorage {
             source: parsed.source || "action",
             outcome: parsed.outcome,
             text: parsed.text || "",
+            threadId: parsed.threadId,
+            turn: parsed.turn,
           };
         })
         .reverse(); // Newest first for the Learning History list

@@ -199,6 +199,7 @@ export class RegistryService {
               artifact.accent,
               artifact.tone,
               artifact.content,
+              artifact.truths,
             ),
           };
         case "writer":
@@ -226,6 +227,7 @@ export class RegistryService {
               artifact.displayName,
               artifact.description,
               artifact.content,
+              artifact.truths,
             ),
           };
       }
