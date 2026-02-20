@@ -2,6 +2,7 @@ import {
   AgentService,
   ConfigService,
   EvolutionEngine,
+  EvolutionService,
   IntelligenceService,
   RegistryService,
   SecretService,
@@ -126,6 +127,10 @@ agentCommand
         throw new Error("Gemini API Key not found. Run 'hub config set-key'.");
       }
 
+      if (!config.model) {
+        throw new Error("Model not found. Run 'hub config set-model'.");
+      }
+
       const artifacts = await RegistryService.getAllArtifacts(workspaceRoot);
       let targets = artifacts;
 
@@ -176,6 +181,141 @@ agentCommand
             target.id,
           );
 
+          // --- PHASE 4: CONFLICT ORCHESTRATION ---
+          if (result.conflictType === "hard") {
+            console.log(chalk.red.bold(`\n⚠️  Hard Conflict Detected!`));
+
+            // Explain why the conflict happened
+            if (result.violatedMetadataField) {
+              console.log(
+                chalk.red(
+                  `   Inconsistency: Feedback contradicts ${chalk.bold(result.violatedMetadataField)}.`,
+                ),
+              );
+              console.log(
+                chalk.yellow(
+                  `   Inferred correction: ${chalk.green(result.newMetadataValue)}`,
+                ),
+              );
+            } else if (result.violatedTruth) {
+              console.log(
+                chalk.red(
+                  `   Contradiction: Feedback negates truth: "${chalk.italic(result.violatedTruth)}".`,
+                ),
+              );
+            }
+
+            console.log(chalk.dim(`   AI Reasoning: ${result.thoughtProcess}`));
+
+            const { action } = await inquirer.prompt([
+              {
+                type: "list",
+                name: "action",
+                message:
+                  "A specialized fork is recommended. How do you want to proceed?",
+                choices: [
+                  { name: "🔱 Fork into new specialized agent", value: "fork" },
+                  {
+                    name: "📝 Force Update original (pivots core identity)",
+                    value: "overwrite",
+                  },
+                  { name: "⏩ Skip this agent", value: "skip" },
+                ],
+              },
+            ]);
+
+            if (action === "skip") {
+              console.log(
+                chalk.gray(`   ⏩ Evolution deferred for ${target.id}.\n`),
+              );
+              continue;
+            }
+
+            if (action === "fork") {
+              // Only prompt for Display Name as requested
+              const { newDisplayName } = await inquirer.prompt([
+                {
+                  type: "input",
+                  name: "newDisplayName",
+                  message: "Enter Display Name for the new agent:",
+                  default:
+                    result.suggestedForkName ||
+                    `${target.displayName} (Specialized)`,
+                  validate: (v) => v.trim().length > 0 || "Name is required.",
+                },
+              ]);
+
+              const newId = crypto.randomUUID();
+
+              await AgentService.forkAgent(
+                secret.apiKey,
+                config.model,
+                workspaceRoot,
+                target.id,
+                newId,
+                target.type,
+                newDisplayName,
+                result.analysis, // Passes metadata/truth corrections to the fork
+              );
+
+              // Clear original buffer as the feedback has been specialized into the fork
+              await AgentService.clearFeedbackBuffer(
+                workspaceRoot,
+                target.type,
+                target.id,
+              );
+
+              console.log(
+                chalk.green(
+                  `   ✅ Specialized agent created: ${chalk.bold(newDisplayName)} (${newId})\n`,
+                ),
+              );
+              continue;
+            }
+
+            if (action === "overwrite") {
+              // Force the update on the original agent regardless of contradiction
+              const updatedTruths = EvolutionService.applyProposals(
+                target.truths,
+                result.analysis.proposals,
+              );
+
+              await AgentService.saveAgent(workspaceRoot, {
+                identity: {
+                  ...target,
+                  metadata:
+                    result.violatedMetadataField &&
+                    result.newMetadataValue &&
+                    target.type === "persona"
+                      ? {
+                          ...target.metadata,
+                          [result.violatedMetadataField]:
+                            result.newMetadataValue,
+                        }
+                      : target.type === "persona"
+                        ? target.metadata
+                        : {},
+                },
+                behavior: target.content,
+                knowledge: {
+                  description: result.newDescription,
+                  truths: updatedTruths,
+                },
+              });
+
+              await AgentService.clearFeedbackBuffer(
+                workspaceRoot,
+                target.type,
+                target.id,
+              );
+              console.log(
+                chalk.yellow(`   ✅ Original agent updated with override.\n`),
+              );
+              continue;
+            }
+          }
+
+          // --- STANDARD SOFT EVOLUTION (Phase 3 Path) ---
           console.log(chalk.green(`   ✅ Evolution Successful`));
           console.log(chalk.dim(`   💭 Thought: ${result.thoughtProcess}`));
 

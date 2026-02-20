@@ -134,8 +134,10 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
         id,
       );
 
-      // Refresh local state to reflect new truths and updated description
-      await syncAgents();
+      // Only refresh if it wasn't a hard conflict (soft updates happen automatically)
+      if (result.conflictType !== "hard") {
+        await syncAgents();
+      }
 
       return result;
     } catch (err: any) {

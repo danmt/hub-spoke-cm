@@ -12,17 +12,22 @@ export class IntelligenceService {
     displayName: string,
     behavior: string,
     truths: AgentTruth[] = [],
+    metadata: Record<string, any> = {},
   ): Promise<string> {
     const relevantTruths = truths
       .sort((a, b) => b.weight - a.weight)
       .slice(0, MAX_TRUTHS_FOR_CONTEXT)
       .map((t) => `- ${t.text}`)
       .join("\n");
+    const metaContext = Object.entries(metadata)
+      .map(([key, value]) => `${key.toUpperCase()}: ${value}`)
+      .join("\n");
 
     const prompt = `
       Based on the following agent name and behavior, write a concise one-sentence functional description for a registry.
       
       NAME: ${displayName}
+      ${metaContext ? `TRAITS:\n${metaContext}` : ""}
       BEHAVIOR: ${behavior}
       ${relevantTruths.length > 0 ? `LEARNED TRUTHS:\n${relevantTruths}` : ""}
       

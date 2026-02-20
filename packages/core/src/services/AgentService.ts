@@ -1,4 +1,9 @@
-import { AgentIdentity, AgentKnowledge } from "../types/index.js";
+import {
+  AgentIdentity,
+  AgentKnowledge,
+  EvolutionAnalysis,
+} from "../types/index.js";
+import { IntelligenceService } from "./IntelligenceService.js";
 import { IoService } from "./IoService.js";
 import { ArtifactType } from "./RegistryService.js";
 
@@ -80,7 +85,7 @@ export class AgentService {
     const agentDirPath = IoService.join(workspaceUri, "agents", `${type}s`, id);
     const feedbackFile = IoService.join(agentDirPath, "feedback.jsonl");
 
-    if (!IoService.exists(feedbackFile)) return [];
+    if (!(await IoService.exists(feedbackFile))) return [];
 
     try {
       const content = await IoService.readFile(feedbackFile);
@@ -143,5 +148,126 @@ export class AgentService {
       // In Phase 7 we will move this to archive instead of just deleting
       await IoService.writeFile(path, "");
     }
+  }
+
+  /**
+   * Physically clones an agent package into a new directory with a new identity.
+   * Filters knowledge to remove contradictions as defined in Phase 4.
+   */
+  static async forkAgent(
+    apiKey: string,
+    model: string,
+    workspaceRoot: string,
+    originalId: string,
+    newId: string,
+    type: ArtifactType,
+    newDisplayName: string,
+    analysis: EvolutionAnalysis,
+  ): Promise<{
+    id: string;
+    description: string;
+    truths: {
+      text: string;
+      weight: number;
+    }[];
+  }> {
+    const oldPkgDir = IoService.join(
+      workspaceRoot,
+      "agents",
+      `${type}s`,
+      originalId,
+    );
+    const newPkgDir = IoService.join(
+      workspaceRoot,
+      "agents",
+      `${type}s`,
+      newId,
+    );
+
+    // 1. Read current core artifacts from parent
+    const identityRaw = await IoService.readFile(
+      IoService.join(oldPkgDir, "agent.json"),
+    );
+    const behavior = await IoService.readFile(
+      IoService.join(oldPkgDir, "behavior.md"),
+    );
+    const knowledgeRaw = await IoService.readFile(
+      IoService.join(oldPkgDir, "knowledge.json"),
+    );
+
+    const parentIdentity = JSON.parse(identityRaw);
+    const parentKnowledge: AgentKnowledge = JSON.parse(knowledgeRaw);
+
+    // 3. Update Identity Metadata if a metadata field was violated
+    const childIdentity = {
+      ...parentIdentity,
+      id: newId,
+      displayName: newDisplayName,
+    };
+
+    if (
+      analysis.violatedMetadataField &&
+      analysis.newMetadataValue &&
+      childIdentity.metadata
+    ) {
+      childIdentity.metadata[analysis.violatedMetadataField] =
+        analysis.newMetadataValue;
+    }
+
+    const truthsToPurge = new Set([
+      analysis.violatedTruth,
+      ...(analysis.contradictoryTruths || []),
+    ]);
+
+    const childTruths = parentKnowledge.truths.filter(
+      (t) => !truthsToPurge.has(t.text),
+    );
+
+    const newDescription =
+      await IntelligenceService.generateInferredDescription(
+        apiKey,
+        model,
+        newDisplayName,
+        behavior,
+        childTruths,
+        childIdentity.metadata || {},
+      );
+
+    // 4. Create new package structure
+    await IoService.makeDir(newPkgDir);
+    await IoService.writeFile(
+      IoService.join(newPkgDir, "agent.json"),
+      JSON.stringify(childIdentity, null, 2),
+    );
+    await IoService.writeFile(
+      IoService.join(newPkgDir, "behavior.md"),
+      behavior,
+    );
+
+    // Save filtered knowledge
+    await IoService.writeFile(
+      IoService.join(newPkgDir, "knowledge.json"),
+      JSON.stringify(
+        {
+          description: newDescription,
+          truths: childTruths,
+        },
+        null,
+        2,
+      ),
+    );
+
+    // 5. Write Lineage Data (birth.json)
+    const birthData = {
+      parentId: originalId,
+      birthReason: analysis.thoughtProcess,
+      timestamp: new Date().toISOString(),
+    };
+    await IoService.writeFile(
+      IoService.join(newPkgDir, "birth.json"),
+      JSON.stringify(birthData, null, 2),
+    );
+
+    return { id: newId, description: newDescription, truths: childTruths };
   }
 }

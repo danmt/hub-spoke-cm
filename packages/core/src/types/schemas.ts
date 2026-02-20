@@ -117,8 +117,15 @@ export const EvolutionProposalSchema = z.object({
  * The full output from the LLM after analyzing the feedback buffer.
  */
 export const EvolutionAnalysisSchema = z.object({
+  thoughtProcess: z.string(),
+  conflictType: z.enum(["none", "soft", "hard"]).default("none"),
+  forkRecommended: z.boolean().default(false),
+  suggestedForkName: z.string().nullable(),
+  violatedTruth: z.string().nullable(),
+  violatedMetadataField: z.string().nullable(),
+  newMetadataValue: z.string().nullable(),
+  contradictoryTruths: z.array(z.string()).default([]),
   proposals: z.array(EvolutionProposalSchema),
-  thoughtProcess: z.string(), // High-level summary of patterns detected
 });
 
 /**

@@ -12,13 +12,17 @@ import {
   AgentInteractionEntry,
   AgentService,
   AssemblerArtifact,
+  ConfigService,
   EvolutionResult,
   PersonaArtifact,
+  SecretService,
   WriterArtifact,
 } from "@hub-spoke/core";
+import * as Crypto from "expo-crypto";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   LayoutAnimation,
@@ -31,14 +35,17 @@ import {
 
 export default function AgentDetailsScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: any }>();
-  const { getAgent, deleteAgent, evolveAgent } = useAgents();
-  const { activeWorkspace } = useWorkspace();
+  const { getAgent, deleteAgent, evolveAgent, refresh } = useAgents();
+  const { activeWorkspace, upsertAgentIndex } = useWorkspace();
   const themeColors = Colors[useColorScheme() ?? "dark"];
   const router = useRouter();
 
   const [isEvolving, setIsEvolving] = useState(false);
   const [evolutionResult, setEvolutionResult] =
     useState<EvolutionResult | null>(null);
+  const [showForkModal, setShowForkModal] = useState(false);
+  const [newForkName, setNewForkName] = useState("");
+  const [isForking, setIsForking] = useState(false);
 
   // Buffer and Interaction State
   const [history, setHistory] = useState<AgentInteractionEntry[]>([]);
@@ -109,12 +116,74 @@ export default function AgentDetailsScreen() {
     try {
       const result = await evolveAgent(type, id);
       setEvolutionResult(result);
-      await loadLearningData(); // Refresh history (it will be cleared after evolution)
+
+      if (result.conflictType === "hard") {
+        setNewForkName(result.suggestedForkName || "");
+        setShowForkModal(true);
+      } else {
+        await loadLearningData(); // Refresh history for soft updates
+      }
       Vibe.handoff();
     } catch (err: any) {
       Alert.alert("Evolution Failed", err.message);
     } finally {
       setIsEvolving(false);
+    }
+  };
+
+  const executeFork = async () => {
+    if (!evolutionResult || !activeWorkspace) return;
+
+    const secret = await SecretService.getSecret();
+    const config = await ConfigService.getConfig();
+
+    if (!secret.apiKey) {
+      Alert.alert("Gemini API Key is missing");
+      return;
+    }
+
+    if (!config.model) {
+      Alert.alert("Model is missing");
+      return;
+    }
+
+    setIsForking(true); // Lock the UI
+
+    try {
+      const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+      const newId = Crypto.randomUUID();
+      const newAgent = await AgentService.forkAgent(
+        secret.apiKey,
+        config.model,
+        workspaceDir.uri,
+        id,
+        newId,
+        type,
+        newForkName,
+        evolutionResult.analysis,
+      );
+
+      await AgentService.clearFeedbackBuffer(workspaceDir.uri, type, id);
+      setShowForkModal(false);
+      setEvolutionResult(null);
+
+      await upsertAgentIndex({
+        id: newId,
+        type,
+        displayName: newForkName,
+        description: newAgent.description,
+      });
+
+      await refresh();
+      await Vibe.handoff();
+
+      Alert.alert("Success", `Specialized agent "${newForkName}" created.`, [
+        { text: "View Registry", onPress: () => router.push("/(tabs)/agents") },
+      ]);
+    } catch (err: any) {
+      Alert.alert("Fork Failed", err.message);
+    } finally {
+      setIsForking(false); // Release the lock
     }
   };
 
@@ -439,6 +508,83 @@ export default function AgentDetailsScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={showForkModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: themeColors.modalBackground },
+            ]}
+          >
+            <Text style={styles.modalTitle}>🔱 Contradiction Detected</Text>
+
+            <View style={styles.conflictCard}>
+              {evolutionResult?.violatedMetadataField ? (
+                <Text style={styles.conflictText}>
+                  Feedback violates current{" "}
+                  {evolutionResult.violatedMetadataField.toUpperCase()}.{"\n"}
+                  New value will be:{" "}
+                  <Text
+                    style={{
+                      color: themeColors.buttonPrimary,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {evolutionResult.newMetadataValue}
+                  </Text>
+                </Text>
+              ) : (
+                <Text style={styles.conflictText}>
+                  Feedback contradicts rooted truth:{"\n"}
+                  <Text style={{ fontStyle: "italic", opacity: 0.8 }}>
+                    "{evolutionResult?.violatedTruth}"
+                  </Text>
+                </Text>
+              )}
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              A specialized fork is recommended to preserve the original agent's
+              identity.
+            </Text>
+
+            <InputField
+              label="New Agent Name"
+              value={newForkName}
+              onChangeText={setNewForkName}
+              placeholder="e.g. Playful Juan"
+            />
+
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.cancelBtn}
+                onPress={() => setShowForkModal(false)}
+              >
+                <Text style={styles.cancelBtnText}>Discard</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.saveBtn,
+                  {
+                    backgroundColor: isForking
+                      ? "#666"
+                      : themeColors.buttonPrimary,
+                  },
+                ]}
+                onPress={executeFork}
+                disabled={isForking}
+              >
+                {isForking ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Fork Agent</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -747,5 +893,20 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(128,128,128,0.1)",
     borderRadius: 8,
     marginBottom: 6,
+  },
+  conflictCard: {
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 68, 68, 0.1)", // Light red background for attention
+    borderLeftWidth: 4,
+    borderLeftColor: "#ff4444", // Strong red accent for the contradiction
+    marginBottom: 20,
+    width: "100%",
+  },
+  conflictText: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "500",
+    color: "#fff", // Adjust based on theme if necessary
   },
 });
