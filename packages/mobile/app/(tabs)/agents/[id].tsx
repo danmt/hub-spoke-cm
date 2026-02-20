@@ -1,3 +1,4 @@
+import { AgentThinkingOverlay } from "@/components/AgentThinkingOverlay";
 import { InputField } from "@/components/form/InputField";
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
@@ -5,11 +6,13 @@ import { Colors, ThemeColors } from "@/constants/Colors";
 import { useAgents } from "@/services/AgentsContext";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
+import { Vibe } from "@/utils/vibe";
 import { FontAwesome } from "@expo/vector-icons";
 import {
   AgentInteractionEntry,
   AgentService,
   AssemblerArtifact,
+  EvolutionResult,
   PersonaArtifact,
   WriterArtifact,
 } from "@hub-spoke/core";
@@ -28,12 +31,16 @@ import {
 
 export default function AgentDetailsScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: any }>();
-  const { getAgent, deleteAgent } = useAgents();
+  const { getAgent, deleteAgent, evolveAgent } = useAgents();
   const { activeWorkspace } = useWorkspace();
   const themeColors = Colors[useColorScheme() ?? "dark"];
   const router = useRouter();
 
-  // Phase 2 State
+  const [isEvolving, setIsEvolving] = useState(false);
+  const [evolutionResult, setEvolutionResult] =
+    useState<EvolutionResult | null>(null);
+
+  // Buffer and Interaction State
   const [history, setHistory] = useState<AgentInteractionEntry[]>([]);
   const [showTeachModal, setShowTeachModal] = useState(false);
   const [manualInstruction, setManualInstruction] = useState("");
@@ -97,6 +104,20 @@ export default function AgentDetailsScreen() {
     );
   };
 
+  const handleEvolve = async () => {
+    setIsEvolving(true);
+    try {
+      const result = await evolveAgent(type, id);
+      setEvolutionResult(result);
+      await loadLearningData(); // Refresh history (it will be cleared after evolution)
+      Vibe.handoff();
+    } catch (err: any) {
+      Alert.alert("Evolution Failed", err.message);
+    } finally {
+      setIsEvolving(false);
+    }
+  };
+
   const handleManualTeach = async () => {
     if (!manualInstruction.trim() || !activeWorkspace) return;
 
@@ -128,6 +149,18 @@ export default function AgentDetailsScreen() {
     });
   };
 
+  if (isEvolving) {
+    return (
+      <AgentThinkingOverlay
+        agentId={artifact.id}
+        model="Evolution Engine"
+        phase="styling"
+        status="Extracting Rooted Truths..."
+        color={themeColors.buttonPrimary}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Stack.Screen
@@ -142,7 +175,7 @@ export default function AgentDetailsScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Polymorphic Body */}
+        {/* Polymorphic Header Info */}
         {artifact.type === "persona" && (
           <PersonaDisplay artifact={artifact} theme={themeColors} />
         )}
@@ -210,39 +243,16 @@ export default function AgentDetailsScreen() {
         )}
 
         {/* FEEDBACK BUFFER SECTION */}
-        <View style={styles.sectionHeaderRow}>
-          <Pressable
-            style={[styles.collapsibleHeader, { flex: 1, marginTop: 0 }]}
-            onPress={toggleBuffer}
-          >
-            <Text style={styles.sectionTitle}>
-              Learning Buffer ({history.length})
-            </Text>
-            <FontAwesome
-              name={isBufferExpanded ? "chevron-up" : "chevron-down"}
-              size={12}
-              color="#888"
-            />
-          </Pressable>
-          <Pressable
-            style={styles.teachButton}
-            onPress={() => setShowTeachModal(true)}
-          >
-            <FontAwesome
-              name="plus"
-              size={10}
-              color={themeColors.buttonPrimary}
-            />
-            <Text
-              style={[
-                styles.teachButtonText,
-                { color: themeColors.buttonPrimary },
-              ]}
-            >
-              Teach
-            </Text>
-          </Pressable>
-        </View>
+        <Pressable style={styles.collapsibleHeader} onPress={toggleBuffer}>
+          <Text style={styles.sectionTitle}>
+            Learning Buffer ({history.length})
+          </Text>
+          <FontAwesome
+            name={isBufferExpanded ? "chevron-up" : "chevron-down"}
+            size={12}
+            color="#888"
+          />
+        </Pressable>
 
         {isBufferExpanded && (
           <View style={styles.historyList}>
@@ -286,6 +296,46 @@ export default function AgentDetailsScreen() {
           </View>
         )}
 
+        {/* NEW Unified Learning Actions Footer */}
+        <View style={styles.learningActionsFooter}>
+          <Pressable
+            style={[
+              styles.actionButtonSecondary,
+              { borderColor: themeColors.tint, flex: 1 },
+            ]}
+            onPress={() => setShowTeachModal(true)}
+          >
+            <FontAwesome
+              name="commenting-o"
+              size={16}
+              color={themeColors.text}
+            />
+            <Text style={styles.actionButtonText}>Teach</Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.actionButtonPrimary,
+              {
+                flex: 1,
+              },
+              history.length > 0
+                ? { backgroundColor: themeColors.buttonPrimary }
+                : {
+                    backgroundColor: "#999",
+                    opacity: 0.7,
+                  },
+            ]}
+            onPress={handleEvolve}
+            disabled={history.length === 0}
+          >
+            <FontAwesome name="graduation-cap" size={16} color="#fff" />
+            <Text style={[styles.actionButtonText, { color: "#fff" }]}>
+              Train
+            </Text>
+          </Pressable>
+        </View>
+
         <Pressable
           style={[styles.deleteButton, { borderColor: "#ff4444" }]}
           onPress={handleDelete}
@@ -309,7 +359,7 @@ export default function AgentDetailsScreen() {
           >
             <Text style={styles.modalTitle}>Manual Instruction</Text>
             <Text style={styles.modalSubtitle}>
-              Directly update the agent's behavior buffer. processed during
+              Directly update the agent's behavior buffer. Processed during
               evolution.
             </Text>
 
@@ -343,6 +393,52 @@ export default function AgentDetailsScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Evolution Summary Modal */}
+      <Modal visible={!!evolutionResult} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: themeColors.modalBackground },
+            ]}
+          >
+            <Text style={styles.modalTitle}>Evolution Complete</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              <Text style={styles.modalSubtitle}>
+                {evolutionResult?.thoughtProcess}
+              </Text>
+
+              {evolutionResult?.addedTruths.map((t, i) => (
+                <View key={i} style={styles.proposalItem}>
+                  <Text style={{ color: "#32a852" }}>+ [NEW] {t}</Text>
+                </View>
+              ))}
+              {evolutionResult?.strengthenedTruths.map((t, i) => (
+                <View key={i} style={styles.proposalItem}>
+                  <Text style={{ color: themeColors.tint }}>
+                    ↑ [REINFORCED] {t}
+                  </Text>
+                </View>
+              ))}
+              {evolutionResult?.weakenedTruths.map((t, i) => (
+                <View key={i} style={styles.proposalItem}>
+                  <Text style={{ color: "#ffcc00" }}>↓ [WEAKENED] {t}</Text>
+                </View>
+              ))}
+            </ScrollView>
+            <Pressable
+              style={[
+                styles.saveBtn,
+                { backgroundColor: themeColors.buttonPrimary, marginTop: 20 },
+              ]}
+              onPress={() => setEvolutionResult(null)}
+            >
+              <Text style={styles.saveBtnText}>Awesome</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -370,19 +466,19 @@ function PersonaDisplay({
           <InfoTile
             icon="volume-up"
             label="Tone"
-            value={artifact.tone}
+            value={artifact.metadata.tone}
             theme={theme}
           />
           <InfoTile
             icon="language"
             label="Lang"
-            value={artifact.language}
+            value={artifact.metadata.language}
             theme={theme}
           />
           <InfoTile
             icon="commenting-o"
             label="Accent"
-            value={artifact.accent}
+            value={artifact.metadata.accent}
             theme={theme}
           />
         </View>
@@ -529,22 +625,38 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     opacity: 0.7,
   },
-  sectionHeaderRow: {
+  learningActionsFooter: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    gap: 12,
     marginTop: 10,
+    paddingTop: 20,
+    marginBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(128,128,128,0.1)",
   },
-  teachButton: {
+  actionButtonPrimary: {
+    flex: 2,
+    height: 50,
+    borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "rgba(50, 168, 82, 0.1)",
-    marginBottom: 15,
+    justifyContent: "center",
+    gap: 8,
   },
-  teachButtonText: { fontSize: 12, fontWeight: "bold" },
+  actionButtonSecondary: {
+    flex: 1,
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  actionButtonText: {
+    fontWeight: "bold",
+    fontSize: 14,
+  },
   knowledgeList: { marginBottom: 20 },
   truthCard: { padding: 15, borderRadius: 12, marginBottom: 10 },
   truthText: {
@@ -597,7 +709,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    marginTop: 30,
+    marginTop: 10,
     gap: 10,
   },
   deleteButtonText: { color: "#ff4444", fontWeight: "bold" },
@@ -630,4 +742,10 @@ const styles = StyleSheet.create({
   cancelBtnText: { color: "#888", fontWeight: "bold" },
   saveBtn: { paddingHorizontal: 25, paddingVertical: 15, borderRadius: 12 },
   saveBtnText: { color: "#fff", fontWeight: "bold" },
+  proposalItem: {
+    padding: 10,
+    backgroundColor: "rgba(128,128,128,0.1)",
+    borderRadius: 8,
+    marginBottom: 6,
+  },
 });

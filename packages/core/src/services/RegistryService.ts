@@ -20,17 +20,21 @@ export interface BaseArtifact {
 
 export interface PersonaArtifact extends BaseArtifact {
   type: "persona";
-  language: string;
-  tone: string;
-  accent: string;
+  metadata: {
+    language: string;
+    tone: string;
+    accent: string;
+  };
 }
 
 export interface WriterArtifact extends BaseArtifact {
   type: "writer";
+  metadata?: {};
 }
 
 export interface AssemblerArtifact extends BaseArtifact {
   type: "assembler";
+  metadata?: {};
 }
 
 export type Artifact = PersonaArtifact | WriterArtifact | AssemblerArtifact;
@@ -130,9 +134,11 @@ export class RegistryService {
               content: behavior,
               displayName: identity.displayName,
               truths: knowledge.truths,
-              language: identity.metadata?.language || "English",
-              tone: identity.metadata?.tone || "Neutral",
-              accent: identity.metadata?.accent || "Standard",
+              metadata: {
+                language: identity.metadata?.language || "English",
+                tone: identity.metadata?.tone || "Neutral",
+                accent: identity.metadata?.accent || "Standard",
+              },
             });
           } else {
             allArtifacts.push({
@@ -186,9 +192,9 @@ export class RegistryService {
               artifact.id,
               artifact.displayName,
               artifact.description,
-              artifact.language,
-              artifact.accent,
-              artifact.tone,
+              artifact.metadata.language,
+              artifact.metadata.accent,
+              artifact.metadata.tone,
               artifact.content,
               artifact.truths,
             ),
@@ -243,9 +249,9 @@ export class RegistryService {
           id: a.artifact.id,
           description: a.artifact.description,
           capabilities: {
-            tone: a.artifact.tone,
-            language: a.artifact.language,
-            accent: a.artifact.accent,
+            tone: a.artifact.metadata.tone,
+            language: a.artifact.metadata.language,
+            accent: a.artifact.metadata.accent,
           },
         })),
       writers: agents

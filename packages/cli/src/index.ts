@@ -9,6 +9,7 @@ import {
 import chalk from "chalk";
 import { Command } from "commander";
 import dotenv from "dotenv";
+import { agentCommand } from "./commands/agent.js";
 import { configCommand } from "./commands/config.js";
 import { exportCommand } from "./commands/export.js";
 import { fillCommand } from "./commands/fill.js";
@@ -52,6 +53,7 @@ async function main() {
   program.addCommand(fillCommand);
   program.addCommand(configCommand);
   program.addCommand(exportCommand);
+  program.addCommand(agentCommand);
 
   // Global Error Handling
   program.on("command:*", async () => {

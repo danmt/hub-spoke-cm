@@ -4,6 +4,7 @@ import {
   ArchitectResponse,
   AssembleResponse,
   CreateHubAction,
+  getAgent,
   HubService,
   IoService,
   ParserService,
@@ -74,28 +75,49 @@ export async function executeCliCreateHubAction(
       console.log(`${chalk.yellow("Topic:")} ${brief.topic}`);
       console.log(`${chalk.yellow("Goal:")} ${brief.goal}`);
       console.log(`${chalk.yellow("Audience:")} ${brief.audience}`);
-      console.log(`${chalk.yellow("Assembler:")} ${brief.assemblerId}`);
-      console.log(`${chalk.yellow("Persona:")}   ${brief.personaId}\n`);
+
+      const assembler = getAgent(agents, "assembler", brief.assemblerId);
+
       console.log(
-        `${chalk.yellow("Allowed Writers:")}   ${brief.allowedWriterIds.join(", ")}\n`,
+        `${chalk.yellow("Assembler:")} ${assembler?.artifact.displayName ?? brief.assemblerId}`,
       );
+
+      const persona = getAgent(agents, "persona", brief.personaId);
+
+      console.log(
+        `${chalk.yellow("Persona:")}   ${persona?.artifact.displayName ?? brief.personaId}`,
+      );
+
+      console.log(`${chalk.yellow("Allowed Writers:")}`);
+
+      brief.allowedWriterIds.forEach((writerId) => {
+        const writer = getAgent(agents, "writer", writerId);
+
+        console.log(`     - ${writer?.artifact.displayName ?? writerId}\n`);
+      });
+
       return confirmOrFeedback();
     })
-    .onAssembling((assemblerId) =>
+    .onAssembling((assemblerId) => {
+      const assembler = getAgent(agents, "assembler", assemblerId);
+
       console.log(
         chalk.cyan(
-          `\n🏗️  Requesting structure from ${chalk.bold(assemblerId)}...`,
+          `\n🏗️  Requesting structure from ${chalk.bold(assembler?.artifact.displayName ?? assemblerId)}...`,
         ),
-      ),
-    )
+      );
+    })
     .onAssembler(({ blueprint }) => {
       console.log(chalk.bold.cyan("\n📋 Intelligent Blueprint Summary:"));
       console.log(`${chalk.yellow("Hub ID:")} ${blueprint.hubId}`);
 
       blueprint.components.forEach((c, i) => {
+        const writer = getAgent(agents, "writer", c.writerId);
+
         console.log(
-          chalk.white(`#${i + 1} [${c.writerId.toUpperCase()}] `) +
-            chalk.bold(c.header),
+          chalk.white(
+            `#${i + 1} [${writer?.artifact.displayName.toUpperCase() ?? c.writerId}] `,
+          ) + chalk.bold(c.header),
         );
         console.log(indentText(`${chalk.yellow("Bridge:")} ${c.bridge}`, 4));
         console.log(indentText(`${chalk.yellow("Intent:")} ${c.intent}`, 4));
@@ -104,8 +126,11 @@ export async function executeCliCreateHubAction(
       return confirmOrFeedback();
     })
     .onRephrasing((personaId) => {
+      const persona = getAgent(agents, "persona", personaId);
       console.log(
-        chalk.magenta(`\n✨ ${chalk.bold(personaId)} is styling...\n`),
+        chalk.magenta(
+          `\n✨ ${chalk.bold(persona?.artifact.displayName ?? personaId)} is styling...\n`,
+        ),
       );
     })
     .onRephrase(async ({ header, content }) => {

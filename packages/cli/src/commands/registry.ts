@@ -50,7 +50,7 @@ export const registryCommand = new Command("registry")
         filtered.forEach((art) => {
           // Display primary ID and description
           console.log(
-            `   - ${chalk.bold(art.id)}: ${art.description || chalk.dim("No description")}`,
+            `   - ${chalk.bold(art.displayName)}: ${art.description || chalk.dim("No description")}`,
           );
 
           // 3. Use Discriminated Union for Type-Specific Metadata
@@ -58,7 +58,7 @@ export const registryCommand = new Command("registry")
           if (art.type === "persona") {
             console.log(
               chalk.dim(
-                `     Tone: ${chalk.italic(art.tone)} | Language: ${art.language} | Accent: ${art.accent}`,
+                `     Tone: ${chalk.italic(art.metadata.tone)} | Language: ${art.metadata.language} | Accent: ${art.metadata.accent}`,
               ),
             );
           }

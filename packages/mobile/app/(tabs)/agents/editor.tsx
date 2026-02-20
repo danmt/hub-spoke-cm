@@ -64,7 +64,11 @@ export default function AgentEditorScreen() {
     id: id || "",
     description: "",
     content: "",
-    language: "English",
+    metadata: {
+      language: "",
+      accent: "",
+      tone: "",
+    },
   });
   const { refresh } = useAgents();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -123,7 +127,7 @@ export default function AgentEditorScreen() {
     if (agentType === "persona") {
       const p = formData as Partial<PersonaArtifact>;
 
-      if (!p.tone?.trim()) {
+      if (!p.metadata?.tone?.trim()) {
         Alert.alert(
           "Validation Error",
           "Please define the tone for this persona.",
@@ -131,7 +135,7 @@ export default function AgentEditorScreen() {
         return false;
       }
 
-      if (!p.accent?.trim()) {
+      if (!p.metadata?.accent?.trim()) {
         Alert.alert(
           "Validation Error",
           "Please define the accent for this persona.",
@@ -186,9 +190,11 @@ export default function AgentEditorScreen() {
           metadata:
             agentType === "persona"
               ? {
-                  tone: (formData as Partial<PersonaArtifact>).tone,
-                  language: (formData as Partial<PersonaArtifact>).language,
-                  accent: (formData as Partial<PersonaArtifact>).accent,
+                  tone: (formData as Partial<PersonaArtifact>).metadata?.tone,
+                  language: (formData as Partial<PersonaArtifact>).metadata
+                    ?.language,
+                  accent: (formData as Partial<PersonaArtifact>).metadata
+                    ?.accent,
                 }
               : {},
         },
@@ -229,7 +235,10 @@ export default function AgentEditorScreen() {
     if (type === "persona") {
       setFormData(
         (prev) =>
-          ({ ...prev, language: "English" }) as Partial<PersonaArtifact>,
+          ({
+            ...prev,
+            metadata: { language: "English" },
+          }) as Partial<PersonaArtifact>,
       );
     }
     setState("EDITING");
@@ -371,9 +380,12 @@ export default function AgentEditorScreen() {
           <>
             <InputField
               label="Tone"
-              value={(formData as PersonaArtifact).tone}
+              value={(formData as PersonaArtifact).metadata.tone}
               onChangeText={(v) =>
-                setFormData({ ...formData, tone: v } as PersonaArtifact)
+                setFormData({
+                  ...formData,
+                  metadata: { ...formData.metadata, tone: v },
+                } as PersonaArtifact)
               }
               placeholder="e.g. Sarcastic, Concise"
               required
@@ -385,9 +397,12 @@ export default function AgentEditorScreen() {
 
             <InputField
               label="Accent"
-              value={(formData as PersonaArtifact).accent}
+              value={(formData as PersonaArtifact).metadata.accent}
               onChangeText={(v) =>
-                setFormData({ ...formData, accent: v } as PersonaArtifact)
+                setFormData({
+                  ...formData,
+                  metadata: { ...formData.metadata, accent: v },
+                } as PersonaArtifact)
               }
               placeholder="e.g. London British"
               required
@@ -402,7 +417,7 @@ export default function AgentEditorScreen() {
               <View style={styles.selectorRow}>
                 {["English", "Spanish"].map((lang) => {
                   const isSelected =
-                    (formData as PersonaArtifact).language === lang;
+                    (formData as PersonaArtifact).metadata.language === lang;
                   return (
                     <Pressable
                       key={lang}
@@ -416,7 +431,10 @@ export default function AgentEditorScreen() {
                       onPress={() =>
                         setFormData({
                           ...formData,
-                          language: lang,
+                          metadata: {
+                            ...formData.metadata,
+                            language: lang,
+                          },
                         } as PersonaArtifact)
                       }
                     >

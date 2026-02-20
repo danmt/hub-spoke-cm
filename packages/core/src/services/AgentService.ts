@@ -104,4 +104,44 @@ export class AgentService {
       return [];
     }
   }
+
+  /**
+   * Retrieves the raw feedback buffer content as a string for LLM analysis.
+   */
+  static async getRawFeedbackBuffer(
+    workspaceRoot: string,
+    type: ArtifactType,
+    id: string,
+  ): Promise<string> {
+    const path = IoService.join(
+      workspaceRoot,
+      "agents",
+      `${type}s`,
+      id,
+      "feedback.jsonl",
+    );
+    if (!(await IoService.exists(path))) return "";
+    return await IoService.readFile(path);
+  }
+
+  /**
+   * Deletes the feedback buffer after a successful evolution cycle.
+   */
+  static async clearFeedbackBuffer(
+    workspaceRoot: string,
+    type: ArtifactType,
+    id: string,
+  ): Promise<void> {
+    const path = IoService.join(
+      workspaceRoot,
+      "agents",
+      `${type}s`,
+      id,
+      "feedback.jsonl",
+    );
+    if (await IoService.exists(path)) {
+      // In Phase 7 we will move this to archive instead of just deleting
+      await IoService.writeFile(path, "");
+    }
+  }
 }

@@ -2,6 +2,8 @@
 import {
   AgentPair,
   ConfigService,
+  EvolutionEngine,
+  EvolutionResult,
   RegistryService,
   SecretService,
 } from "@hub-spoke/core";
@@ -24,6 +26,10 @@ interface AgentsContextType {
     id: string,
   ) => Extract<AgentPair, { type: T }> | null;
   isLoading: boolean;
+  evolveAgent: (
+    type: AgentPair["type"],
+    id: string,
+  ) => Promise<EvolutionResult>;
   deleteAgent: (type: AgentPair["type"], id: string) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -107,9 +113,47 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
     await updateManifest({ agents: updatedAgents });
   };
 
+  const evolveAgent = async (
+    type: AgentPair["type"],
+    id: string,
+  ): Promise<EvolutionResult> => {
+    if (!activeWorkspace) throw new Error("No active workspace.");
+
+    try {
+      const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+      const secret = await SecretService.getSecret();
+      const config = await ConfigService.getConfig();
+
+      if (!secret.apiKey) throw new Error("API Key required.");
+
+      const result = await EvolutionEngine.evolve(
+        workspaceDir.uri,
+        secret.apiKey,
+        config.model || "gemini-2.0-flash",
+        type,
+        id,
+      );
+
+      // Refresh local state to reflect new truths and updated description
+      await syncAgents();
+
+      return result;
+    } catch (err: any) {
+      console.error("Evolution Error:", err);
+      throw err;
+    }
+  };
+
   return (
     <AgentsContext.Provider
-      value={{ agents, getAgent, isLoading, deleteAgent, refresh: syncAgents }}
+      value={{
+        agents,
+        getAgent,
+        isLoading,
+        deleteAgent,
+        evolveAgent,
+        refresh: syncAgents,
+      }}
     >
       {children}
     </AgentsContext.Provider>

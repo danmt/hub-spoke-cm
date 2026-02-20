@@ -12,6 +12,7 @@ export * from "./agents/Writer.js";
 export * from "./services/AgentService.js";
 export * from "./services/AiService.js";
 export * from "./services/ConfigService.js";
+export * from "./services/EvolutionEngine.js";
 export * from "./services/EvolutionService.js";
 export * from "./services/HubService.js";
 export * from "./services/IntelligenceService.js";
