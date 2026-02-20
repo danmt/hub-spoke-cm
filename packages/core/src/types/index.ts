@@ -5,6 +5,8 @@ import {
   AgentIdentitySchema,
   AgentKnowledgeSchema,
   AgentTruthSchema,
+  EvolutionAnalysisSchema,
+  EvolutionProposalSchema,
   FrontmatterSchema,
   HubBlueprintSchema,
   HubComponentSchema,
@@ -24,6 +26,8 @@ export type AgentIdentity = z.infer<typeof AgentIdentitySchema>;
 export type AgentBirth = z.infer<typeof AgentBirthSchema>;
 export type AgentKnowledge = z.infer<typeof AgentKnowledgeSchema>;
 export type AgentTruth = z.infer<typeof AgentTruthSchema>;
+export type EvolutionAnalysis = z.infer<typeof EvolutionAnalysisSchema>;
+export type EvolutionProposal = z.infer<typeof EvolutionProposalSchema>;
 
 // Re-export Schemas for validation use
 export {
@@ -31,6 +35,8 @@ export {
   AgentIdentitySchema,
   AgentKnowledgeSchema,
   AgentTruthSchema,
+  EvolutionAnalysisSchema,
+  EvolutionProposalSchema,
   FrontmatterSchema,
   HubBlueprintSchema,
   HubComponentSchema,

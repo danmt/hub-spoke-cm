@@ -101,3 +101,22 @@ export const AgentKnowledgeSchema = z.object({
   description: z.string(),
   truths: z.array(AgentTruthSchema).default([]),
 });
+
+/**
+ * Evolution Proposal
+ * Represents a single memory adjustment suggested by the Evolution Engine.
+ */
+export const EvolutionProposalSchema = z.object({
+  text: z.string(),
+  action: z.enum(["add", "strengthen", "weaken"]),
+  reasoning: z.string(), // Why the AI decided to make this change
+});
+
+/**
+ * Evolution Analysis
+ * The full output from the LLM after analyzing the feedback buffer.
+ */
+export const EvolutionAnalysisSchema = z.object({
+  proposals: z.array(EvolutionProposalSchema),
+  thoughtProcess: z.string(), // High-level summary of patterns detected
+});
