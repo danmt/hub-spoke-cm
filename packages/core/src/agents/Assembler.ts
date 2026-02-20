@@ -202,7 +202,6 @@ export class Assembler {
   }
 
   private parse(text: string): AssembleResponse {
-    console.log(text);
     const hubIdMatch = text.match(/\[HUB_ID\]([\s\S]*?)\[\/HUB_ID\]/i);
     const hubId = hubIdMatch ? hubIdMatch[1].trim() : "generated-hub";
 

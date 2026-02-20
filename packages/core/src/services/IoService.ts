@@ -10,6 +10,8 @@ export interface AgentInteractionEntry {
   source: AgentInteractionSource;
   outcome: AgentInteractionOutcome;
   text: string;
+  threadId: string;
+  turn: number;
 }
 
 export interface HubContext {
@@ -130,6 +132,8 @@ export class IoService {
     id: string,
     source: AgentInteractionSource,
     outcome: AgentInteractionOutcome,
+    threadId: string,
+    turn: number,
     text?: string,
   ): Promise<void> {
     this.ensureProvider();
@@ -146,6 +150,8 @@ export class IoService {
       source,
       outcome,
       text: text || "",
+      threadId,
+      turn,
     };
 
     const current = (await this.provider.exists(filePath))

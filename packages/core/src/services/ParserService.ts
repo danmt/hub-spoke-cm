@@ -20,7 +20,6 @@ export class ParserService {
    */
   static parseMarkdown(rawContent: string): ParsedFile {
     try {
-      console.log(rawContent);
       const { data, content } = parseFrontmatter(rawContent);
       const finalData: Record<string, any> = { ...data };
 

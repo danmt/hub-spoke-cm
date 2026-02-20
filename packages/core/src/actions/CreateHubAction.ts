@@ -124,6 +124,9 @@ export class CreateHubAction {
     }
 
     // 2. Assembler Phase (Generate the Blueprint)
+    const assembleThreadId = `create-assemble-${Date.now()}`;
+    let assembleTurn = 0;
+
     const assembly = await assembler.assemble({
       topic: architecture.brief.topic,
       goal: architecture.brief.goal,
@@ -143,8 +146,11 @@ export class CreateHubAction {
             params.agentId,
             "action",
             "feedback",
+            assembleThreadId,
+            assembleTurn,
             interaction.feedback,
           );
+          assembleTurn++;
         } else {
           await IoService.appendAgentInteraction(
             this.workspaceRoot,
@@ -152,6 +158,8 @@ export class CreateHubAction {
             params.agentId,
             "action",
             "accepted",
+            assembleThreadId,
+            assembleTurn,
           );
         }
 
@@ -162,6 +170,8 @@ export class CreateHubAction {
     });
 
     // 3. Rephrasing phase
+    const styleThreadId = `create-style-${Date.now()}`;
+    let styleTurn = 0;
     const personaId = architecture.brief.personaId;
     const persona = this.personas.find((p) => p.id === personaId);
 
@@ -186,8 +196,11 @@ export class CreateHubAction {
             params.agentId,
             "action",
             "feedback",
+            styleThreadId,
+            styleTurn,
             interaction.feedback,
           );
+          styleTurn++;
         } else {
           await IoService.appendAgentInteraction(
             this.workspaceRoot,
@@ -195,6 +208,8 @@ export class CreateHubAction {
             params.agentId,
             "action",
             "accepted",
+            styleThreadId,
+            styleTurn,
           );
         }
 

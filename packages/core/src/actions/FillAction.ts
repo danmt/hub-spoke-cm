@@ -108,6 +108,8 @@ export class FillAction {
     this._onStart?.(sectionId);
 
     // 1. Neutral Writing Phase
+    const writerThreadId = `fill-${sectionId}-write-${Date.now()}`;
+    let writerTurn = 0;
     const neutral = await writer.write({
       intent,
       topic,
@@ -128,8 +130,11 @@ export class FillAction {
             params.agentId,
             "action",
             "feedback",
+            writerThreadId,
+            writerTurn,
             interaction.feedback,
           );
+          writerTurn++;
         } else {
           await IoService.appendAgentInteraction(
             this.workspaceRoot,
@@ -137,6 +142,8 @@ export class FillAction {
             params.agentId,
             "action",
             "accepted",
+            writerThreadId,
+            writerTurn,
           );
         }
 
@@ -148,6 +155,8 @@ export class FillAction {
     });
 
     // 2. Persona Rephrasing Phase
+    const personaThreadId = `fill-${sectionId}-style-${Date.now()}`;
+    let personaTurn = 0;
     const rephrased = await this.persona.rephrase({
       header: neutral.header,
       content: neutral.content,
@@ -163,8 +172,11 @@ export class FillAction {
             params.agentId,
             "action",
             "feedback",
+            personaThreadId,
+            personaTurn,
             interaction.feedback,
           );
+          personaTurn++;
         } else {
           await IoService.appendAgentInteraction(
             this.workspaceRoot,
@@ -172,6 +184,8 @@ export class FillAction {
             params.agentId,
             "action",
             "accepted",
+            personaThreadId,
+            personaTurn,
           );
         }
 

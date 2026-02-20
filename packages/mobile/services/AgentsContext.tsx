@@ -80,12 +80,6 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
   }, [activeWorkspace, workspaceLoading, syncAgents]);
 
   const getAgent = <T extends AgentPair["type"]>(type: T, id: string) => {
-    console.log(agents, type, id);
-
-    agents.forEach((agent) =>
-      console.log(agent.agent.id, agent.artifact.id, id),
-    );
-
     return agents.find(
       (a) => a.type === type && a.artifact.id === id,
     ) as Extract<AgentPair, { type: T }> | null;
