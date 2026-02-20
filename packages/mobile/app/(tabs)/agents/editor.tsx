@@ -133,8 +133,12 @@ export default function AgentEditorScreen() {
 
   const validateForm = (): boolean => {
     if (!formData.displayName?.trim()) {
-      Alert.alert("Validation Error", "Persona needs a display name.");
+      Alert.alert("Validation Error", "Agent needs a display name.");
       return false;
+    }
+
+    if (isEditMode) {
+      return true;
     }
 
     if (agentType === "persona") {
@@ -177,7 +181,7 @@ export default function AgentEditorScreen() {
     try {
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
 
-      // --- NEW: SMART FORK LOGIC ---
+      // --- SMART FORK LOGIC ---
       if (isForkMode && id) {
         const metadataPayload =
           agentType === "persona"
@@ -222,7 +226,7 @@ export default function AgentEditorScreen() {
       }
       // --- END SMART FORK LOGIC ---
 
-      // --- EXISTING: CREATE / EDIT LOGIC ---
+      // --- CREATE / EDIT LOGIC ---
       let existingTruths: AgentTruth[] = [];
       let targetId = id;
 
@@ -443,101 +447,106 @@ export default function AgentEditorScreen() {
 
         <Text style={styles.helperText}>Give a name to your agent.</Text>
 
-        {agentType === "persona" && (
+        {!isEditMode && (
           <>
+            {agentType === "persona" && (
+              <>
+                <InputField
+                  label="Tone"
+                  value={(formData as PersonaArtifact).metadata.tone}
+                  onChangeText={(v) =>
+                    setFormData({
+                      ...formData,
+                      metadata: { ...formData.metadata, tone: v },
+                    } as PersonaArtifact)
+                  }
+                  placeholder="e.g. Sarcastic, Concise"
+                  required
+                />
+
+                <Text style={styles.helperText}>
+                  Describe the tone of your agent.
+                </Text>
+
+                <InputField
+                  label="Accent"
+                  value={(formData as PersonaArtifact).metadata.accent}
+                  onChangeText={(v) =>
+                    setFormData({
+                      ...formData,
+                      metadata: { ...formData.metadata, accent: v },
+                    } as PersonaArtifact)
+                  }
+                  placeholder="e.g. London British"
+                  required
+                />
+
+                <Text style={styles.helperText}>
+                  Describe the accent of your agent.
+                </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Output Language</Text>
+                  <View style={styles.selectorRow}>
+                    {["English", "Spanish"].map((lang) => {
+                      const isSelected =
+                        (formData as PersonaArtifact).metadata.language ===
+                        lang;
+                      return (
+                        <Pressable
+                          key={lang}
+                          style={[
+                            styles.langOption,
+                            isSelected && {
+                              backgroundColor: themeColors.buttonPrimary,
+                              borderColor: themeColors.buttonPrimary,
+                            },
+                          ]}
+                          onPress={() =>
+                            setFormData({
+                              ...formData,
+                              metadata: {
+                                ...formData.metadata,
+                                language: lang,
+                              },
+                            } as PersonaArtifact)
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.langOptionText,
+                              isSelected && { color: "#fff", opacity: 1 },
+                            ]}
+                          >
+                            {lang}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <Text style={styles.helperText}>
+                  Choose the langue your agent will use.
+                </Text>
+              </>
+            )}
+
             <InputField
-              label="Tone"
-              value={(formData as PersonaArtifact).metadata.tone}
-              onChangeText={(v) =>
-                setFormData({
-                  ...formData,
-                  metadata: { ...formData.metadata, tone: v },
-                } as PersonaArtifact)
-              }
-              placeholder="e.g. Sarcastic, Concise"
+              label="Behavior"
+              value={formData.content}
+              onChangeText={(v) => setFormData({ ...formData, content: v })}
+              placeholder="Write long essays about science..."
+              multiline
+              style={{ height: 250 }}
               required
             />
 
             <Text style={styles.helperText}>
-              Describe the tone of your agent.
-            </Text>
-
-            <InputField
-              label="Accent"
-              value={(formData as PersonaArtifact).metadata.accent}
-              onChangeText={(v) =>
-                setFormData({
-                  ...formData,
-                  metadata: { ...formData.metadata, accent: v },
-                } as PersonaArtifact)
-              }
-              placeholder="e.g. London British"
-              required
-            />
-
-            <Text style={styles.helperText}>
-              Describe the accent of your agent.
-            </Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Output Language</Text>
-              <View style={styles.selectorRow}>
-                {["English", "Spanish"].map((lang) => {
-                  const isSelected =
-                    (formData as PersonaArtifact).metadata.language === lang;
-                  return (
-                    <Pressable
-                      key={lang}
-                      style={[
-                        styles.langOption,
-                        isSelected && {
-                          backgroundColor: themeColors.buttonPrimary,
-                          borderColor: themeColors.buttonPrimary,
-                        },
-                      ]}
-                      onPress={() =>
-                        setFormData({
-                          ...formData,
-                          metadata: {
-                            ...formData.metadata,
-                            language: lang,
-                          },
-                        } as PersonaArtifact)
-                      }
-                    >
-                      <Text
-                        style={[
-                          styles.langOptionText,
-                          isSelected && { color: "#fff", opacity: 1 },
-                        ]}
-                      >
-                        {lang}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            <Text style={styles.helperText}>
-              Choose the langue your agent will use.
+              Describe the behavior of the agent.
             </Text>
           </>
         )}
-
-        <InputField
-          label="Behavior"
-          value={formData.content}
-          onChangeText={(v) => setFormData({ ...formData, content: v })}
-          placeholder="Write long essays about science..."
-          multiline
-          style={{ height: 250 }}
-          required
-        />
-
-        <Text style={styles.helperText}>
-          Describe the behavior of the agent.
-        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
