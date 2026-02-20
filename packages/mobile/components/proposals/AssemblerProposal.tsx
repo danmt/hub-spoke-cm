@@ -1,5 +1,6 @@
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
+import { useAgents } from "@/services/AgentsContext";
 import { AssembleResponse } from "@hub-spoke/core";
 import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
@@ -14,38 +15,47 @@ interface Props {
 export function AssemblerProposal({ data, onResolve }: Props) {
   const colorScheme = useColorScheme() ?? "dark";
   const themeColors = Colors[colorScheme];
+  const { getAgent } = useAgents();
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Content Blueprint</Text>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {data.blueprint.components.map((comp, index) => (
-          <View
-            key={comp.id}
-            style={[
-              styles.sectionCard,
-              {
-                backgroundColor: colorScheme === "dark" ? "#1a1a1a" : "#f8f8f8",
-              },
-            ]}
-          >
-            <View style={styles.sectionHeader}>
-              <View
-                style={[
-                  styles.numberBadge,
-                  { backgroundColor: themeColors.buttonPrimary },
-                ]}
-              >
-                <Text style={styles.numberText}>{index + 1}</Text>
+        {data.blueprint.components.map((comp, index) => {
+          // Resolve the human-readable display name for the writer
+          const writerName =
+            getAgent("writer", comp.writerId)?.artifact.displayName ||
+            comp.writerId;
+
+          return (
+            <View
+              key={comp.id}
+              style={[
+                styles.sectionCard,
+                {
+                  backgroundColor:
+                    colorScheme === "dark" ? "#1a1a1a" : "#f8f8f8",
+                },
+              ]}
+            >
+              <View style={styles.sectionHeader}>
+                <View
+                  style={[
+                    styles.numberBadge,
+                    { backgroundColor: themeColors.buttonPrimary },
+                  ]}
+                >
+                  <Text style={styles.numberText}>{index + 1}</Text>
+                </View>
+                <Text style={styles.writerBadge}>
+                  {writerName.toUpperCase()}
+                </Text>
               </View>
-              <Text style={styles.writerBadge}>
-                {comp.writerId.toUpperCase()}
-              </Text>
+              <Text style={styles.headerText}>{comp.header}</Text>
+              <Text style={styles.intentText}>{comp.intent}</Text>
             </View>
-            <Text style={styles.headerText}>{comp.header}</Text>
-            <Text style={styles.intentText}>{comp.intent}</Text>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       <ConfirmOrFeedback

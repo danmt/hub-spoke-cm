@@ -1,11 +1,12 @@
 // src/commands/fill.ts
 import {
   ConfigService,
-  IoService,
+  HubService,
   LoggerService,
   ParserService,
   RegistryService,
   SecretService,
+  WorkspaceService,
 } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
@@ -27,7 +28,7 @@ export const fillCommand = new Command("fill")
       let workspaceRoot: string;
 
       try {
-        workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
+        workspaceRoot = await WorkspaceService.findRoot(currentDir);
       } catch (err) {
         console.error(
           chalk.red(
@@ -40,8 +41,7 @@ export const fillCommand = new Command("fill")
       if (options.file) {
         targetFile = path.resolve(currentDir, options.file);
       } else {
-        const workspaceRoot = await IoService.findWorkspaceRoot(currentDir);
-        const { rootDir } = await IoService.resolveHubContext(
+        const { rootDir } = await HubService.resolveHubContext(
           workspaceRoot,
           currentDir,
           async (hubs) => {
@@ -56,8 +56,13 @@ export const fillCommand = new Command("fill")
             return targetHub;
           },
         );
-        const hubMeta = await IoService.readHubMetadata(rootDir);
-        targetFile = path.join(workspaceRoot, "posts", hubMeta.hubId, "hub.md");
+        const hubMeta = await HubService.readHub(rootDir);
+        targetFile = path.join(
+          workspaceRoot,
+          "posts",
+          hubMeta.frontmatter.hubId,
+          "hub.md",
+        );
       }
 
       console.log(
@@ -97,6 +102,7 @@ export const fillCommand = new Command("fill")
       );
 
       await executeCliFillAction(
+        workspaceRoot,
         agents,
         hub.frontmatter,
         hub.sections,

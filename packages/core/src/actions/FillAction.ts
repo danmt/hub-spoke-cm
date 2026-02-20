@@ -1,6 +1,7 @@
 // src/actions/FillAction.ts
 import { Persona, PersonaInteractionHandler } from "../agents/Persona.js";
 import { Writer, WriterInteractionHandler } from "../agents/Writer.js";
+import { AgentService } from "../services/AgentService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import {
   AgentPair,
@@ -31,7 +32,11 @@ export class FillAction {
   private persona: Persona;
   private writers: Writer[];
 
-  constructor(personaId: string, agents: AgentPair[]) {
+  constructor(
+    public workspaceRoot: string,
+    personaId: string,
+    agents: AgentPair[],
+  ) {
     const persona = getAgent(agents, "persona", personaId);
 
     if (!persona) {
@@ -103,6 +108,8 @@ export class FillAction {
     this._onStart?.(sectionId);
 
     // 1. Neutral Writing Phase
+    const writerThreadId = `fill-${sectionId}-write-${Date.now()}`;
+    let writerTurn = 0;
     const neutral = await writer.write({
       intent,
       topic,
@@ -111,20 +118,72 @@ export class FillAction {
       bridge: blueprint.bridge,
       isFirst,
       isLast,
-      interact: this._onWrite,
+      interact: async (params) => {
+        const interaction = (await this._onWrite?.(params)) || {
+          action: "proceed",
+        };
+
+        if (interaction.action === "feedback") {
+          writerTurn++;
+        }
+
+        await AgentService.appendFeedback(
+          this.workspaceRoot,
+          "writer",
+          params.agentId,
+          {
+            source: "action",
+            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
+            threadId: writerThreadId,
+            turn: writerTurn,
+            ...(interaction.action === "feedback"
+              ? { text: interaction.feedback }
+              : {}),
+          },
+        );
+
+        return interaction;
+      },
       onRetry: this._onRetry,
-      onThinking: () =>
-        this._onWriting?.({ id: sectionId, writerId: writer.id }),
+      onThinking: (agentId) =>
+        this._onWriting?.({ id: sectionId, writerId: agentId }),
     });
 
     // 2. Persona Rephrasing Phase
+    const personaThreadId = `fill-${sectionId}-style-${Date.now()}`;
+    let personaTurn = 0;
     const rephrased = await this.persona.rephrase({
       header: neutral.header,
       content: neutral.content,
-      interact: this._onRephrase,
+      interact: async (params) => {
+        const interaction = (await this._onRephrase?.(params)) || {
+          action: "proceed",
+        };
+
+        if (interaction.action === "feedback") {
+          personaTurn++;
+        }
+
+        await AgentService.appendFeedback(
+          this.workspaceRoot,
+          "persona",
+          params.agentId,
+          {
+            source: "action",
+            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
+            threadId: personaThreadId,
+            turn: personaTurn,
+            ...(interaction.action === "feedback"
+              ? { text: interaction.feedback }
+              : {}),
+          },
+        );
+
+        return interaction;
+      },
       onRetry: this._onRetry,
-      onThinking: () =>
-        this._onRephrasing?.({ id: sectionId, personaId: this.persona.id }),
+      onThinking: (agentId) =>
+        this._onRephrasing?.({ id: sectionId, personaId: agentId }),
     });
 
     await LoggerService.info("FillAction: Execution finished");

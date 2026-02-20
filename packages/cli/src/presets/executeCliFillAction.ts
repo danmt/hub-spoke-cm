@@ -14,6 +14,7 @@ import { retryHandler } from "../utils/retryHandler.js";
 const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
 export async function executeCliFillAction(
+  workspaceRoot: string,
   agents: AgentPair[],
   frontmatter: ContentFrontmatter,
   sections: Record<string, string>,
@@ -31,7 +32,11 @@ export async function executeCliFillAction(
     return;
   }
 
-  const fillAction = new FillAction(frontmatter.personaId, agents)
+  const fillAction = new FillAction(
+    workspaceRoot,
+    frontmatter.personaId,
+    agents,
+  )
     .onStart((id) =>
       console.log(chalk.green(`\n🔄 Generating: ${chalk.bold(id)}`)),
     )
@@ -64,6 +69,6 @@ export async function executeCliFillAction(
       frontmatter,
       updatedSections,
     );
-    await IoService.safeWriteFile(filePath, currentProgress);
+    await IoService.writeFile(filePath, currentProgress);
   }
 }

@@ -4,18 +4,24 @@ import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
 import { useAgents } from "@/services/AgentsContext";
-import { AgentsStorage } from "@/services/AgentsStorage";
 import { useWorkspace } from "@/services/WorkspaceContext";
 import { WorkspaceManager } from "@/services/WorkspaceManager";
-import { computeSlug } from "@/utils/computeSlug";
 import { Vibe } from "@/utils/vibe";
 import { FontAwesome } from "@expo/vector-icons";
 import {
+  AgentService,
+  AgentTruth,
+  Artifact,
   ArtifactType,
   AssemblerArtifact,
+  ConfigService,
+  EvolutionEngine,
+  IntelligenceService,
   PersonaArtifact,
+  SecretService,
   WriterArtifact,
 } from "@hub-spoke/core";
+import * as Crypto from "expo-crypto";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -28,7 +34,7 @@ import {
   StyleSheet,
 } from "react-native";
 
-type EditorState = "SELECTING_TYPE" | "EDITING" | "SAVING" | "DONE";
+type EditorState = "SELECTING_TYPE" | "EDITING" | "SAVING" | "DONE" | "ERROR";
 
 type AgentFormState =
   | Partial<PersonaArtifact>
@@ -37,83 +43,119 @@ type AgentFormState =
 
 export default function AgentEditorScreen() {
   const router = useRouter();
-  const { id, type: initialType } = useLocalSearchParams<{
+  const {
+    id,
+    type: initialType,
+    mode,
+  } = useLocalSearchParams<{
     id: string;
     type: ArtifactType;
+    mode?: "fork";
   }>();
+
   const { activeWorkspace, upsertAgentIndex } = useWorkspace();
-  const { getAgent, agents: currentRegistry } = useAgents();
+  const { getAgent, refresh } = useAgents();
   const themeColors = Colors[useColorScheme() ?? "dark"];
-  const isEditMode = !!id;
+
+  const isForkMode = mode === "fork";
+  const isEditMode = !!id && !isForkMode;
+
   const [state, setState] = useState<EditorState>(
-    isEditMode ? "EDITING" : "SELECTING_TYPE",
+    isEditMode || isForkMode ? "EDITING" : "SELECTING_TYPE",
   );
   const [agentType, setAgentType] = useState<ArtifactType>(
     initialType || "persona",
   );
   const [savedAgentId, setSavedAgentId] = useState<string | null>(null);
+  const [savedAgentDisplayName, setSavedAgentDisplayName] = useState<
+    string | null
+  >(null);
   const [formData, setFormData] = useState<AgentFormState>({
     id: id || "",
     description: "",
     content: "",
-    language: "English",
+    metadata: {
+      language: "",
+      accent: "",
+      tone: "",
+    },
   });
-  const displayedSlug = computeSlug(formData.id || "");
-  const { refresh } = useAgents();
+
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [prerequisites, setPrerequisites] = useState<{
+    model: string;
+    apiKey: string;
+  } | null>(null);
 
   useEffect(() => {
-    if (isEditMode && id) {
+    async function checkPrerequisites() {
+      const secret = await SecretService.getSecret();
+      const config = await ConfigService.getConfig();
+
+      if (!secret.apiKey) {
+        setStatusMessage(
+          "Missing Gemini API Key. Please set it in Settings > Secrets.",
+        );
+        setState("ERROR");
+        return;
+      }
+
+      if (!config.model) {
+        setStatusMessage(
+          "Default AI Model not set. Please configure it in Settings.",
+        );
+        setState("ERROR");
+        return;
+      }
+
+      setPrerequisites({
+        apiKey: secret.apiKey,
+        model: config.model,
+      });
+    }
+
+    checkPrerequisites();
+  }, [activeWorkspace]);
+
+  useEffect(() => {
+    if ((isEditMode || isForkMode) && id) {
       const existing = getAgent(agentType, id);
       if (existing) {
-        setFormData({ ...existing.artifact });
+        setFormData({
+          ...existing.artifact,
+          displayName: isForkMode
+            ? `${existing.artifact.displayName} (Fork)`
+            : existing.artifact.displayName,
+        });
       }
     }
-  }, [id, isEditMode, agentType, getAgent]);
+  }, [id, isEditMode, isForkMode, agentType, getAgent]);
 
   const validateForm = (): boolean => {
-    if (!formData.id?.trim()) {
-      Alert.alert("Validation Error", "Agent ID is required.");
+    if (!formData.displayName?.trim()) {
+      Alert.alert("Validation Error", "Agent needs a display name.");
       return false;
     }
 
-    const slug = computeSlug(formData.id);
-    if (!slug) {
-      Alert.alert("Validation Error", "The ID must contain valid characters.");
-      return false;
-    }
-
-    // Check for duplicates only when creating a new agent
-    if (!isEditMode) {
-      const exists = currentRegistry.some(
-        (a) => a.artifact.id.toLowerCase() === slug.toLowerCase(),
-      );
-      if (exists) {
-        Alert.alert(
-          "Duplicate ID",
-          `An agent with the ID "${slug}" already exists.`,
-        );
-        return false;
-      }
-    }
-
-    if (!formData.description?.trim()) {
-      Alert.alert(
-        "Validation Error",
-        "Role description is required for the AI context.",
-      );
-      return false;
+    if (isEditMode) {
+      return true;
     }
 
     if (agentType === "persona") {
       const p = formData as Partial<PersonaArtifact>;
-      if (!p.name?.trim()) {
-        Alert.alert("Validation Error", "Persona needs a display name.");
-        return false;
-      }
-      if (!p.tone?.trim()) {
+
+      if (!p.metadata?.tone?.trim()) {
         Alert.alert(
           "Validation Error",
           "Please define the tone for this persona.",
+        );
+        return false;
+      }
+
+      if (!p.metadata?.accent?.trim()) {
+        Alert.alert(
+          "Validation Error",
+          "Please define the accent for this persona.",
         );
         return false;
       }
@@ -122,7 +164,7 @@ export default function AgentEditorScreen() {
     if (!formData.content?.trim()) {
       Alert.alert(
         "Validation Error",
-        "System instructions (the strategy) cannot be empty.",
+        "Behavior (the strategy) cannot be empty.",
       );
       return false;
     }
@@ -133,53 +175,116 @@ export default function AgentEditorScreen() {
   const handleSave = async () => {
     if (!validateForm()) return;
     if (!activeWorkspace) return;
+    if (!prerequisites) return;
 
     setState("SAVING");
     try {
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
-      const targetId = computeSlug(formData.id!);
 
-      const frontmatter: Record<string, any> = {
-        id: targetId,
-        type: agentType,
-        description: formData.description,
-      };
+      // --- SMART FORK LOGIC ---
+      if (isForkMode && id) {
+        const metadataPayload =
+          agentType === "persona"
+            ? {
+                tone: (formData as Partial<PersonaArtifact>).metadata?.tone,
+                language: (formData as Partial<PersonaArtifact>).metadata
+                  ?.language,
+                accent: (formData as Partial<PersonaArtifact>).metadata?.accent,
+              }
+            : {};
 
-      if (agentType === "persona") {
-        const p = formData as Partial<PersonaArtifact>;
-        frontmatter.name = p.name || targetId;
-        frontmatter.tone = p.tone || "Neutral";
-        frontmatter.accent = p.accent || "Standard";
-        frontmatter.language = p.language || "English";
+        const newId = Crypto.randomUUID();
+
+        // 1. Orchestrate the Proactive Smart Fork
+        const forkedAgent = await EvolutionEngine.forkFromManualChange(
+          workspaceDir.uri,
+          prerequisites.apiKey,
+          prerequisites.model,
+          id,
+          newId,
+          agentType,
+          formData.displayName!,
+          formData.content!,
+          metadataPayload,
+        );
+
+        // 2. Fetch the AI-generated description from the new package to update the index
+        await upsertAgentIndex({
+          id: forkedAgent.id,
+          type: agentType,
+          displayName: forkedAgent.name,
+          description: forkedAgent.description || "Specialized Agent Fork",
+        });
+
+        await refresh();
+        await Vibe.handoff();
+
+        setSavedAgentId(forkedAgent.id);
+        setSavedAgentDisplayName(formData.displayName!);
+        setState("DONE");
+        return;
+      }
+      // --- END SMART FORK LOGIC ---
+
+      // --- CREATE / EDIT LOGIC ---
+      let existingTruths: AgentTruth[] = [];
+      let targetId = id;
+
+      if (isEditMode && id) {
+        const existing = getAgent(agentType, id);
+        existingTruths = (existing?.artifact as Artifact)?.truths || [];
+      } else {
+        targetId = Crypto.randomUUID();
       }
 
-      await AgentsStorage.saveAgentToFile({
-        workspaceUri: workspaceDir.uri,
-        type: agentType,
-        id: targetId,
-        frontmatter,
-        content: formData.content!,
+      const description = await IntelligenceService.generateInferredDescription(
+        prerequisites.apiKey,
+        prerequisites.model,
+        formData.displayName!,
+        formData.content!,
+        existingTruths,
+      );
+
+      await AgentService.saveAgent(workspaceDir.uri, {
+        identity: {
+          id: targetId,
+          type: agentType,
+          displayName: formData.displayName!,
+          metadata:
+            agentType === "persona"
+              ? {
+                  tone: (formData as Partial<PersonaArtifact>).metadata?.tone,
+                  language: (formData as Partial<PersonaArtifact>).metadata
+                    ?.language,
+                  accent: (formData as Partial<PersonaArtifact>).metadata
+                    ?.accent,
+                }
+              : {},
+        },
+        behavior: formData.content!,
+        knowledge: {
+          description,
+          truths: existingTruths,
+        },
       });
 
       await upsertAgentIndex({
         id: targetId,
         type: agentType,
-        name:
-          agentType === "persona"
-            ? (formData as PersonaArtifact).name
-            : undefined,
-        description: formData.description!,
+        displayName: formData.displayName!,
+        description,
       });
 
       await refresh();
       await Vibe.handoff();
 
       if (isEditMode) {
-        Alert.alert("Success", `Agent @${targetId} updated.`, [
+        Alert.alert("Success", `Agent ${formData.displayName} updated.`, [
           { text: "OK", onPress: () => router.back() },
         ]);
       } else {
         setSavedAgentId(targetId);
+        setSavedAgentDisplayName(formData.displayName!);
         setState("DONE");
       }
     } catch (err: any) {
@@ -193,11 +298,45 @@ export default function AgentEditorScreen() {
     if (type === "persona") {
       setFormData(
         (prev) =>
-          ({ ...prev, language: "English" }) as Partial<PersonaArtifact>,
+          ({
+            ...prev,
+            metadata: { language: "English" },
+          }) as Partial<PersonaArtifact>,
       );
     }
     setState("EDITING");
   };
+
+  if (state === "ERROR") {
+    return (
+      <View style={styles.centered}>
+        <FontAwesome name="exclamation-triangle" size={60} color="#ff4444" />
+        <Text style={styles.title}>Action Blocked</Text>
+        <Text style={styles.description}>{statusMessage}</Text>
+
+        <View style={styles.victoryActions}>
+          <Pressable
+            style={[
+              styles.primaryButton,
+              { backgroundColor: themeColors.buttonPrimary },
+            ]}
+            onPress={() => router.push("/settings")}
+          >
+            <Text style={styles.buttonText}>Configure AI Settings</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.secondaryButton, { borderColor: themeColors.tint }]}
+            onPress={() => router.back()}
+          >
+            <Text style={{ color: themeColors.tint, fontWeight: "bold" }}>
+              Cancel
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   if (state === "SELECTING_TYPE") {
     return (
@@ -236,14 +375,16 @@ export default function AgentEditorScreen() {
     );
   }
 
-  if (state === "DONE" && savedAgentId) {
+  if (state === "DONE" && savedAgentId && savedAgentDisplayName) {
     return (
       <View style={styles.centered}>
         <Stack.Screen options={{ headerRight: undefined }} />
         <Text style={styles.victoryEmoji}>🚀</Text>
-        <Text style={styles.title}>Agent Deployed</Text>
+        <Text style={styles.title}>
+          {isForkMode ? "Agent Forked" : "Agent Deployed"}
+        </Text>
         <Text style={styles.doneSub}>
-          Agent @{savedAgentId} is ready for action.
+          Agent {savedAgentDisplayName} is ready for action.
         </Text>
         <Pressable
           style={[
@@ -263,6 +404,12 @@ export default function AgentEditorScreen() {
     );
   }
 
+  const getHeaderTitle = () => {
+    if (isForkMode) return `Forking ${id.split("-")[0]}`;
+    if (isEditMode) return `Edit ${id.split("-")[0]}`;
+    return `New ${agentType}`;
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -270,7 +417,7 @@ export default function AgentEditorScreen() {
     >
       <Stack.Screen
         options={{
-          title: isEditMode ? `Edit ${id}` : `New ${agentType}`,
+          title: getHeaderTitle(),
           headerRight: () =>
             state === "SAVING" ? (
               <ActivityIndicator size="small" color={themeColors.tint} />
@@ -278,12 +425,12 @@ export default function AgentEditorScreen() {
               <Pressable onPress={handleSave}>
                 <Text
                   style={{
-                    color: themeColors.tint,
+                    color: isForkMode ? "#FFD700" : themeColors.tint,
                     fontWeight: "bold",
                     fontSize: 16,
                   }}
                 >
-                  Save
+                  {isForkMode ? "Birth Fork" : "Save"}
                 </Text>
               </Pressable>
             ),
@@ -291,122 +438,115 @@ export default function AgentEditorScreen() {
       />
       <ScrollView contentContainerStyle={styles.scroll}>
         <InputField
-          label="Agent ID (Slug)"
-          value={formData.id}
-          onChangeText={(value) =>
-            setFormData({
-              ...formData,
-              id: value,
-            })
-          }
-          placeholder="e.g. technical-prose"
-          editable={!isEditMode}
+          label="Display Name"
+          value={formData.displayName}
+          onChangeText={(v) => setFormData({ ...formData, displayName: v })}
+          placeholder="e.g. Lead Storyteller"
           required
         />
 
-        {!isEditMode &&
-          (displayedSlug !== formData.id ? (
-            <Text style={styles.helperText}>
-              Actual ID:{" "}
-              <Text style={{ color: themeColors.tint }}>{displayedSlug}</Text>
-            </Text>
-          ) : (
-            <Text style={styles.helperText}>Enter a unique ID.</Text>
-          ))}
+        <Text style={styles.helperText}>Give a name to your agent.</Text>
 
-        <InputField
-          label="Role Description"
-          value={formData.description}
-          onChangeText={(v) => setFormData({ ...formData, description: v })}
-          placeholder="Describe the agent's specific purpose..."
-          multiline
-          required
-        />
-
-        <Text style={styles.helperText}>
-          This tells the architects when to use this agent.
-        </Text>
-
-        {agentType === "persona" && (
+        {!isEditMode && (
           <>
-            <InputField
-              label="Display Name"
-              value={(formData as PersonaArtifact).name}
-              onChangeText={(v) =>
-                setFormData({ ...formData, name: v } as PersonaArtifact)
-              }
-              placeholder="e.g. Lead Storyteller"
-              required
-            />
+            {agentType === "persona" && (
+              <>
+                <InputField
+                  label="Tone"
+                  value={(formData as PersonaArtifact).metadata.tone}
+                  onChangeText={(v) =>
+                    setFormData({
+                      ...formData,
+                      metadata: { ...formData.metadata, tone: v },
+                    } as PersonaArtifact)
+                  }
+                  placeholder="e.g. Sarcastic, Concise"
+                  required
+                />
 
-            <Text style={styles.helperText}>Give a name to your agent.</Text>
+                <Text style={styles.helperText}>
+                  Describe the tone of your agent.
+                </Text>
+
+                <InputField
+                  label="Accent"
+                  value={(formData as PersonaArtifact).metadata.accent}
+                  onChangeText={(v) =>
+                    setFormData({
+                      ...formData,
+                      metadata: { ...formData.metadata, accent: v },
+                    } as PersonaArtifact)
+                  }
+                  placeholder="e.g. London British"
+                  required
+                />
+
+                <Text style={styles.helperText}>
+                  Describe the accent of your agent.
+                </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Output Language</Text>
+                  <View style={styles.selectorRow}>
+                    {["English", "Spanish"].map((lang) => {
+                      const isSelected =
+                        (formData as PersonaArtifact).metadata.language ===
+                        lang;
+                      return (
+                        <Pressable
+                          key={lang}
+                          style={[
+                            styles.langOption,
+                            isSelected && {
+                              backgroundColor: themeColors.buttonPrimary,
+                              borderColor: themeColors.buttonPrimary,
+                            },
+                          ]}
+                          onPress={() =>
+                            setFormData({
+                              ...formData,
+                              metadata: {
+                                ...formData.metadata,
+                                language: lang,
+                              },
+                            } as PersonaArtifact)
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.langOptionText,
+                              isSelected && { color: "#fff", opacity: 1 },
+                            ]}
+                          >
+                            {lang}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <Text style={styles.helperText}>
+                  Choose the langue your agent will use.
+                </Text>
+              </>
+            )}
 
             <InputField
-              label="Tone"
-              value={(formData as PersonaArtifact).tone}
-              onChangeText={(v) =>
-                setFormData({ ...formData, tone: v } as PersonaArtifact)
-              }
-              placeholder="e.g. Sarcastic, Concise"
+              label="Behavior"
+              value={formData.content}
+              onChangeText={(v) => setFormData({ ...formData, content: v })}
+              placeholder="Write long essays about science..."
+              multiline
+              style={{ height: 250 }}
               required
             />
 
             <Text style={styles.helperText}>
-              Describe the tone of your agent.
-            </Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Output Language</Text>
-              <View style={styles.selectorRow}>
-                {["English", "Spanish"].map((lang) => {
-                  const isSelected =
-                    (formData as PersonaArtifact).language === lang;
-                  return (
-                    <Pressable
-                      key={lang}
-                      style={[
-                        styles.langOption,
-                        isSelected && {
-                          backgroundColor: themeColors.buttonPrimary,
-                          borderColor: themeColors.buttonPrimary,
-                        },
-                      ]}
-                      onPress={() =>
-                        setFormData({
-                          ...formData,
-                          language: lang,
-                        } as PersonaArtifact)
-                      }
-                    >
-                      <Text
-                        style={[
-                          styles.langOptionText,
-                          isSelected && { color: "#fff", opacity: 1 },
-                        ]}
-                      >
-                        {lang}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            <Text style={styles.helperText}>
-              Choose the langue your agent will use.
+              Describe the behavior of the agent.
             </Text>
           </>
         )}
-
-        <InputField
-          label="System Instructions"
-          value={formData.content}
-          onChangeText={(v) => setFormData({ ...formData, content: v })}
-          placeholder="Detailed behavior strategy..."
-          multiline
-          style={{ height: 250 }}
-          required
-        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -524,4 +664,28 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.1)",
   },
   langOptionText: { fontSize: 15, fontWeight: "bold", opacity: 0.7 },
+  description: {
+    fontSize: 16,
+    opacity: 0.6,
+    lineHeight: 24,
+    marginTop: 12,
+    textAlign: "center",
+  },
+  victoryActions: {
+    width: "100%",
+    marginTop: 40,
+    gap: 12,
+  },
+  secondaryButton: {
+    height: 60,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  buttonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 18,
+  },
 });

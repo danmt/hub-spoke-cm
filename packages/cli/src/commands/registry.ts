@@ -1,5 +1,5 @@
 // src/cli/commands/registry.ts
-import { IoService, RegistryService } from "@hub-spoke/core";
+import { RegistryService, WorkspaceService } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
 
@@ -14,7 +14,7 @@ export const registryCommand = new Command("registry")
   .action(async () => {
     try {
       // 1. Fetch all artifacts from the workspace once
-      const workspaceRoot = await IoService.findWorkspaceRoot(process.cwd());
+      const workspaceRoot = await WorkspaceService.findRoot(process.cwd());
       const artifacts = await RegistryService.getAllArtifacts(workspaceRoot);
 
       if (artifacts.length === 0) {
@@ -50,7 +50,7 @@ export const registryCommand = new Command("registry")
         filtered.forEach((art) => {
           // Display primary ID and description
           console.log(
-            `   - ${chalk.bold(art.id)}: ${art.description || chalk.dim("No description")}`,
+            `   - ${chalk.bold(art.displayName)}: ${art.description || chalk.dim("No description")}`,
           );
 
           // 3. Use Discriminated Union for Type-Specific Metadata
@@ -58,7 +58,7 @@ export const registryCommand = new Command("registry")
           if (art.type === "persona") {
             console.log(
               chalk.dim(
-                `     Tone: ${chalk.italic(art.tone)} | Language: ${art.language} | Accent: ${art.accent}`,
+                `     Tone: ${chalk.italic(art.metadata.tone)} | Language: ${art.metadata.language} | Accent: ${art.metadata.accent}`,
               ),
             );
           }

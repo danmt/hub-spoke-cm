@@ -3,8 +3,8 @@ import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors } from "@/constants/Colors";
 import { useWorkspace } from "@/services/WorkspaceContext";
-import { AgentIndexEntry } from "@/types/manifest";
 import { FontAwesome } from "@expo/vector-icons";
+import { AgentIndexEntry } from "@hub-spoke/core";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
@@ -93,7 +93,7 @@ function AgentSection({ title, icon, data, theme, router }: any) {
           }
         >
           <View style={styles.cardInfo}>
-            <Text style={styles.agentName}>{item.id}</Text>
+            <Text style={styles.agentName}>{item.displayName}</Text>
             <Text style={styles.agentDesc} numberOfLines={2}>
               {item.description}
             </Text>

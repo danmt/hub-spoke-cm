@@ -1,6 +1,8 @@
 // src/agents/Persona.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
+import { AgentTruth } from "../types/index.js";
+import { MAX_TRUTHS_FOR_CONTEXT } from "../utils/consts.js";
 
 export type PersonaInteractionResponse =
   | {
@@ -19,7 +21,7 @@ export interface PersonaContext {
   header: string;
   content: string;
   interact?: PersonaInteractionHandler;
-  onThinking?: () => void;
+  onThinking?: (agentId: string) => void;
   onRetry?: (error: Error) => Promise<boolean>;
 }
 
@@ -30,6 +32,7 @@ export interface PersonaGenerateContext {
 }
 
 export interface PersonaResponse {
+  agentId: string;
   header: string;
   content: string;
 }
@@ -42,21 +45,30 @@ export class Persona {
     private readonly apiKey: string,
     private readonly model: string,
     public id: string,
-    public name: string,
+    public displayName: string,
     public description: string,
     public language: string,
     public accent: string,
     public tone: string,
-    public roleDescription: string,
+    behaviour: string,
+    truths: AgentTruth[] = [],
   ) {
+    const learnedContext = truths
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, MAX_TRUTHS_FOR_CONTEXT)
+      .map((t) => `- ${t.text}`)
+      .join("\n");
+
     this.systemInstruction = `
       ROLE:
-      ${this.roleDescription}
+      ${behaviour}
 
       VOICE & STYLE:
       - LANGUAGE: Must write exclusively in ${this.language || this.language}.
       - ACCENT: ${this.accent}
       - TONE: ${this.tone}.
+
+      ${learnedContext ? `LEARNED CONTEXT (MANDATORY GUIDELINES):\n${learnedContext}` : ""}
 
       TASK:
       
@@ -87,7 +99,7 @@ export class Persona {
 
     while (true) {
       try {
-        if (ctx.onThinking) ctx.onThinking();
+        if (ctx.onThinking) ctx.onThinking(this.id);
 
         const generated = await this.generate({
           header: ctx.header,
@@ -170,6 +182,7 @@ export class Persona {
     }
 
     return {
+      agentId: this.id,
       header: hMatch[1].trim(),
       content: cMatch[1].trim(),
     };

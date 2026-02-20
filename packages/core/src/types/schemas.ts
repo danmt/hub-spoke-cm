@@ -66,3 +66,96 @@ export const HubConfigSchema = z.object({
 export const HubSecretSchema = z.object({
   apiKey: z.string().optional(),
 });
+
+/**
+ * The Identity of an agent (agent.json)
+ */
+export const AgentIdentitySchema = z.object({
+  id: z.string().uuid(),
+  type: z.enum(["persona", "writer", "assembler"]),
+  displayName: z.string(),
+  metadata: z.record(z.string(), z.any()).optional(), // e.g., { tone, language } for personas
+});
+
+/**
+ * Lineage tracking (birth.json)
+ */
+export const AgentBirthSchema = z.object({
+  parentId: z.string().uuid().optional(),
+  birthReason: z.string(),
+  timestamp: z.string(),
+});
+
+/**
+ * The Memory of an agent (knowledge.json)
+ */
+export const AgentTruthSchema = z.object({
+  text: z.string(),
+  weight: z.number().min(0).max(1),
+});
+
+/**
+ * The Memory of an agent (knowledge.json)
+ */
+export const AgentKnowledgeSchema = z.object({
+  description: z.string(),
+  truths: z.array(AgentTruthSchema).default([]),
+});
+
+/**
+ * Evolution Proposal
+ * Represents a single memory adjustment suggested by the Evolution Engine.
+ */
+export const EvolutionProposalSchema = z.object({
+  text: z.string(),
+  action: z.enum(["add", "strengthen", "weaken"]),
+  reasoning: z.string(), // Why the AI decided to make this change
+});
+
+/**
+ * Evolution Analysis
+ * The full output from the LLM after analyzing the feedback buffer.
+ */
+export const EvolutionAnalysisSchema = z.object({
+  thoughtProcess: z.string(),
+  conflictType: z.enum(["none", "soft", "hard"]).default("none"),
+  forkRecommended: z.boolean().default(false),
+  suggestedForkName: z.string().nullable(),
+  violatedTruth: z.string().nullable(),
+  violatedMetadataField: z.string().nullable(),
+  newMetadataValue: z.string().nullable(),
+  contradictoryTruths: z.array(z.string()).default([]),
+  proposals: z.array(EvolutionProposalSchema),
+});
+
+/**
+ * Metadata for a Hub stored in the local mobile index.
+ * Prevents reading/parsing full hub.md files for list views.
+ */
+export const HubIndexEntrySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  hasTodo: z.boolean(),
+  lastModified: z.string(),
+});
+
+/**
+ * Metadata for an Agent stored in the local mobile index.
+ * Allows the Registry list to render without parsing agent frontmatter.
+ */
+export const AgentIndexEntrySchema = z.object({
+  id: z.string(),
+  type: z.enum(["persona", "writer", "assembler"]),
+  displayName: z.string().optional(),
+  description: z.string(),
+});
+
+/**
+ * The Mobile Shadow Index (.hub/workspace.json).
+ * Unique to the mobile implementation for performance optimization.
+ */
+export const WorkspaceManifestSchema = z.object({
+  hubs: z.array(HubIndexEntrySchema).default([]),
+  agents: z.array(AgentIndexEntrySchema).default([]),
+  lastSynced: z.string(),
+});

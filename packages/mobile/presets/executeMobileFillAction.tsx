@@ -15,6 +15,7 @@ const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
  * Emits specific agent IDs and phases (writing/styling) to keep the UI informed.
  */
 export async function executeMobileFillAction(
+  workspaceRoot: string,
   agents: AgentPair[],
   frontmatter: ContentFrontmatter,
   sections: Record<string, string>,
@@ -45,7 +46,11 @@ export async function executeMobileFillAction(
   if (pendingSectionIds.length === 0) return;
 
   // Initialize the FillAction orchestrator with the Persona defined in metadata
-  const fillAction = new FillAction(frontmatter.personaId, agents)
+  const fillAction = new FillAction(
+    workspaceRoot,
+    frontmatter.personaId,
+    agents,
+  )
     .onStart((id) => {
       // Basic initialization status
       handlers.onStatus(`Initializing section: ${id}`, id);
@@ -96,7 +101,7 @@ export async function executeMobileFillAction(
       updatedSections,
     );
 
-    await IoService.safeWriteFile(filePath, currentProgress);
+    await IoService.writeFile(filePath, currentProgress);
 
     const remaining = pendingSectionIds.slice(i + 1).length > 0;
     await handlers.onSectionComplete(frontmatter.hubId, sectionId, remaining);

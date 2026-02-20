@@ -1,25 +1,74 @@
-// packages/mobile/app/(tabs)/agents/[id].tsx
+import { AgentThinkingOverlay } from "@/components/AgentThinkingOverlay";
+import { InputField } from "@/components/form/InputField";
 import { Text, View } from "@/components/Themed";
 import { useColorScheme } from "@/components/useColorScheme";
 import { Colors, ThemeColors } from "@/constants/Colors";
 import { useAgents } from "@/services/AgentsContext";
+import { useWorkspace } from "@/services/WorkspaceContext";
+import { WorkspaceManager } from "@/services/WorkspaceManager";
+import { Vibe } from "@/utils/vibe";
 import { FontAwesome } from "@expo/vector-icons";
 import {
+  AgentInteractionEntry,
+  AgentService,
   AssemblerArtifact,
+  ConfigService,
+  EvolutionEngine,
+  EvolutionResult,
+  EvolutionService,
   PersonaArtifact,
+  SecretService,
   WriterArtifact,
 } from "@hub-spoke/core";
+import * as Crypto from "expo-crypto";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  LayoutAnimation,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
 
 export default function AgentDetailsScreen() {
   const { id, type } = useLocalSearchParams<{ id: string; type: any }>();
-  const { getAgent, deleteAgent } = useAgents();
+  const { getAgent, deleteAgent, evolveAgent, refresh } = useAgents();
+  const { activeWorkspace, upsertAgentIndex } = useWorkspace();
   const themeColors = Colors[useColorScheme() ?? "dark"];
   const router = useRouter();
 
+  const [isEvolving, setIsEvolving] = useState(false);
+  const [evolutionResult, setEvolutionResult] =
+    useState<EvolutionResult | null>(null);
+  const [showForkModal, setShowForkModal] = useState(false);
+  const [newForkName, setNewForkName] = useState("");
+  const [isForking, setIsForking] = useState(false);
+
+  // Buffer and Interaction State
+  const [history, setHistory] = useState<AgentInteractionEntry[]>([]);
+  const [showTeachModal, setShowTeachModal] = useState(false);
+  const [manualInstruction, setManualInstruction] = useState("");
+
+  // UX State: Collapsible toggles
+  const [isTruthsExpanded, setIsTruthsExpanded] = useState(false);
+  const [isBufferExpanded, setIsBufferExpanded] = useState(false);
+
   const agent = useMemo(() => getAgent(type, id), [id, type, getAgent]);
+
+  const loadLearningData = async () => {
+    const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+    const data = await AgentService.getFeedback(workspaceDir.uri, type, id);
+    setHistory(data);
+  };
+
+  useEffect(() => {
+    loadLearningData();
+  }, [id, type]);
 
   if (!agent) {
     return (
@@ -30,6 +79,16 @@ export default function AgentDetailsScreen() {
   }
 
   const artifact = agent.artifact;
+
+  const toggleTruths = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsTruthsExpanded(!isTruthsExpanded);
+  };
+
+  const toggleBuffer = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsBufferExpanded(!isBufferExpanded);
+  };
 
   const handleDelete = () => {
     Alert.alert(
@@ -54,6 +113,168 @@ export default function AgentDetailsScreen() {
     );
   };
 
+  const handleEvolve = async () => {
+    setIsEvolving(true);
+    try {
+      const result = await evolveAgent(type, id);
+      setEvolutionResult(result);
+
+      if (result.conflictType === "hard") {
+        setNewForkName(
+          result.suggestedForkName || `${artifact.displayName} (Fork)`,
+        );
+        setShowForkModal(true);
+        Vibe.error();
+      } else {
+        await loadLearningData(); // Refresh history for soft updates
+        Vibe.success();
+      }
+    } catch (err: any) {
+      Alert.alert("Evolution Failed", err.message);
+    } finally {
+      setIsEvolving(false);
+    }
+  };
+
+  // REACTIVE FORK (Solves Semantic Conflicts)
+  const executeFork = async () => {
+    if (!evolutionResult || !activeWorkspace) return;
+
+    const secret = await SecretService.getSecret();
+    const config = await ConfigService.getConfig();
+
+    if (!secret.apiKey || !config.model) {
+      Alert.alert(
+        "Configuration Missing",
+        "Gemini API Key or Model is not set.",
+      );
+      return;
+    }
+
+    setIsForking(true);
+
+    try {
+      const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+
+      const newId = Crypto.randomUUID();
+      const forkedAgent = await EvolutionEngine.forkFromConflict(
+        workspaceDir.uri,
+        secret.apiKey,
+        config.model,
+        id,
+        newId,
+        type,
+        newForkName,
+        evolutionResult.analysis,
+      );
+
+      await upsertAgentIndex({
+        id: newId,
+        type,
+        displayName: newForkName,
+        description: forkedAgent.description || "Specialized Agent",
+      });
+
+      await AgentService.clearFeedbackBuffer(workspaceDir.uri, type, id);
+
+      setShowForkModal(false);
+      setEvolutionResult(null);
+      await refresh();
+      await Vibe.handoff();
+
+      Alert.alert("Success", `Specialized agent "${newForkName}" birthed.`, [
+        {
+          text: "View Agent",
+          onPress: () =>
+            router.replace({
+              pathname: "/(tabs)/agents/[id]",
+              params: { id: newId, type },
+            }),
+        },
+      ]);
+    } catch (err: any) {
+      Alert.alert("Fork Failed", err.message);
+    } finally {
+      setIsForking(false);
+    }
+  };
+
+  // FORCE OVERWRITE (Ignores contradictions, forces the soft update)
+  const executeOverwrite = async () => {
+    if (!evolutionResult || !activeWorkspace) return;
+    setIsForking(true);
+
+    try {
+      const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+
+      const updatedTruths = EvolutionService.applyProposals(
+        artifact.truths || [],
+        evolutionResult.analysis.proposals,
+      );
+
+      const updatedMetadata: Record<string, any> = artifact.metadata
+        ? { ...artifact.metadata }
+        : {};
+
+      if (
+        evolutionResult.violatedMetadataField &&
+        evolutionResult.newMetadataValue
+      ) {
+        updatedMetadata[evolutionResult.violatedMetadataField] =
+          evolutionResult.newMetadataValue;
+      }
+
+      await AgentService.saveAgent(workspaceDir.uri, {
+        identity: { ...artifact, metadata: updatedMetadata },
+        behavior: artifact.content,
+        knowledge: {
+          description: evolutionResult.newDescription || artifact.description,
+          truths: updatedTruths,
+        },
+      });
+
+      await AgentService.clearFeedbackBuffer(workspaceDir.uri, type, id);
+
+      setShowForkModal(false);
+      setEvolutionResult(null);
+      await refresh();
+      await loadLearningData();
+      Vibe.success();
+      Alert.alert(
+        "Agent Overwritten",
+        "The core identity has been forcefully pivoted.",
+      );
+    } catch (err: any) {
+      Alert.alert("Overwrite Failed", err.message);
+    } finally {
+      setIsForking(false);
+    }
+  };
+
+  const handleManualTeach = async () => {
+    if (!manualInstruction.trim() || !activeWorkspace) return;
+
+    try {
+      const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+      await AgentService.appendFeedback(
+        workspaceDir.uri,
+        artifact.type,
+        artifact.id,
+        {
+          source: "manual",
+          outcome: "feedback",
+          text: manualInstruction,
+        },
+      );
+      setManualInstruction("");
+      setShowTeachModal(false);
+      await loadLearningData();
+      if (!isBufferExpanded) toggleBuffer();
+    } catch (err: any) {
+      Alert.alert("Teaching Error", err.message);
+    }
+  };
+
   const handleEdit = () => {
     router.push({
       pathname: "/agents/editor",
@@ -61,11 +282,23 @@ export default function AgentDetailsScreen() {
     });
   };
 
+  if (isEvolving) {
+    return (
+      <AgentThinkingOverlay
+        agentId={artifact.id}
+        model="Evolution Engine"
+        phase="styling"
+        status="Extracting Rooted Truths..."
+        color={themeColors.buttonPrimary}
+      />
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: artifact.id,
+          title: artifact.displayName || artifact.id,
           headerRight: () => (
             <Pressable onPress={handleEdit} style={{ padding: 8 }}>
               <FontAwesome name="pencil" size={20} color={themeColors.tint} />
@@ -75,7 +308,7 @@ export default function AgentDetailsScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Polymorphic Body */}
+        {/* Polymorphic Header Info */}
         {artifact.type === "persona" && (
           <PersonaDisplay artifact={artifact} theme={themeColors} />
         )}
@@ -86,8 +319,22 @@ export default function AgentDetailsScreen() {
           <AssemblerDisplay artifact={artifact} theme={themeColors} />
         )}
 
+        {/* PROACTIVE FORK BUTTON */}
+        <Pressable
+          style={styles.forkProactiveButton}
+          onPress={() => {
+            router.push({
+              pathname: "/(tabs)/agents/editor",
+              params: { id: artifact.id, type: artifact.type, mode: "fork" },
+            });
+          }}
+        >
+          <FontAwesome name="code-fork" size={16} color="#FFD700" />
+          <Text style={styles.forkProactiveText}>Fork & Evolve Manually</Text>
+        </Pressable>
+
         {/* System Instructions Section */}
-        <Text style={styles.sectionTitle}>System Prompt</Text>
+        <Text style={styles.sectionTitle}>Behaviour</Text>
         <View
           style={[
             styles.contentCard,
@@ -95,6 +342,145 @@ export default function AgentDetailsScreen() {
           ]}
         >
           <Text style={styles.contentBody}>{artifact.content}</Text>
+        </View>
+
+        {/* KNOWLEDGE SECTION (Truths) */}
+        <Pressable style={styles.collapsibleHeader} onPress={toggleTruths}>
+          <Text style={styles.sectionTitle}>
+            Learned Truths ({artifact.truths.length})
+          </Text>
+          <FontAwesome
+            name={isTruthsExpanded ? "chevron-up" : "chevron-down"}
+            size={12}
+            color="#888"
+          />
+        </Pressable>
+
+        {isTruthsExpanded && (
+          <View style={styles.knowledgeList}>
+            {artifact.truths.length === 0 ? (
+              <Text style={styles.emptyText}>No truths rooted yet.</Text>
+            ) : (
+              artifact.truths
+                .sort((a, b) => b.weight - a.weight)
+                .map((truth, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.truthCard,
+                      { backgroundColor: themeColors.cardBackground },
+                    ]}
+                  >
+                    <Text style={styles.truthText}>{truth.text}</Text>
+                    <View style={styles.weightContainer}>
+                      <View
+                        style={[
+                          styles.weightBar,
+                          {
+                            width: `${truth.weight * 100}%`,
+                            backgroundColor: themeColors.buttonPrimary,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                ))
+            )}
+          </View>
+        )}
+
+        {/* FEEDBACK BUFFER SECTION */}
+        <Pressable style={styles.collapsibleHeader} onPress={toggleBuffer}>
+          <Text style={styles.sectionTitle}>
+            Learning Buffer ({history.length})
+          </Text>
+          <FontAwesome
+            name={isBufferExpanded ? "chevron-up" : "chevron-down"}
+            size={12}
+            color="#888"
+          />
+        </Pressable>
+
+        {isBufferExpanded && (
+          <View style={styles.historyList}>
+            {history.length === 0 ? (
+              <Text style={styles.emptyText}>
+                No interactions recorded in the current buffer.
+              </Text>
+            ) : (
+              history.map((entry, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.feedbackItem,
+                    {
+                      borderLeftColor:
+                        entry.outcome === "accepted" ? "#32a852" : "#ffcc00",
+                    },
+                  ]}
+                >
+                  <View style={styles.feedbackHeader}>
+                    <FontAwesome
+                      name={entry.source === "manual" ? "university" : "bolt"}
+                      size={12}
+                      color={
+                        entry.outcome === "accepted" ? "#32a852" : "#ffcc00"
+                      }
+                    />
+                    <Text style={styles.feedbackDate}>
+                      {new Date(entry.timestamp).toLocaleDateString()}
+                    </Text>
+                    <Text style={styles.sourceTag}>
+                      {entry.source.toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={styles.feedbackText}>
+                    {entry.text || "Agent performance was approved."}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+        )}
+
+        {/* Unified Learning Actions Footer */}
+        <View style={styles.learningActionsFooter}>
+          <Pressable
+            style={[
+              styles.actionButtonSecondary,
+              { borderColor: themeColors.tint, flex: 1 },
+            ]}
+            onPress={() => setShowTeachModal(true)}
+          >
+            <FontAwesome
+              name="commenting-o"
+              size={16}
+              color={themeColors.text}
+            />
+            <Text style={styles.actionButtonText}>Teach</Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.actionButtonPrimary,
+              {
+                flex: 1,
+              },
+              history.length > 0
+                ? { backgroundColor: themeColors.buttonPrimary }
+                : {
+                    backgroundColor: "#999",
+                    opacity: 0.7,
+                  },
+            ]}
+            onPress={handleEvolve}
+            disabled={history.length === 0}
+          >
+            <FontAwesome name="graduation-cap" size={16} color="#fff" />
+            <Text style={[styles.actionButtonText, { color: "#fff" }]}>
+              Train
+            </Text>
+          </Pressable>
         </View>
 
         <Pressable
@@ -105,13 +491,219 @@ export default function AgentDetailsScreen() {
           <Text style={styles.deleteButtonText}>Delete Agent</Text>
         </Pressable>
       </ScrollView>
+
+      {/* Manual Teaching Modal */}
+      <Modal visible={showTeachModal} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: themeColors.modalBackground },
+            ]}
+          >
+            <Text style={styles.modalTitle}>Manual Instruction</Text>
+            <Text style={styles.modalSubtitle}>
+              Directly update the agent's behavior buffer. Processed during
+              evolution.
+            </Text>
+
+            <InputField
+              label="Instruction"
+              placeholder="e.g. Always use metric units in technical drafts."
+              multiline
+              value={manualInstruction}
+              onChangeText={setManualInstruction}
+              style={{ height: 120 }}
+            />
+
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.cancelBtn}
+                onPress={() => setShowTeachModal(false)}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.saveBtn,
+                  { backgroundColor: themeColors.buttonPrimary },
+                ]}
+                onPress={handleManualTeach}
+                disabled={!manualInstruction.trim()}
+              >
+                <Text style={styles.saveBtnText}>Save to Buffer</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Evolution Summary Modal */}
+      <Modal
+        visible={!!evolutionResult && !showForkModal}
+        transparent
+        animationType="slide"
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: themeColors.modalBackground },
+            ]}
+          >
+            <Text style={styles.modalTitle}>Evolution Complete</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              <Text style={styles.modalSubtitle}>
+                {evolutionResult?.thoughtProcess}
+              </Text>
+
+              {evolutionResult?.addedTruths.map((t, i) => (
+                <View key={i} style={styles.proposalItem}>
+                  <Text style={{ color: "#32a852" }}>+ [NEW] {t}</Text>
+                </View>
+              ))}
+              {evolutionResult?.strengthenedTruths.map((t, i) => (
+                <View key={i} style={styles.proposalItem}>
+                  <Text style={{ color: themeColors.tint }}>
+                    ↑ [REINFORCED] {t}
+                  </Text>
+                </View>
+              ))}
+              {evolutionResult?.weakenedTruths.map((t, i) => (
+                <View key={i} style={styles.proposalItem}>
+                  <Text style={{ color: "#ffcc00" }}>↓ [WEAKENED] {t}</Text>
+                </View>
+              ))}
+            </ScrollView>
+            <Pressable
+              style={[
+                styles.saveBtn,
+                { backgroundColor: themeColors.buttonPrimary, marginTop: 20 },
+              ]}
+              onPress={() => setEvolutionResult(null)}
+            >
+              <Text style={styles.saveBtnText}>Awesome</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Conflict / Fork Modal */}
+      <Modal visible={showForkModal} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: themeColors.modalBackground },
+            ]}
+          >
+            <Text style={styles.modalTitle}>🔱 Contradiction Detected</Text>
+
+            <View style={styles.conflictCard}>
+              {evolutionResult?.violatedMetadataField ? (
+                <Text style={styles.conflictText}>
+                  Feedback violates current{" "}
+                  {evolutionResult.violatedMetadataField.toUpperCase()}.{"\n"}
+                  New value will be:{" "}
+                  <Text
+                    style={{
+                      color: themeColors.buttonPrimary,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {evolutionResult.newMetadataValue}
+                  </Text>
+                </Text>
+              ) : (
+                <Text style={styles.conflictText}>
+                  Feedback contradicts rooted truth:{"\n"}
+                  <Text style={{ fontStyle: "italic", opacity: 0.8 }}>
+                    "{evolutionResult?.violatedTruth}"
+                  </Text>
+                </Text>
+              )}
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              A specialized fork is recommended to preserve the original agent's
+              identity.
+            </Text>
+
+            <InputField
+              label="New Agent Name"
+              value={newForkName}
+              onChangeText={setNewForkName}
+              placeholder="e.g. Playful Juan"
+            />
+
+            <View
+              style={[
+                styles.modalActions,
+                {
+                  flexWrap: "wrap",
+                  justifyContent: "space-between",
+                  marginTop: 20,
+                },
+              ]}
+            >
+              <Pressable
+                style={styles.cancelBtn}
+                onPress={() => setShowForkModal(false)}
+              >
+                <Text style={styles.cancelBtnText}>Discard</Text>
+              </Pressable>
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <Pressable
+                  style={[
+                    styles.saveBtn,
+                    {
+                      backgroundColor: "transparent",
+                      borderWidth: 1,
+                      borderColor: "#ff4444",
+                    },
+                  ]}
+                  onPress={executeOverwrite}
+                  disabled={isForking}
+                >
+                  <Text style={{ color: "#ff4444", fontWeight: "bold" }}>
+                    Overwrite
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.saveBtn,
+                    {
+                      backgroundColor: isForking
+                        ? "#666"
+                        : themeColors.buttonPrimary,
+                    },
+                  ]}
+                  onPress={executeFork}
+                  disabled={isForking}
+                >
+                  {isForking ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>Fork Agent</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
-/**
- * Specialized UI for Personas - Focuses on Voice & Style
- */
 function PersonaDisplay({
   artifact,
   theme,
@@ -125,29 +717,29 @@ function PersonaDisplay({
         style={[styles.headerCard, { backgroundColor: theme.cardBackground }]}
       >
         <Text style={styles.typeLabel}>Persona</Text>
-        <Text style={styles.title}>{artifact.name}</Text>
+        <Text style={styles.title}>{artifact.displayName || artifact.id}</Text>
+        <Text style={styles.idSubtext}>ID: {artifact.id}</Text>
         <Text style={styles.description}>{artifact.description}</Text>
       </View>
-
       <View style={styles.metaSection}>
         <Text style={styles.sectionTitle}>Voice Profile</Text>
         <View style={styles.row}>
           <InfoTile
             icon="volume-up"
             label="Tone"
-            value={artifact.tone}
+            value={artifact.metadata.tone}
             theme={theme}
           />
           <InfoTile
             icon="language"
             label="Lang"
-            value={artifact.language}
+            value={artifact.metadata.language}
             theme={theme}
           />
           <InfoTile
             icon="commenting-o"
             label="Accent"
-            value={artifact.accent}
+            value={artifact.metadata.accent}
             theme={theme}
           />
         </View>
@@ -156,9 +748,6 @@ function PersonaDisplay({
   );
 }
 
-/**
- * Specialized UI for Writers - Focuses on Technical Strategy
- */
 function WriterDisplay({
   artifact,
   theme,
@@ -172,17 +761,16 @@ function WriterDisplay({
         style={[styles.headerCard, { backgroundColor: theme.cardBackground }]}
       >
         <Text style={styles.typeLabel}>Writer</Text>
-        <Text style={styles.title}>{artifact.id}</Text>
+        <Text style={styles.title}>{artifact.displayName || artifact.id}</Text>
+        <Text style={styles.idSubtext}>ID: {artifact.id}</Text>
         <Text style={styles.description}>{artifact.description}</Text>
       </View>
-
       <View style={styles.metaSection}>
         <Text style={styles.sectionTitle}>Drafting Strategy</Text>
         <View style={[styles.strategyCard, { borderColor: theme.tint + "40" }]}>
           <FontAwesome name="terminal" size={14} color={theme.tint} />
           <Text style={styles.strategyText}>
-            This agent handles neutral technical drafting without stylistic
-            bias.
+            This agent handles neutral technical drafting without bias.
           </Text>
         </View>
       </View>
@@ -190,9 +778,6 @@ function WriterDisplay({
   );
 }
 
-/**
- * Specialized UI for Assemblers - Focuses on Structure & Dependencies
- */
 function AssemblerDisplay({
   artifact,
   theme,
@@ -205,7 +790,8 @@ function AssemblerDisplay({
       style={[styles.headerCard, { backgroundColor: theme.cardBackground }]}
     >
       <Text style={styles.typeLabel}>Assembler</Text>
-      <Text style={styles.title}>{artifact.id}</Text>
+      <Text style={styles.title}>{artifact.displayName || artifact.id}</Text>
+      <Text style={styles.idSubtext}>ID: {artifact.id}</Text>
       <Text style={styles.description}>{artifact.description}</Text>
     </View>
   );
@@ -217,7 +803,7 @@ function InfoTile({
   value,
   theme,
 }: {
-  icon: React.ComponentProps<typeof FontAwesome>["name"];
+  icon: any;
   label: string;
   value: string;
   theme: ThemeColors;
@@ -241,7 +827,7 @@ function InfoTile({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  scrollContent: { padding: 20, paddingBottom: 40 },
+  scrollContent: { padding: 20, paddingBottom: 60 },
   headerCard: { padding: 25, borderRadius: 24, marginBottom: 25 },
   typeLabel: {
     fontSize: 10,
@@ -250,9 +836,31 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 1,
   },
-  title: { fontSize: 28, fontWeight: "bold", marginBottom: 12 },
+  title: { fontSize: 28, fontWeight: "bold", marginBottom: 4 },
+  idSubtext: {
+    fontSize: 12,
+    opacity: 0.4,
+    fontWeight: "bold",
+    marginBottom: 12,
+    letterSpacing: 0.5,
+  },
   description: { fontSize: 16, lineHeight: 22, opacity: 0.8 },
   metaSection: { marginBottom: 25 },
+
+  forkProactiveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 215, 0, 0.15)",
+    borderColor: "#FFD700",
+    borderWidth: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
+    marginBottom: 25,
+  },
+  forkProactiveText: { color: "#FFD700", fontWeight: "bold", fontSize: 16 },
+
   sectionTitle: {
     fontSize: 14,
     fontWeight: "900",
@@ -260,6 +868,13 @@ const styles = StyleSheet.create({
     opacity: 0.4,
     marginBottom: 15,
     letterSpacing: 1,
+  },
+  collapsibleHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 15,
   },
   row: { flexDirection: "row", gap: 10 },
   tile: { flex: 1, padding: 15, borderRadius: 16, alignItems: "flex-start" },
@@ -279,15 +894,89 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   strategyText: { fontSize: 13, opacity: 0.7, flex: 1 },
-  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  tag: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  tagText: { fontSize: 12, fontWeight: "bold" },
-  contentCard: { padding: 20, borderRadius: 20 },
+  contentCard: { padding: 20, borderRadius: 20, marginBottom: 30 },
   contentBody: {
     fontSize: 14,
     lineHeight: 22,
     fontStyle: "italic",
     opacity: 0.7,
+  },
+  learningActionsFooter: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 10,
+    paddingTop: 20,
+    marginBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(128,128,128,0.1)",
+  },
+  actionButtonPrimary: {
+    flex: 2,
+    height: 50,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  actionButtonSecondary: {
+    flex: 1,
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  actionButtonText: {
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  knowledgeList: { marginBottom: 20 },
+  truthCard: { padding: 15, borderRadius: 12, marginBottom: 10 },
+  truthText: {
+    fontSize: 14,
+    fontWeight: "500",
+    lineHeight: 20,
+    marginBottom: 10,
+  },
+  weightContainer: {
+    height: 4,
+    width: "100%",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  weightBar: { height: "100%" },
+  historyList: { marginBottom: 20 },
+  feedbackItem: {
+    padding: 15,
+    borderLeftWidth: 3,
+    marginBottom: 12,
+    backgroundColor: "rgba(128,128,128,0.05)",
+    borderRadius: 8,
+  },
+  feedbackHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  feedbackDate: { fontSize: 11, opacity: 0.4, fontWeight: "bold" },
+  sourceTag: {
+    fontSize: 9,
+    fontWeight: "900",
+    opacity: 0.3,
+    marginLeft: "auto",
+  },
+  feedbackText: { fontSize: 14, lineHeight: 20, opacity: 0.7 },
+  emptyText: {
+    fontSize: 13,
+    opacity: 0.4,
+    fontStyle: "italic",
+    paddingHorizontal: 5,
+    marginBottom: 20,
   },
   deleteButton: {
     flexDirection: "row",
@@ -296,8 +985,62 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    marginTop: 30,
+    marginTop: 10,
     gap: 10,
   },
   deleteButtonText: { color: "#ff4444", fontWeight: "bold" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    padding: 30,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    minHeight: 400,
+  },
+  modalTitle: { fontSize: 22, fontWeight: "bold", marginBottom: 10 },
+  modalSubtitle: {
+    fontSize: 14,
+    opacity: 0.6,
+    lineHeight: 20,
+    marginBottom: 25,
+  },
+  modalActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+  },
+  cancelBtn: { padding: 10 },
+  cancelBtnText: { color: "#888", fontWeight: "bold" },
+  saveBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveBtnText: { color: "#fff", fontWeight: "bold" },
+  proposalItem: {
+    padding: 10,
+    backgroundColor: "rgba(128,128,128,0.1)",
+    borderRadius: 8,
+    marginBottom: 6,
+  },
+  conflictCard: {
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 68, 68, 0.1)",
+    borderLeftWidth: 4,
+    borderLeftColor: "#ff4444",
+    marginBottom: 20,
+    width: "100%",
+  },
+  conflictText: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "500",
+    color: "#fff",
+  },
 });

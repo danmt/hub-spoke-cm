@@ -21,7 +21,7 @@ export class ExportService {
       });
 
       // 1. Read the hub through the core IoService (using MobileIoProvider)
-      const hubFile = await IoService.readHubFile(hubRootDir);
+      const hubFile = await IoService.readFile(hubRootDir);
 
       // 2. Clean the markdown content using the core ParserService
       const { frontmatter, content: cleanMarkdown } =

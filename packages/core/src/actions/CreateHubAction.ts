@@ -16,6 +16,7 @@ import {
   PersonaResponse,
 } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
+import { AgentService } from "../services/AgentService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { AgentPair, getAgentsByType } from "../services/RegistryService.js";
 
@@ -40,6 +41,7 @@ export class CreateHubAction {
   private personas: Persona[];
 
   constructor(
+    public workspaceRoot: string,
     apiKey: string,
     model: string,
     manifest: string,
@@ -122,6 +124,9 @@ export class CreateHubAction {
     }
 
     // 2. Assembler Phase (Generate the Blueprint)
+    const assemblerThreadId = `create-assemble-${Date.now()}`;
+    let assemblerTurn = 0;
+
     const assembly = await assembler.assemble({
       topic: architecture.brief.topic,
       goal: architecture.brief.goal,
@@ -129,12 +134,39 @@ export class CreateHubAction {
       allowedWriters: this.writers.filter((writer) =>
         architecture.brief.allowedWriterIds.includes(writer.id),
       ),
-      interact: this._onAssembler,
-      onThinking: () => this._onAssembling?.(assemblerId),
+      interact: async (params) => {
+        const interaction = (await this._onAssembler?.(params)) || {
+          action: "proceed",
+        };
+
+        if (interaction.action === "feedback") {
+          assemblerTurn++;
+        }
+
+        await AgentService.appendFeedback(
+          this.workspaceRoot,
+          "assembler",
+          params.agentId,
+          {
+            source: "action",
+            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
+            threadId: assemblerThreadId,
+            turn: assemblerTurn,
+            ...(interaction.action === "feedback"
+              ? { text: interaction.feedback }
+              : {}),
+          },
+        );
+
+        return interaction;
+      },
+      onThinking: (agentId) => this._onAssembling?.(agentId),
       onRetry: this._onRetry,
     });
 
     // 3. Rephrasing phase
+    const personaThreadId = `create-style-${Date.now()}`;
+    let personaTurn = 0;
     const personaId = architecture.brief.personaId;
     const persona = this.personas.find((p) => p.id === personaId);
 
@@ -147,8 +179,34 @@ export class CreateHubAction {
     const personification = await persona.rephrase({
       header: architecture.brief.topic,
       content: `Write an engaging one sentence long description for this content hub. Topic: ${architecture.brief.topic}. Goal: ${architecture.brief.goal}.`,
-      interact: this._onRephrase,
-      onThinking: () => this._onRephrasing?.(personaId),
+      interact: async (params) => {
+        const interaction = (await this._onRephrase?.(params)) || {
+          action: "proceed",
+        };
+
+        if (interaction.action === "feedback") {
+          personaTurn++;
+        }
+
+        await AgentService.appendFeedback(
+          this.workspaceRoot,
+          "persona",
+          params.agentId,
+          {
+            source: "action",
+            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
+            threadId: personaThreadId,
+            turn: personaTurn,
+            ...(interaction.action === "feedback"
+              ? { text: interaction.feedback }
+              : {}),
+          },
+        );
+
+        return interaction;
+      },
+
+      onThinking: (agentId) => this._onRephrasing?.(agentId),
       onRetry: this._onRetry,
     });
 

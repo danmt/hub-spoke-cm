@@ -1,4 +1,4 @@
-import { IoService } from "@hub-spoke/core";
+import { WorkspaceService } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
 
@@ -16,7 +16,7 @@ export const initCommand = new Command("init")
         ),
       );
 
-      await IoService.initWorkspace(rootDir, type);
+      await WorkspaceService.init(rootDir, type);
 
       console.log(chalk.green("✅ Workspace structure created."));
       console.log(

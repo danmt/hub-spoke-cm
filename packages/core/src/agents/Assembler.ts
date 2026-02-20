@@ -1,7 +1,8 @@
 // src/agents/Assembler.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
-import { HubBlueprint } from "../types/index.js";
+import { AgentTruth, HubBlueprint } from "../types/index.js";
+import { MAX_TRUTHS_FOR_CONTEXT } from "../utils/consts.js";
 import { extractTag } from "../utils/extractTag.js";
 
 export type AssemblerInteractionResponse =
@@ -24,10 +25,11 @@ export interface AssembleContext {
   allowedWriters: WriterInfo[];
   interact?: AssemblerInteractionHandler;
   onRetry?: (error: Error) => Promise<boolean>;
-  onThinking?: () => void;
+  onThinking?: (agentId: string) => void;
 }
 
 export interface AssembleResponse {
+  agentId: string;
   blueprint: HubBlueprint;
 }
 
@@ -45,6 +47,7 @@ export interface WriterInfo {
 }
 
 export interface AssemblerGenerateResponse {
+  agentId: string;
   blueprint: HubBlueprint;
 }
 
@@ -56,13 +59,23 @@ export class Assembler {
     private readonly apiKey: string,
     private readonly model: string,
     public id: string,
+    public displayName: string,
     public description: string,
-    strategyPrompt: string,
+    behaviour: string,
+    truths: AgentTruth[] = [],
   ) {
+    const learnedContext = truths
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, MAX_TRUTHS_FOR_CONTEXT)
+      .map((t) => `- ${t.text}`)
+      .join("\n");
+
     this.systemInstruction = `
       You are a Lead Content Architect. Your mission is to decompose a high-level project into a surgical, sequential execution blueprint.
 
-      STRATEGY: ${strategyPrompt}
+      STRATEGY: ${behaviour}
+
+      ${learnedContext ? `LEARNED CONTEXT (MANDATORY GUIDELINES):\n${learnedContext}` : ""}
 
       CRITICAL REQUIREMENT: "FUTURE-AWARE INTENTS"
       Every section's 'intent' must be a detailed micro-brief (50-100 words) that includes:
@@ -108,7 +121,7 @@ export class Assembler {
 
     while (true) {
       try {
-        if (ctx.onThinking) ctx.onThinking();
+        if (ctx.onThinking) ctx.onThinking(this.id);
 
         const generated = await this.generate({
           audience: ctx.audience,
@@ -189,7 +202,6 @@ export class Assembler {
   }
 
   private parse(text: string): AssembleResponse {
-    console.log(text);
     const hubIdMatch = text.match(/\[HUB_ID\]([\s\S]*?)\[\/HUB_ID\]/i);
     const hubId = hubIdMatch ? hubIdMatch[1].trim() : "generated-hub";
 
@@ -234,6 +246,6 @@ export class Assembler {
       );
     }
 
-    return { blueprint: { hubId, components } };
+    return { agentId: this.id, blueprint: { hubId, components } };
   }
 }

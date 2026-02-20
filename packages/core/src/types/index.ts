@@ -1,12 +1,21 @@
 // src/types/index.ts
 import { z } from "zod";
 import {
+  AgentBirthSchema,
+  AgentIdentitySchema,
+  AgentIndexEntrySchema,
+  AgentKnowledgeSchema,
+  AgentTruthSchema,
+  EvolutionAnalysisSchema,
+  EvolutionProposalSchema,
   FrontmatterSchema,
   HubBlueprintSchema,
   HubComponentSchema,
   HubConfigSchema,
+  HubIndexEntrySchema,
   HubSecretSchema,
   SectionBlueprintSchema,
+  WorkspaceManifestSchema,
 } from "./schemas.js";
 
 // Export Inferred Types
@@ -16,13 +25,31 @@ export type ContentFrontmatter = z.infer<typeof FrontmatterSchema>;
 export type HubBlueprint = z.infer<typeof HubBlueprintSchema>;
 export type HubConfig = z.infer<typeof HubConfigSchema>;
 export type HubSecret = z.infer<typeof HubSecretSchema>;
+export type AgentIdentity = z.infer<typeof AgentIdentitySchema>;
+export type AgentBirth = z.infer<typeof AgentBirthSchema>;
+export type AgentKnowledge = z.infer<typeof AgentKnowledgeSchema>;
+export type AgentTruth = z.infer<typeof AgentTruthSchema>;
+export type EvolutionAnalysis = z.infer<typeof EvolutionAnalysisSchema>;
+export type EvolutionProposal = z.infer<typeof EvolutionProposalSchema>;
+export type HubIndexEntry = z.infer<typeof HubIndexEntrySchema>;
+export type AgentIndexEntry = z.infer<typeof AgentIndexEntrySchema>;
+export type WorkspaceManifest = z.infer<typeof WorkspaceManifestSchema>;
 
 // Re-export Schemas for validation use
 export {
+  AgentBirthSchema,
+  AgentIdentitySchema,
+  AgentIndexEntrySchema,
+  AgentKnowledgeSchema,
+  AgentTruthSchema,
+  EvolutionAnalysisSchema,
+  EvolutionProposalSchema,
   FrontmatterSchema,
   HubBlueprintSchema,
   HubComponentSchema,
   HubConfigSchema,
+  HubIndexEntrySchema,
   HubSecretSchema,
   SectionBlueprintSchema,
+  WorkspaceManifestSchema,
 } from "./schemas.js";
