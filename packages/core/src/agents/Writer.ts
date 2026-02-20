@@ -1,6 +1,8 @@
 // src/agents/Writer.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
+import { AgentTruth } from "../types/index.js";
+import { MAX_TRUTHS_FOR_CONTEXT } from "../utils/consts.js";
 
 export type WriterInteractionResponse =
   | {
@@ -52,14 +54,24 @@ export class Writer {
     private readonly apiKey: string,
     private readonly model: string,
     public id: string,
+    public displayName: string,
     public description: string,
-    writingStrategy: string,
+    behaviour: string,
+    truths: AgentTruth[] = [],
   ) {
+    const learnedContext = truths
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, MAX_TRUTHS_FOR_CONTEXT)
+      .map((t) => `- ${t.text}`)
+      .join("\n");
+
     this.systemInstruction = `
       ROLE: You are a Neutral Content Writer.
       
       WRITING STRATEGY: 
-      ${writingStrategy}
+      ${behaviour}
+
+      ${learnedContext ? `LEARNED CONTEXT (MANDATORY GUIDELINES):\n${learnedContext}` : ""}
               
       CORE EXECUTION RULES:
       1. Follow the INTENT micro-brief exactly. It defines your scope boundaries.

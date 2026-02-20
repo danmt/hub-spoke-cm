@@ -2,9 +2,8 @@
 import { Assembler } from "../agents/Assembler.js";
 import { Persona } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
-import { parseAssemblerArtifact } from "../utils/parseAssemblerArtifact.js";
-import { parsePersonaArtifact } from "../utils/parsePersonaArtifact.js";
-import { parseWriterArtifact } from "../utils/parseWriterArtifact.js";
+import { AgentTruth } from "../types/index.js";
+import { AgentIdentitySchema, AgentKnowledgeSchema } from "../types/schemas.js";
 import { LoggerService } from "./LoggerService.js";
 
 export type ArtifactType = "persona" | "writer" | "assembler";
@@ -12,14 +11,14 @@ export type ArtifactType = "persona" | "writer" | "assembler";
 export interface BaseArtifact {
   id: string;
   type: ArtifactType;
+  displayName: string;
   description: string;
   content: string;
-  model?: string;
+  truths: AgentTruth[];
 }
 
 export interface PersonaArtifact extends BaseArtifact {
   type: "persona";
-  name: string;
   language: string;
   tone: string;
   accent: string;
@@ -69,8 +68,15 @@ export function getAgent<T extends AgentPair["type"]>(
 }
 
 export interface RegistryProvider {
-  listAgentFiles(folder: string): Promise<string[]>;
-  readAgentFile(folder: string, filename: string): Promise<string>;
+  listAgentFolders(typeFolder: string): Promise<string[]>;
+  readAgentPackage(
+    typeFolder: string,
+    folderName: string,
+  ): Promise<{
+    identity: string;
+    behavior: string;
+    knowledge: string;
+  }>;
   getIdentifier(filename: string): string;
   setWorkspaceRoot(path: string): void;
 }
@@ -116,46 +122,36 @@ export class RegistryService {
       await LoggerService.debug("Scanning registry folders", { workspaceRoot });
 
       for (const [folder, type] of Object.entries(folders)) {
-        const files = await this.provider.listAgentFiles(folder);
-        const mdFiles = files.filter((f) => f.endsWith(".md"));
+        const agentFolders = await this.provider.listAgentFolders(folder);
 
-        for (const file of mdFiles) {
-          const raw = await this.provider.readAgentFile(folder, file);
+        for (const agentDir of agentFolders) {
+          const raw = await this.provider.readAgentPackage(folder, agentDir);
+          const identity = AgentIdentitySchema.parse(JSON.parse(raw.identity));
+          const knowledge = AgentKnowledgeSchema.parse(
+            JSON.parse(raw.knowledge),
+          );
 
           if (type === "persona") {
-            const personaArtifact = parsePersonaArtifact(raw);
-
             allArtifacts.push({
-              id: personaArtifact.id,
+              id: identity.id,
               type,
-              description: personaArtifact.description || "",
-              content: personaArtifact.content.trim(),
-              model: personaArtifact.model,
-              name: personaArtifact.name,
-              language: personaArtifact.language || "English",
-              tone: personaArtifact.tone || "Neutral",
-              accent: personaArtifact.accent || "Standard",
-            });
-          } else if (type === "writer") {
-            const writerArtifact = parseWriterArtifact(raw);
-
-            allArtifacts.push({
-              type,
-              content: writerArtifact.content,
-              description: writerArtifact.description,
-              id: writerArtifact.id,
-              model: writerArtifact.model,
+              description: knowledge.description || "",
+              content: raw.behavior,
+              displayName: identity.displayName,
+              truths: knowledge.truths,
+              language: identity.metadata?.language || "English",
+              tone: identity.metadata?.tone || "Neutral",
+              accent: identity.metadata?.accent || "Standard",
             });
           } else {
-            const assemblerArtifact = parseAssemblerArtifact(raw);
-
             allArtifacts.push({
               type,
-              content: assemblerArtifact.content,
-              description: assemblerArtifact.description,
-              id: assemblerArtifact.id,
-              model: assemblerArtifact.model,
-            } as AssemblerArtifact);
+              content: raw.behavior,
+              description: knowledge.description,
+              truths: knowledge.truths,
+              id: identity.id,
+              displayName: identity.displayName,
+            });
           }
         }
       }
@@ -195,9 +191,9 @@ export class RegistryService {
             artifact: artifact as PersonaArtifact,
             agent: new Persona(
               apiKey,
-              artifact.model || model,
+              model,
               artifact.id,
-              artifact.name,
+              artifact.displayName,
               artifact.description,
               artifact.language,
               artifact.accent,
@@ -211,10 +207,12 @@ export class RegistryService {
             artifact: artifact as WriterArtifact,
             agent: new Writer(
               apiKey,
-              artifact.model || model,
+              model,
               artifact.id,
+              artifact.displayName,
               artifact.description,
               artifact.content,
+              artifact.truths,
             ),
           };
         case "assembler":
@@ -223,8 +221,9 @@ export class RegistryService {
             artifact: artifact as AssemblerArtifact,
             agent: new Assembler(
               apiKey,
-              artifact.model || model,
+              model,
               artifact.id,
+              artifact.displayName,
               artifact.description,
               artifact.content,
             ),
@@ -249,11 +248,11 @@ export class RegistryService {
         )
         .map((a) => ({
           id: a.artifact.id,
-          name: a.artifact.name,
           description: a.artifact.description,
           capabilities: {
             tone: a.artifact.tone,
             language: a.artifact.language,
+            accent: a.artifact.accent,
           },
         })),
       writers: agents

@@ -11,6 +11,7 @@ export * from "./agents/Writer.js";
 // Services (Environment Agnostic)
 export * from "./services/AiService.js";
 export * from "./services/ConfigService.js";
+export * from "./services/IntelligenceService.js";
 export * from "./services/IoService.js";
 export * from "./services/LoggerService.js";
 export * from "./services/ParserService.js";

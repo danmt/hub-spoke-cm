@@ -1,6 +1,8 @@
 // src/agents/Persona.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
+import { AgentTruth } from "../types/index.js";
+import { MAX_TRUTHS_FOR_CONTEXT } from "../utils/consts.js";
 
 export type PersonaInteractionResponse =
   | {
@@ -42,21 +44,30 @@ export class Persona {
     private readonly apiKey: string,
     private readonly model: string,
     public id: string,
-    public name: string,
+    public displayName: string,
     public description: string,
     public language: string,
     public accent: string,
     public tone: string,
-    public roleDescription: string,
+    behaviour: string,
+    truths: AgentTruth[] = [],
   ) {
+    const learnedContext = truths
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, MAX_TRUTHS_FOR_CONTEXT)
+      .map((t) => `- ${t.text}`)
+      .join("\n");
+
     this.systemInstruction = `
       ROLE:
-      ${this.roleDescription}
+      ${behaviour}
 
       VOICE & STYLE:
       - LANGUAGE: Must write exclusively in ${this.language || this.language}.
       - ACCENT: ${this.accent}
       - TONE: ${this.tone}.
+
+      ${learnedContext ? `LEARNED CONTEXT (MANDATORY GUIDELINES):\n${learnedContext}` : ""}
 
       TASK:
       

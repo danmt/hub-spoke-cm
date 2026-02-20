@@ -1,74 +1,61 @@
-// packages/mobile/services/AgentPersistence.ts
-import { ArtifactType } from "@hub-spoke/core";
+import { AgentIdentity, AgentKnowledge } from "@hub-spoke/core";
 import { Directory, File } from "expo-file-system";
 
-export interface SaveAgentParams {
+export interface SaveAgentPackageParams {
   workspaceUri: string;
-  type: ArtifactType;
-  id: string;
-  frontmatter: Record<string, any>;
-  content: string; // The system instructions / strategy
+  identity: AgentIdentity;
+  behavior: string;
+  knowledge: AgentKnowledge;
+  birthReason?: string; // Only provided on creation
 }
 
 export class AgentsStorage {
-  /**
-   * Saves an agent artifact to the mobile filesystem.
-   * Bypasses IoService to use native expo-file-system calls.
-   */
-  static async saveAgentToFile({
+  static async saveAgentPackage({
     workspaceUri,
-    type,
-    id,
-    frontmatter,
-    content,
-  }: SaveAgentParams): Promise<string> {
-    // 1. Resolve target directory based on type
-    const folderName = `${type}s`; // personas, writers, assemblers
-    const agentDir = new Directory(workspaceUri, "agents", folderName);
+    identity,
+    behavior,
+    knowledge,
+  }: SaveAgentPackageParams): Promise<void> {
+    const agentDir = new Directory(
+      workspaceUri,
+      "agents",
+      `${identity.type}s`,
+      identity.id,
+    );
+    const isNew = !agentDir.exists;
 
-    if (!agentDir.exists) {
+    if (isNew) {
       agentDir.create();
     }
 
-    // 2. Generate Markdown using Core Parser
-    // Agent artifacts are simpler than Hubs: they just have frontmatter + body.
-    // ParserService.reconstructMarkdown expects (frontmatter, sections).
-    // We pass an empty sections object because agent bodies are parsed as raw content
-    // after the frontmatter block, not delimited sections.
-    const markdown = this.generateAgentMarkdown(frontmatter, content);
+    // Always update Identity and Behavior
+    new File(agentDir, "agent.json").write(JSON.stringify(identity, null, 2));
+    new File(agentDir, "behavior.md").write(behavior.trim());
 
-    // 3. Write to disk
-    const filename = `${id}.md`;
-    const agentFile = new File(agentDir, filename);
+    // Knowledge: In Phase 1, we overwrite the description but keep existing truths
+    new File(agentDir, "knowledge.json").write(
+      JSON.stringify(knowledge, null, 2),
+    );
 
-    // Ensure we are using the File class from expo-file-system as intended in this architecture
-    if (!agentFile.exists) {
-      agentFile.create();
+    const feedbackFile = new File(agentDir, "feedback.jsonl");
+
+    if (!feedbackFile.exists) {
+      feedbackFile.create();
     }
 
-    agentFile.write(markdown);
+    const birthFile = new File(agentDir, "birth.json");
 
-    return agentFile.uri;
-  }
-
-  /**
-   * Helper to format Agent-specific Markdown.
-   * Personas/Writers don't use [SECTION] tags, so we manually
-   * assemble the YAML + Body.
-   */
-  private static generateAgentMarkdown(
-    frontmatter: any,
-    content: string,
-  ): string {
-    const yamlLines = Object.entries(frontmatter).map(([k, v]) => {
-      const value = typeof v === "string" ? JSON.stringify(v) : v;
-      // Handle array formatting for YAML (like writerIds)
-      if (Array.isArray(v)) {
-        return `${k}:\n${v.map((id) => `  - ${id}`).join("\n")}`;
-      }
-      return `${k}: ${value}`;
-    });
-
-    return `---\n${yamlLines.join("\n")}\n---\n\n${content.trim()}`;
+    if (!birthFile.exists) {
+      birthFile.write(
+        JSON.stringify(
+          {
+            birthReason: "Manual Creation",
+            timestamp: new Date().toISOString(),
+          },
+          null,
+          2,
+        ),
+      );
+    }
   }
 }

@@ -8,40 +8,66 @@ export class MobileRegistryProvider implements RegistryProvider {
   constructor(private workspaceRoot: string = Paths.document.uri) {}
 
   /**
-   * Lists files in the specified agent folder.
-   * Core expects filenames (e.g., "tutorial.md"), not absolute URIs.
+   * Scans agent category folders (e.g., /personas) for agent subdirectories.
+   * Returns an array of folder names which serve as the internal IDs.
    */
-  async listAgentFiles(folder: string): Promise<string[]> {
-    const agentsDir = new Directory(this.workspaceRoot, "agents", folder);
+  async listAgentFolders(folder: string): Promise<string[]> {
+    const categoryDir = new Directory(this.workspaceRoot, "agents", folder);
 
-    // Idempotent check for directory existence
-    if (!agentsDir.exists) {
+    if (!categoryDir.exists) {
       return [];
     }
 
-    // .list() returns an array of File/Directory objects.
-    // We filter specifically for Files so the RegistryService doesn't try
-    // to parse folders as markdown agents.
-    const contents = agentsDir.list();
+    const contents = categoryDir.list();
 
+    // Filter for directories only; each directory represents one adaptive agent package
     return contents
-      .filter((item): item is File => item instanceof File)
+      .filter((item): item is Directory => item instanceof Directory)
       .map((item) => item.name);
   }
 
   /**
-   * Reads a specific file from the agent folder as a UTF-8 string.
+   * Reads the specific artifacts from an agent's directory package.
+   * Core requires the raw strings to perform schema validation and parsing.
    */
-  async readAgentFile(folder: string, filename: string): Promise<string> {
-    const agentsDir = new Directory(this.workspaceRoot, "agents", folder);
-    const file = new File(agentsDir, filename);
+  async readAgentPackage(
+    folder: string,
+    folderName: string,
+  ): Promise<{
+    identity: string;
+    behavior: string;
+    knowledge: string;
+  }> {
+    const agentDir = new Directory(
+      this.workspaceRoot,
+      "agents",
+      folder,
+      folderName,
+    );
 
-    if (!file.exists) {
-      throw new Error(`Agent file not found: agents/${folder}/${filename}`);
+    if (!agentDir.exists) {
+      throw new Error(
+        `Agent package not found at: agents/${folder}/${folderName}`,
+      );
     }
 
-    // We must await the .text() promise to return the raw content to the RegistryService
-    return await file.text();
+    // Required artifacts for registry synchronization
+    const identityFile = new File(agentDir, "agent.json");
+    const behaviorFile = new File(agentDir, "behavior.md");
+    const knowledgeFile = new File(agentDir, "knowledge.json");
+
+    // Ensure critical files exist before attempting to read
+    if (!identityFile.exists || !behaviorFile.exists || !knowledgeFile.exists) {
+      throw new Error(
+        `Incomplete agent package detected in ${folderName}. Missing core artifacts.`,
+      );
+    }
+
+    return {
+      identity: await identityFile.text(),
+      behavior: await behaviorFile.text(),
+      knowledge: await knowledgeFile.text(),
+    };
   }
 
   /**

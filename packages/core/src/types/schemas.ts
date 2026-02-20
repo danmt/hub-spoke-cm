@@ -66,3 +66,38 @@ export const HubConfigSchema = z.object({
 export const HubSecretSchema = z.object({
   apiKey: z.string().optional(),
 });
+
+/**
+ * The Identity of an agent (agent.json)
+ */
+export const AgentIdentitySchema = z.object({
+  id: z.string().uuid(),
+  type: z.enum(["persona", "writer", "assembler"]),
+  displayName: z.string(),
+  metadata: z.record(z.string(), z.any()).optional(), // e.g., { tone, language } for personas
+});
+
+/**
+ * Lineage tracking (birth.json)
+ */
+export const AgentBirthSchema = z.object({
+  parentId: z.string().uuid().optional(),
+  birthReason: z.string(),
+  timestamp: z.string(),
+});
+
+/**
+ * The Memory of an agent (knowledge.json)
+ */
+export const AgentTruthSchema = z.object({
+  text: z.string(),
+  weight: z.number().min(0).max(1),
+});
+
+/**
+ * The Memory of an agent (knowledge.json)
+ */
+export const AgentKnowledgeSchema = z.object({
+  description: z.string(),
+  truths: z.array(AgentTruthSchema).default([]),
+});

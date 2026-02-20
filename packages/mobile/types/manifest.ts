@@ -18,7 +18,7 @@ export const HubIndexEntrySchema = z.object({
 export const AgentIndexEntrySchema = z.object({
   id: z.string(),
   type: z.enum(["persona", "writer", "assembler"]),
-  name: z.string().optional(),
+  displayName: z.string().optional(),
   description: z.string(),
 });
 

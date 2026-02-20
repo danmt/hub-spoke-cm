@@ -1,7 +1,8 @@
 // src/agents/Assembler.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
-import { HubBlueprint } from "../types/index.js";
+import { AgentTruth, HubBlueprint } from "../types/index.js";
+import { MAX_TRUTHS_FOR_CONTEXT } from "../utils/consts.js";
 import { extractTag } from "../utils/extractTag.js";
 
 export type AssemblerInteractionResponse =
@@ -56,13 +57,23 @@ export class Assembler {
     private readonly apiKey: string,
     private readonly model: string,
     public id: string,
+    public displayName: string,
     public description: string,
-    strategyPrompt: string,
+    behaviour: string,
+    truths: AgentTruth[] = [],
   ) {
+    const learnedContext = truths
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, MAX_TRUTHS_FOR_CONTEXT)
+      .map((t) => `- ${t.text}`)
+      .join("\n");
+
     this.systemInstruction = `
       You are a Lead Content Architect. Your mission is to decompose a high-level project into a surgical, sequential execution blueprint.
 
-      STRATEGY: ${strategyPrompt}
+      STRATEGY: ${behaviour}
+
+      ${learnedContext ? `LEARNED CONTEXT (MANDATORY GUIDELINES):\n${learnedContext}` : ""}
 
       CRITICAL REQUIREMENT: "FUTURE-AWARE INTENTS"
       Every section's 'intent' must be a detailed micro-brief (50-100 words) that includes:
