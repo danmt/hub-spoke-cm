@@ -5,6 +5,7 @@ import {
   ArchitectResponse,
   AssembleResponse,
   CreateHubAction,
+  HubService,
   IoService,
   ParserService,
   PersonaResponse,
@@ -54,7 +55,7 @@ export async function executeMobileCreateHubAction(
 
   const result = await action.execute();
 
-  const hubDir = await IoService.createHubDirectory(
+  const hubDir = await HubService.createHubDirectory(
     workspaceRoot,
     result.assembly.blueprint.hubId,
   );
@@ -67,7 +68,7 @@ export async function executeMobileCreateHubAction(
     result.personification.content,
   );
 
-  await IoService.safeWriteFile(filePath.uri, fileContent);
+  await IoService.writeFile(filePath.uri, fileContent);
 
   await handlers.onComplete(
     result.assembly.blueprint.hubId,

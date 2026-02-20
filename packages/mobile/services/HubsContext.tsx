@@ -1,5 +1,5 @@
 // packages/mobile/services/HubsContext.tsx
-import { IoService, ParsedFile } from "@hub-spoke/core";
+import { HubService, ParsedFile } from "@hub-spoke/core";
 import { Directory } from "expo-file-system";
 import React, { createContext, useContext, useRef, useState } from "react";
 import { useWorkspace } from "./WorkspaceContext";
@@ -32,7 +32,7 @@ export function HubsProvider({ children }: { children: React.ReactNode }) {
 
     const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
     const hubDir = new Directory(workspaceDir, "posts", id);
-    const data = await IoService.readHub(hubDir.uri);
+    const data = await HubService.readHub(hubDir.uri);
 
     setCache((prev) => {
       const next = new Map(prev);

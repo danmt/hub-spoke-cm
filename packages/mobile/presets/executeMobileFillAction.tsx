@@ -101,7 +101,7 @@ export async function executeMobileFillAction(
       updatedSections,
     );
 
-    await IoService.safeWriteFile(filePath, currentProgress);
+    await IoService.writeFile(filePath, currentProgress);
 
     const remaining = pendingSectionIds.slice(i + 1).length > 0;
     await handlers.onSectionComplete(frontmatter.hubId, sectionId, remaining);

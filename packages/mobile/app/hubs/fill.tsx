@@ -16,7 +16,7 @@ import { Vibe } from "@/utils/vibe";
 import { FontAwesome } from "@expo/vector-icons";
 import {
   ConfigService,
-  IoService,
+  HubService,
   ParsedFile,
   RegistryService,
   SecretService,
@@ -61,7 +61,7 @@ export default function FillHubScreen() {
       try {
         const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
         const hubDir = new Directory(workspaceDir, "posts", id);
-        const hub = await IoService.readHub(hubDir.uri);
+        const hub = await HubService.readHub(hubDir.uri);
         setHubData(hub);
         setHubPathUri(new File(hubDir, "hub.md").uri);
         const pending = Object.values(hub.sections).filter((s) =>

@@ -1,10 +1,11 @@
-// packages/mobile/services/WorkspaceContext.tsx
 import {
   AgentIndexEntry,
+  HubService,
+  LoggerService,
+  RegistryService,
   WorkspaceManifest,
   WorkspaceManifestSchema,
-} from "@/types/manifest";
-import { IoService, LoggerService, RegistryService } from "@hub-spoke/core";
+} from "@hub-spoke/core";
 import { Directory, File } from "expo-file-system";
 import React, {
   createContext,
@@ -48,11 +49,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       description: a.description,
     }));
 
-    const hubIds = await IoService.findAllHubsInWorkspace(workspaceDir.uri);
+    const hubIds = await HubService.listHubs(workspaceDir.uri);
     const hubEntries = await Promise.all(
       hubIds.map(async (hubId) => {
         const hubDir = new Directory(workspaceDir.uri, "posts", hubId);
-        const parsed = await IoService.readHub(hubDir.uri);
+        const parsed = await HubService.readHub(hubDir.uri);
         return {
           id: hubId,
           title: parsed.frontmatter.title,
