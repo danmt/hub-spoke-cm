@@ -22,4 +22,25 @@ export class Vibe {
   static async selection() {
     await Haptics.selectionAsync();
   }
+
+  /**
+   * Success feedback for completed evolutions, saves, or forks.
+   */
+  static async success() {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+
+  /**
+   * Error feedback for hard conflicts, rejected operations, or failures.
+   */
+  static async error() {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  }
+
+  /**
+   * Warning feedback for cautious actions or destructive prompts.
+   */
+  static async warning() {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+  }
 }

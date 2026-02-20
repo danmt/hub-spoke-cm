@@ -1,9 +1,4 @@
-import {
-  AgentIdentity,
-  AgentKnowledge,
-  EvolutionAnalysis,
-} from "../types/index.js";
-import { IntelligenceService } from "./IntelligenceService.js";
+import { AgentIdentity, AgentKnowledge } from "../types/index.js";
 import { IoService } from "./IoService.js";
 import { ArtifactType } from "./RegistryService.js";
 
@@ -150,124 +145,86 @@ export class AgentService {
     }
   }
 
-  /**
-   * Physically clones an agent package into a new directory with a new identity.
-   * Filters knowledge to remove contradictions as defined in Phase 4.
-   */
   static async forkAgent(
-    apiKey: string,
-    model: string,
     workspaceRoot: string,
-    originalId: string,
-    newId: string,
-    type: ArtifactType,
-    newDisplayName: string,
-    analysis: EvolutionAnalysis,
-  ): Promise<{
-    id: string;
-    description: string;
-    truths: {
-      text: string;
-      weight: number;
-    }[];
-  }> {
+    params: {
+      originalId: string;
+      newId: string;
+      type: ArtifactType;
+      newDisplayName: string;
+      newMetadata?: Record<string, any>;
+      newBehavior?: string;
+      newDescription: string;
+      newTruths: any[];
+      birthReason: string;
+    },
+  ): Promise<void> {
     const oldPkgDir = IoService.join(
       workspaceRoot,
       "agents",
-      `${type}s`,
-      originalId,
+      `${params.type}s`,
+      params.originalId,
     );
     const newPkgDir = IoService.join(
       workspaceRoot,
       "agents",
-      `${type}s`,
-      newId,
+      `${params.type}s`,
+      params.newId,
     );
 
-    // 1. Read current core artifacts from parent
+    // 1. Read parent identity to maintain base settings (type, etc.)
     const identityRaw = await IoService.readFile(
       IoService.join(oldPkgDir, "agent.json"),
     );
-    const behavior = await IoService.readFile(
-      IoService.join(oldPkgDir, "behavior.md"),
-    );
-    const knowledgeRaw = await IoService.readFile(
-      IoService.join(oldPkgDir, "knowledge.json"),
-    );
-
     const parentIdentity = JSON.parse(identityRaw);
-    const parentKnowledge: AgentKnowledge = JSON.parse(knowledgeRaw);
 
-    // 3. Update Identity Metadata if a metadata field was violated
+    // 2. Construct New Identity
     const childIdentity = {
       ...parentIdentity,
-      id: newId,
-      displayName: newDisplayName,
+      id: params.newId,
+      displayName: params.newDisplayName,
+      metadata: params.newMetadata || parentIdentity.metadata,
     };
 
-    if (
-      analysis.violatedMetadataField &&
-      analysis.newMetadataValue &&
-      childIdentity.metadata
-    ) {
-      childIdentity.metadata[analysis.violatedMetadataField] =
-        analysis.newMetadataValue;
-    }
-
-    const truthsToPurge = new Set([
-      analysis.violatedTruth,
-      ...(analysis.contradictoryTruths || []),
-    ]);
-
-    const childTruths = parentKnowledge.truths.filter(
-      (t) => !truthsToPurge.has(t.text),
-    );
-
-    const newDescription =
-      await IntelligenceService.generateInferredDescription(
-        apiKey,
-        model,
-        newDisplayName,
-        behavior,
-        childTruths,
-        childIdentity.metadata || {},
-      );
-
-    // 4. Create new package structure
+    // 3. Prepare File System
     await IoService.makeDir(newPkgDir);
+
+    // 4. Write Artifacts
     await IoService.writeFile(
       IoService.join(newPkgDir, "agent.json"),
       JSON.stringify(childIdentity, null, 2),
     );
+
     await IoService.writeFile(
       IoService.join(newPkgDir, "behavior.md"),
-      behavior,
+      params.newBehavior ||
+        (await IoService.readFile(IoService.join(oldPkgDir, "behavior.md"))),
     );
 
-    // Save filtered knowledge
     await IoService.writeFile(
       IoService.join(newPkgDir, "knowledge.json"),
       JSON.stringify(
         {
-          description: newDescription,
-          truths: childTruths,
+          description: params.newDescription,
+          truths: params.newTruths,
         },
         null,
         2,
       ),
     );
 
-    // 5. Write Lineage Data (birth.json)
-    const birthData = {
-      parentId: originalId,
-      birthReason: analysis.thoughtProcess,
-      timestamp: new Date().toISOString(),
-    };
+    // 5. Lineage
     await IoService.writeFile(
       IoService.join(newPkgDir, "birth.json"),
-      JSON.stringify(birthData, null, 2),
+      JSON.stringify(
+        {
+          parentId: params.originalId,
+          birthReason: params.birthReason,
+          timestamp: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
     );
-
-    return { id: newId, description: newDescription, truths: childTruths };
   }
 }

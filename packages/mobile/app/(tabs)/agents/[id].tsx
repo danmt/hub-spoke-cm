@@ -13,7 +13,9 @@ import {
   AgentService,
   AssemblerArtifact,
   ConfigService,
+  EvolutionEngine,
   EvolutionResult,
+  EvolutionService,
   PersonaArtifact,
   SecretService,
   WriterArtifact,
@@ -118,12 +120,15 @@ export default function AgentDetailsScreen() {
       setEvolutionResult(result);
 
       if (result.conflictType === "hard") {
-        setNewForkName(result.suggestedForkName || "");
+        setNewForkName(
+          result.suggestedForkName || `${artifact.displayName} (Fork)`,
+        );
         setShowForkModal(true);
+        Vibe.error();
       } else {
         await loadLearningData(); // Refresh history for soft updates
+        Vibe.success();
       }
-      Vibe.handoff();
     } catch (err: any) {
       Alert.alert("Evolution Failed", err.message);
     } finally {
@@ -131,31 +136,31 @@ export default function AgentDetailsScreen() {
     }
   };
 
+  // REACTIVE FORK (Solves Semantic Conflicts)
   const executeFork = async () => {
     if (!evolutionResult || !activeWorkspace) return;
 
     const secret = await SecretService.getSecret();
     const config = await ConfigService.getConfig();
 
-    if (!secret.apiKey) {
-      Alert.alert("Gemini API Key is missing");
+    if (!secret.apiKey || !config.model) {
+      Alert.alert(
+        "Configuration Missing",
+        "Gemini API Key or Model is not set.",
+      );
       return;
     }
 
-    if (!config.model) {
-      Alert.alert("Model is missing");
-      return;
-    }
-
-    setIsForking(true); // Lock the UI
+    setIsForking(true);
 
     try {
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+
       const newId = Crypto.randomUUID();
-      const newAgent = await AgentService.forkAgent(
+      const forkedAgent = await EvolutionEngine.forkFromConflict(
+        workspaceDir.uri,
         secret.apiKey,
         config.model,
-        workspaceDir.uri,
         id,
         newId,
         type,
@@ -163,27 +168,86 @@ export default function AgentDetailsScreen() {
         evolutionResult.analysis,
       );
 
-      await AgentService.clearFeedbackBuffer(workspaceDir.uri, type, id);
-      setShowForkModal(false);
-      setEvolutionResult(null);
-
       await upsertAgentIndex({
         id: newId,
         type,
         displayName: newForkName,
-        description: newAgent.description,
+        description: forkedAgent.description || "Specialized Agent",
       });
 
+      await AgentService.clearFeedbackBuffer(workspaceDir.uri, type, id);
+
+      setShowForkModal(false);
+      setEvolutionResult(null);
       await refresh();
       await Vibe.handoff();
 
-      Alert.alert("Success", `Specialized agent "${newForkName}" created.`, [
-        { text: "View Registry", onPress: () => router.push("/(tabs)/agents") },
+      Alert.alert("Success", `Specialized agent "${newForkName}" birthed.`, [
+        {
+          text: "View Agent",
+          onPress: () =>
+            router.replace({
+              pathname: "/(tabs)/agents/[id]",
+              params: { id: newId, type },
+            }),
+        },
       ]);
     } catch (err: any) {
       Alert.alert("Fork Failed", err.message);
     } finally {
-      setIsForking(false); // Release the lock
+      setIsForking(false);
+    }
+  };
+
+  // FORCE OVERWRITE (Ignores contradictions, forces the soft update)
+  const executeOverwrite = async () => {
+    if (!evolutionResult || !activeWorkspace) return;
+    setIsForking(true);
+
+    try {
+      const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
+
+      const updatedTruths = EvolutionService.applyProposals(
+        artifact.truths || [],
+        evolutionResult.analysis.proposals,
+      );
+
+      const updatedMetadata: Record<string, any> = artifact.metadata
+        ? { ...artifact.metadata }
+        : {};
+
+      if (
+        evolutionResult.violatedMetadataField &&
+        evolutionResult.newMetadataValue
+      ) {
+        updatedMetadata[evolutionResult.violatedMetadataField] =
+          evolutionResult.newMetadataValue;
+      }
+
+      await AgentService.saveAgent(workspaceDir.uri, {
+        identity: { ...artifact, metadata: updatedMetadata },
+        behavior: artifact.content,
+        knowledge: {
+          description: evolutionResult.newDescription || artifact.description,
+          truths: updatedTruths,
+        },
+      });
+
+      await AgentService.clearFeedbackBuffer(workspaceDir.uri, type, id);
+
+      setShowForkModal(false);
+      setEvolutionResult(null);
+      await refresh();
+      await loadLearningData();
+      Vibe.success();
+      Alert.alert(
+        "Agent Overwritten",
+        "The core identity has been forcefully pivoted.",
+      );
+    } catch (err: any) {
+      Alert.alert("Overwrite Failed", err.message);
+    } finally {
+      setIsForking(false);
     }
   };
 
@@ -254,6 +318,20 @@ export default function AgentDetailsScreen() {
         {artifact.type === "assembler" && (
           <AssemblerDisplay artifact={artifact} theme={themeColors} />
         )}
+
+        {/* PROACTIVE FORK BUTTON */}
+        <Pressable
+          style={styles.forkProactiveButton}
+          onPress={() => {
+            router.push({
+              pathname: "/(tabs)/agents/editor",
+              params: { id: artifact.id, type: artifact.type, mode: "fork" },
+            });
+          }}
+        >
+          <FontAwesome name="code-fork" size={16} color="#FFD700" />
+          <Text style={styles.forkProactiveText}>Fork & Evolve Manually</Text>
+        </Pressable>
 
         {/* System Instructions Section */}
         <Text style={styles.sectionTitle}>Behaviour</Text>
@@ -365,7 +443,7 @@ export default function AgentDetailsScreen() {
           </View>
         )}
 
-        {/* NEW Unified Learning Actions Footer */}
+        {/* Unified Learning Actions Footer */}
         <View style={styles.learningActionsFooter}>
           <Pressable
             style={[
@@ -464,7 +542,11 @@ export default function AgentDetailsScreen() {
       </Modal>
 
       {/* Evolution Summary Modal */}
-      <Modal visible={!!evolutionResult} transparent animationType="slide">
+      <Modal
+        visible={!!evolutionResult && !showForkModal}
+        transparent
+        animationType="slide"
+      >
         <View style={styles.modalOverlay}>
           <View
             style={[
@@ -509,8 +591,12 @@ export default function AgentDetailsScreen() {
         </View>
       </Modal>
 
+      {/* Conflict / Fork Modal */}
       <Modal visible={showForkModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
           <View
             style={[
               styles.modalContent,
@@ -556,34 +642,63 @@ export default function AgentDetailsScreen() {
               placeholder="e.g. Playful Juan"
             />
 
-            <View style={styles.modalActions}>
+            <View
+              style={[
+                styles.modalActions,
+                {
+                  flexWrap: "wrap",
+                  justifyContent: "space-between",
+                  marginTop: 20,
+                },
+              ]}
+            >
               <Pressable
                 style={styles.cancelBtn}
                 onPress={() => setShowForkModal(false)}
               >
                 <Text style={styles.cancelBtnText}>Discard</Text>
               </Pressable>
-              <Pressable
-                style={[
-                  styles.saveBtn,
-                  {
-                    backgroundColor: isForking
-                      ? "#666"
-                      : themeColors.buttonPrimary,
-                  },
-                ]}
-                onPress={executeFork}
-                disabled={isForking}
-              >
-                {isForking ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.saveBtnText}>Fork Agent</Text>
-                )}
-              </Pressable>
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <Pressable
+                  style={[
+                    styles.saveBtn,
+                    {
+                      backgroundColor: "transparent",
+                      borderWidth: 1,
+                      borderColor: "#ff4444",
+                    },
+                  ]}
+                  onPress={executeOverwrite}
+                  disabled={isForking}
+                >
+                  <Text style={{ color: "#ff4444", fontWeight: "bold" }}>
+                    Overwrite
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.saveBtn,
+                    {
+                      backgroundColor: isForking
+                        ? "#666"
+                        : themeColors.buttonPrimary,
+                    },
+                  ]}
+                  onPress={executeFork}
+                  disabled={isForking}
+                >
+                  {isForking ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>Fork Agent</Text>
+                  )}
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -731,6 +846,21 @@ const styles = StyleSheet.create({
   },
   description: { fontSize: 16, lineHeight: 22, opacity: 0.8 },
   metaSection: { marginBottom: 25 },
+
+  forkProactiveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 215, 0, 0.15)",
+    borderColor: "#FFD700",
+    borderWidth: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
+    marginBottom: 25,
+  },
+  forkProactiveText: { color: "#FFD700", fontWeight: "bold", fontSize: 16 },
+
   sectionTitle: {
     fontSize: 14,
     fontWeight: "900",
@@ -879,14 +1009,18 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: "row",
-    justifyContent: "flex-end",
     alignItems: "center",
-    gap: 20,
     marginTop: 10,
   },
   cancelBtn: { padding: 10 },
   cancelBtnText: { color: "#888", fontWeight: "bold" },
-  saveBtn: { paddingHorizontal: 25, paddingVertical: 15, borderRadius: 12 },
+  saveBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   saveBtnText: { color: "#fff", fontWeight: "bold" },
   proposalItem: {
     padding: 10,
@@ -897,9 +1031,9 @@ const styles = StyleSheet.create({
   conflictCard: {
     padding: 20,
     borderRadius: 16,
-    backgroundColor: "rgba(255, 68, 68, 0.1)", // Light red background for attention
+    backgroundColor: "rgba(255, 68, 68, 0.1)",
     borderLeftWidth: 4,
-    borderLeftColor: "#ff4444", // Strong red accent for the contradiction
+    borderLeftColor: "#ff4444",
     marginBottom: 20,
     width: "100%",
   },
@@ -907,6 +1041,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     fontWeight: "500",
-    color: "#fff", // Adjust based on theme if necessary
+    color: "#fff",
   },
 });

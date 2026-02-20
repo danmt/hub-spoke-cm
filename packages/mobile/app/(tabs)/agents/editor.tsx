@@ -15,6 +15,7 @@ import {
   ArtifactType,
   AssemblerArtifact,
   ConfigService,
+  EvolutionEngine,
   IntelligenceService,
   PersonaArtifact,
   SecretService,
@@ -42,16 +43,25 @@ type AgentFormState =
 
 export default function AgentEditorScreen() {
   const router = useRouter();
-  const { id, type: initialType } = useLocalSearchParams<{
+  const {
+    id,
+    type: initialType,
+    mode,
+  } = useLocalSearchParams<{
     id: string;
     type: ArtifactType;
+    mode?: "fork";
   }>();
+
   const { activeWorkspace, upsertAgentIndex } = useWorkspace();
-  const { getAgent } = useAgents();
+  const { getAgent, refresh } = useAgents();
   const themeColors = Colors[useColorScheme() ?? "dark"];
-  const isEditMode = !!id;
+
+  const isForkMode = mode === "fork";
+  const isEditMode = !!id && !isForkMode;
+
   const [state, setState] = useState<EditorState>(
-    isEditMode ? "EDITING" : "SELECTING_TYPE",
+    isEditMode || isForkMode ? "EDITING" : "SELECTING_TYPE",
   );
   const [agentType, setAgentType] = useState<ArtifactType>(
     initialType || "persona",
@@ -70,7 +80,7 @@ export default function AgentEditorScreen() {
       tone: "",
     },
   });
-  const { refresh } = useAgents();
+
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [prerequisites, setPrerequisites] = useState<{
     model: string;
@@ -82,7 +92,6 @@ export default function AgentEditorScreen() {
       const secret = await SecretService.getSecret();
       const config = await ConfigService.getConfig();
 
-      // 1. Check for API Key
       if (!secret.apiKey) {
         setStatusMessage(
           "Missing Gemini API Key. Please set it in Settings > Secrets.",
@@ -91,7 +100,6 @@ export default function AgentEditorScreen() {
         return;
       }
 
-      // 2. Check for Default Model
       if (!config.model) {
         setStatusMessage(
           "Default AI Model not set. Please configure it in Settings.",
@@ -110,13 +118,18 @@ export default function AgentEditorScreen() {
   }, [activeWorkspace]);
 
   useEffect(() => {
-    if (isEditMode && id) {
+    if ((isEditMode || isForkMode) && id) {
       const existing = getAgent(agentType, id);
       if (existing) {
-        setFormData({ ...existing.artifact });
+        setFormData({
+          ...existing.artifact,
+          displayName: isForkMode
+            ? `${existing.artifact.displayName} (Fork)`
+            : existing.artifact.displayName,
+        });
       }
     }
-  }, [id, isEditMode, agentType, getAgent]);
+  }, [id, isEditMode, isForkMode, agentType, getAgent]);
 
   const validateForm = (): boolean => {
     if (!formData.displayName?.trim()) {
@@ -164,6 +177,52 @@ export default function AgentEditorScreen() {
     try {
       const workspaceDir = WorkspaceManager.getWorkspaceUri(activeWorkspace);
 
+      // --- NEW: SMART FORK LOGIC ---
+      if (isForkMode && id) {
+        const metadataPayload =
+          agentType === "persona"
+            ? {
+                tone: (formData as Partial<PersonaArtifact>).metadata?.tone,
+                language: (formData as Partial<PersonaArtifact>).metadata
+                  ?.language,
+                accent: (formData as Partial<PersonaArtifact>).metadata?.accent,
+              }
+            : {};
+
+        const newId = Crypto.randomUUID();
+
+        // 1. Orchestrate the Proactive Smart Fork
+        const forkedAgent = await EvolutionEngine.forkFromManualChange(
+          workspaceDir.uri,
+          prerequisites.apiKey,
+          prerequisites.model,
+          id,
+          newId,
+          agentType,
+          formData.displayName!,
+          formData.content!,
+          metadataPayload,
+        );
+
+        // 2. Fetch the AI-generated description from the new package to update the index
+        await upsertAgentIndex({
+          id: forkedAgent.id,
+          type: agentType,
+          displayName: forkedAgent.name,
+          description: forkedAgent.description || "Specialized Agent Fork",
+        });
+
+        await refresh();
+        await Vibe.handoff();
+
+        setSavedAgentId(forkedAgent.id);
+        setSavedAgentDisplayName(formData.displayName!);
+        setState("DONE");
+        return;
+      }
+      // --- END SMART FORK LOGIC ---
+
+      // --- EXISTING: CREATE / EDIT LOGIC ---
       let existingTruths: AgentTruth[] = [];
       let targetId = id;
 
@@ -208,7 +267,7 @@ export default function AgentEditorScreen() {
       await upsertAgentIndex({
         id: targetId,
         type: agentType,
-        displayName: formData.displayName,
+        displayName: formData.displayName!,
         description,
       });
 
@@ -317,7 +376,9 @@ export default function AgentEditorScreen() {
       <View style={styles.centered}>
         <Stack.Screen options={{ headerRight: undefined }} />
         <Text style={styles.victoryEmoji}>🚀</Text>
-        <Text style={styles.title}>Agent Deployed</Text>
+        <Text style={styles.title}>
+          {isForkMode ? "Agent Forked" : "Agent Deployed"}
+        </Text>
         <Text style={styles.doneSub}>
           Agent {savedAgentDisplayName} is ready for action.
         </Text>
@@ -339,6 +400,12 @@ export default function AgentEditorScreen() {
     );
   }
 
+  const getHeaderTitle = () => {
+    if (isForkMode) return `Forking ${id.split("-")[0]}`;
+    if (isEditMode) return `Edit ${id.split("-")[0]}`;
+    return `New ${agentType}`;
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -346,7 +413,7 @@ export default function AgentEditorScreen() {
     >
       <Stack.Screen
         options={{
-          title: isEditMode ? `Edit ${id}` : `New ${agentType}`,
+          title: getHeaderTitle(),
           headerRight: () =>
             state === "SAVING" ? (
               <ActivityIndicator size="small" color={themeColors.tint} />
@@ -354,12 +421,12 @@ export default function AgentEditorScreen() {
               <Pressable onPress={handleSave}>
                 <Text
                   style={{
-                    color: themeColors.tint,
+                    color: isForkMode ? "#FFD700" : themeColors.tint,
                     fontWeight: "bold",
                     fontSize: 16,
                   }}
                 >
-                  Save
+                  {isForkMode ? "Birth Fork" : "Save"}
                 </Text>
               </Pressable>
             ),

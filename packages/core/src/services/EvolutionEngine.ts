@@ -1,8 +1,9 @@
 // packages/core/src/services/EvolutionEngine.ts
-import { EvolutionAnalysis } from "../types/index.js";
+import { AgentKnowledge, EvolutionAnalysis } from "../types/index.js";
 import { AgentService } from "./AgentService.js";
 import { EvolutionService } from "./EvolutionService.js";
 import { IntelligenceService } from "./IntelligenceService.js";
+import { IoService } from "./IoService.js";
 import { LoggerService } from "./LoggerService.js";
 import { ArtifactType, RegistryService } from "./RegistryService.js";
 
@@ -132,5 +133,148 @@ export class EvolutionEngine {
         .map((p) => p.text),
       newDescription,
     };
+  }
+
+  /**
+   * forkFromConflict: The Orchestrator for reactive forks.
+   * This logic lives here because it requires the AI (IntelligenceService)
+   * to clean up the new agent's identity.
+   */
+  static async forkFromConflict(
+    workspaceRoot: string,
+    apiKey: string,
+    model: string,
+    originalId: string,
+    newId: string,
+    type: ArtifactType,
+    newDisplayName: string,
+    analysis: EvolutionAnalysis,
+  ): Promise<{ id: string; name: string; description: string }> {
+    const oldPkgDir = IoService.join(
+      workspaceRoot,
+      "agents",
+      `${type}s`,
+      originalId,
+    );
+
+    const identityRaw = await IoService.readFile(
+      IoService.join(oldPkgDir, "agent.json"),
+    );
+    const behavior = await IoService.readFile(
+      IoService.join(oldPkgDir, "behavior.md"),
+    );
+    const knowledgeRaw = await IoService.readFile(
+      IoService.join(oldPkgDir, "knowledge.json"),
+    );
+
+    const parentIdentity = JSON.parse(identityRaw);
+    const parentKnowledge: AgentKnowledge = JSON.parse(knowledgeRaw);
+
+    // 1. Semantic Purge: Identify truths that clash with the conflict/new metadata
+    const truthsToPurge = new Set([
+      analysis.violatedTruth,
+      ...(analysis.contradictoryTruths || []),
+    ]);
+    const childTruths = parentKnowledge.truths.filter(
+      (t) => !truthsToPurge.has(t.text),
+    );
+
+    // 2. Metadata Pivot: Apply the AI-suggested change (e.g. Tone: Joking)
+    const childMetadata = { ...(parentIdentity.metadata || {}) };
+    if (analysis.violatedMetadataField && analysis.newMetadataValue) {
+      childMetadata[analysis.violatedMetadataField] = analysis.newMetadataValue;
+    }
+
+    // 3. AI Inference: Generate a fresh description based on the specialized identity
+    const newDescription =
+      await IntelligenceService.generateInferredDescription(
+        apiKey,
+        model,
+        newDisplayName,
+        behavior,
+        childTruths,
+        childMetadata,
+      );
+
+    // 4. Execution: Tell AgentService to perform the physical I/O
+    await AgentService.forkAgent(workspaceRoot, {
+      originalId,
+      newId,
+      type,
+      newDisplayName,
+      newMetadata: childMetadata,
+      newDescription,
+      newTruths: childTruths,
+      birthReason: analysis.thoughtProcess,
+    });
+
+    await AgentService.clearFeedbackBuffer(workspaceRoot, type, originalId);
+
+    return { id: newId, name: newDisplayName, description: newDescription };
+  }
+
+  /**
+   * forkFromManualChange: The Orchestrator for proactive/user-driven forks.
+   * Used when a user manually edits behavior or metadata and wants a
+   * "Smart Clone" that filters existing knowledge for compatibility.
+   */
+  static async forkFromManualChange(
+    workspaceRoot: string,
+    apiKey: string,
+    model: string,
+    originalId: string,
+    newId: string,
+    type: ArtifactType,
+    newDisplayName: string,
+    newBehavior: string,
+    newMetadata: Record<string, any>,
+  ): Promise<{ id: string; name: string; description: string }> {
+    const oldPkgDir = IoService.join(
+      workspaceRoot,
+      "agents",
+      `${type}s`,
+      originalId,
+    );
+
+    // 1. Load Parent Knowledge
+    const knowledgeRaw = await IoService.readFile(
+      IoService.join(oldPkgDir, "knowledge.json"),
+    );
+    const parentKnowledge: AgentKnowledge = JSON.parse(knowledgeRaw);
+
+    // 2. Smart Knowledge Migration
+    // We ask the AI to compare the OLD truths against the NEW behavior.
+    const migration = await IntelligenceService.migrateKnowledge(
+      apiKey,
+      model,
+      newBehavior,
+      parentKnowledge.truths,
+    );
+
+    // 3. Generate Specialized Description for the new behavior/metadata
+    const newDescription =
+      await IntelligenceService.generateInferredDescription(
+        apiKey,
+        model,
+        newDisplayName,
+        newBehavior,
+        migration.keptTruths,
+        newMetadata,
+      );
+
+    // 4. Execution: Create the physical artifacts
+    await AgentService.forkAgent(workspaceRoot, {
+      originalId,
+      newId,
+      type,
+      newDisplayName,
+      newMetadata,
+      newBehavior,
+      newDescription,
+      newTruths: migration.keptTruths,
+      birthReason: `Manual behavior evolution: ${migration.thoughtProcess}`,
+    });
+
+    return { id: newId, name: newDisplayName, description: newDescription };
   }
 }
