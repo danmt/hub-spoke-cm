@@ -1,59 +1,50 @@
-// src/agents/Assembler.ts
+// packages/core/src/agents/Assembler.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
-import { AgentTruth, HubBlueprint } from "../types/index.js";
+import { AgentTruth } from "../types/index.js";
 import { MAX_TRUTHS_FOR_CONTEXT } from "../utils/consts.js";
-import { extractTag } from "../utils/extractTag.js";
 
 export type AssemblerInteractionResponse =
-  | {
-      action: "proceed";
-    }
-  | {
-      action: "feedback";
-      feedback: string;
-    };
+  | { action: "proceed" }
+  | { action: "feedback"; feedback: string };
 
-export type AssemblerInteractionHandler = (
-  params: AssembleResponse,
-) => Promise<AssemblerInteractionResponse>;
-
-export interface AssembleContext {
-  topic: string;
-  goal: string;
-  audience: string;
-  allowedWriters: WriterInfo[];
-  interact?: AssemblerInteractionHandler;
-  onRetry?: (error: Error) => Promise<boolean>;
-  onThinking?: (agentId: string) => void;
+export interface OutlineSection {
+  id: string;
+  header: string;
+  level: number;
+  intent: string;
+  bridge: string;
+  assemblerId: string;
 }
 
-export interface AssembleResponse {
+export interface BlockTask {
+  id: string;
+  intent: string;
+  writerId: string;
+}
+
+export interface AssembleOutlineResponse {
   agentId: string;
-  blueprint: HubBlueprint;
+  sections: OutlineSection[];
 }
 
-export interface AssemblerGenerateContext {
-  topic: string;
-  goal: string;
-  audience: string;
-  allowedWriters: WriterInfo[];
-  feedback?: string;
+export interface AssembleBlocksResponse {
+  agentId: string;
+  blocks: BlockTask[];
 }
 
-export interface WriterInfo {
+export interface AgentInfo {
   id: string;
   description: string;
 }
 
-export interface AssemblerGenerateResponse {
-  agentId: string;
-  blueprint: HubBlueprint;
-}
+// Strictly "outline" or "block" - no hybrid allowed
+export type AssemblerRole = "outline" | "block";
 
 export class Assembler {
-  private readonly systemInstruction: string;
   private history: any[] = [];
+  private learnedContext: string;
+  private readonly systemInstruction: string;
 
   constructor(
     private readonly apiKey: string,
@@ -61,191 +52,289 @@ export class Assembler {
     public id: string,
     public displayName: string,
     public description: string,
-    behaviour: string,
+    private readonly behaviour: string,
     truths: AgentTruth[] = [],
+    public role: AssemblerRole,
   ) {
-    const learnedContext = truths
+    this.learnedContext = truths
       .sort((a, b) => b.weight - a.weight)
       .slice(0, MAX_TRUTHS_FOR_CONTEXT)
       .map((t) => `- ${t.text}`)
       .join("\n");
 
-    this.systemInstruction = `
-      You are a Lead Content Architect. Your mission is to decompose a high-level project into a surgical, sequential execution blueprint.
+    // The system instruction is permanently forged at construction based on the role
+    if (this.role === "outline") {
+      this.systemInstruction = `
+        You are a Lead Content Architect. Your mission is to define the MACRO structure of a document.
+        OUTLINE STRATEGY: ${this.behaviour}
+        ${this.learnedContext ? `LEARNED CONTEXT:\n${this.learnedContext}` : ""}
 
-      STRATEGY: ${behaviour}
+        CRITICAL REQUIREMENT: "MACRO-LEVEL INTENTS"
+        Every section's 'intent' must be a detailed macro-brief (50-100 words) that explicitly includes:
+        1. PRIMARY FOCUS: The overarching goal of this section.
+        2. NARRATIVE PURPOSE: How this section serves the overall document goal.
+        3. SCOPE BOUNDARY: What explicitly belongs in OTHER sections.
 
-      ${learnedContext ? `LEARNED CONTEXT (MANDATORY GUIDELINES):\n${learnedContext}` : ""}
+        RULES:
+        1. Create a logical sequence of sections.
+        2. Set header 'level' to 2 (for ##) or 3 (for ###).
+        3. The 'bridge' explains how to transition into this section from previous ones.
+        4. Do NOT assign writers. You are only building the outline.
+        5. ASSIGN ASSEMBLER: You must assign exactly ONE Assembler ID from the [ALLOWED_ASSEMBLERS] list to handle the micro-delegation for each section.
+        
+        OUTPUT PROTOCOL:
+        You MUST respond ONLY with a valid, raw JSON object. Do not include markdown formatting or conversational text.
 
-      CRITICAL REQUIREMENT: "FUTURE-AWARE INTENTS"
-      Every section's 'intent' must be a detailed micro-brief (50-100 words) that includes:
-      1. PRIMARY FOCUS: The specific technical or narrative goal of THIS section.
-      2. SCOPE BOUNDARY: Explicitly list what NOT to mention because it belongs in a later section.
-      3. THE HAND-OFF: How this section should end to prime the reader for the next specific header.
+        JSON SCHEMA REQUIRED:
+        {
+          "sections": [
+            {
+              "id": "unique-slug",
+              "header": "Section Title",
+              "level": 2,
+              "intent": "FOCUS: [Macro goal] \\nPURPOSE: [Narrative role] \\nBOUNDARY: [What to save for later]",
+              "bridge": "Transition context",
+              "assemblerId": "chosen-assembler-id"
+            }
+          ]
+        }
+      `.trim();
+    } else {
+      this.systemInstruction = `
+        You are a Content Editor delegating micro-tasks for a single document section.
+        DELEGATION STRATEGY: ${this.behaviour}
+        ${this.learnedContext ? `LEARNED CONTEXT:\n${this.learnedContext}` : ""}
 
-      CRITICAL REQUIREMENT: "NARRATIVE CONNECTIVITY"
-      For every component, you must define a [BRIDGE]. 
-      This is one paragraph instruction for the writer on how to transition into the current section. 
-      It must mentions all the concepts that have been covered so far.
+        CRITICAL REQUIREMENT: "FUTURE-AWARE INTENTS"
+        Every block's 'intent' must be a highly detailed micro-brief (50-150 words) that explicitly includes:
+        1. PRIMARY FOCUS: The specific technical or narrative goal of THIS block.
+        2. SCOPE BOUNDARY: Explicitly list what NOT to mention because it belongs in a later block or section.
+        3. THE HAND-OFF: How this block should end to prime the reader for the next specific block.
 
-      EXECUTION RULES:
-      1. WRITER SELECTION: For every [COMPONENT], you MUST select exactly ONE Writer ID from the provided [ALLOWED_WRITERS] list. 
-      2. LANGUAGE: Write blueprint headers and intents in English.
+        RULES:
+        1. Break the section's intent down into 1 or more atomic blocks.
+        2. Assign exactly ONE Writer ID from the [ALLOWED_WRITERS] to each block based on their description.
 
-      INPUT FORMAT:
-      [TOPIC]Topic of the blueprint[/TOPIC]
-      [GOAL]Goal of the blueprint[/GOAL]
-      [AUDIENCE]Audience of the blueprint[/AUDIENCE]
-      [ALLOWED_WRITERS]
-        - id1: Writer with ID 1
-        - id2: Writer to do XYZ
-      [/ALLOWED_WRITERS]
+        OUTPUT PROTOCOL:
+        You MUST respond ONLY with a valid, raw JSON object. Do not include markdown formatting or conversational text.
 
-      OUTPUT FORMAT (Use these exact delimiters):
-      [HUB_ID]slugified-topic-id[/HUB_ID]
-      
-      [COMPONENT]
-      [ID]unique-section-id[/ID]
-      [HEADER]Section Title[/HEADER]
-      [INTENT]Detailed micro-brief focusing on the [TOPIC] for the [AUDIENCE][/INTENT]
-      [WRITER_ID]id1[/WRITER_ID]
-      [BRIDGE]Context of the concepts already covered so far[/BRIDGE]
-      [/COMPONENT]
-
-      Remember: Every [COMPONENT] must include [ID], [HEADER], [INTENT], [WRITER_ID], and [BRIDGE] tags. Always include a closing tag.
-    `.trim();
+        JSON SCHEMA REQUIRED:
+        {
+          "blocks": [
+            {
+              "id": "b1",
+              "intent": "FOCUS: [What to write] \\nBOUNDARY: [What to avoid] \\nHAND-OFF: [How to end]",
+              "writerId": "chosen-writer-id"
+            }
+          ]
+        }
+      `.trim();
+    }
   }
 
-  async assemble(ctx: AssembleContext): Promise<AssembleResponse> {
+  /**
+   * Helper utility to safely extract and parse JSON from LLM outputs
+   */
+  private safelyParseJson<T>(text: string, context: string): T {
+    try {
+      const cleanText = text
+        .replace(/^```(?:json)?/i, "")
+        .replace(/```$/i, "")
+        .trim();
+      return JSON.parse(cleanText) as T;
+    } catch (error) {
+      throw new Error(
+        `Assembler failed to output valid JSON for ${context}. Output was: ${text.substring(0, 100)}...`,
+      );
+    }
+  }
+
+  // ============================================================================
+  // PASS 1: MACRO OUTLINE
+  // ============================================================================
+
+  async assembleOutline(ctx: {
+    topic: string;
+    goal: string;
+    audience: string;
+    allowedAssemblers: AgentInfo[];
+    interact?: (
+      params: AssembleOutlineResponse,
+    ) => Promise<AssemblerInteractionResponse>;
+    onRetry?: (error: Error) => Promise<boolean>;
+    onThinking?: (agentId: string) => void;
+  }): Promise<AssembleOutlineResponse> {
+    if (this.role !== "outline") {
+      throw new Error(
+        `Assembler "${this.id}" is restricted to 'block' delegation and cannot generate outlines.`,
+      );
+    }
+
     let currentFeedback: string | undefined = undefined;
 
     while (true) {
       try {
         if (ctx.onThinking) ctx.onThinking(this.id);
 
-        const generated = await this.generate({
-          audience: ctx.audience,
-          goal: ctx.goal,
-          topic: ctx.topic,
-          allowedWriters: ctx.allowedWriters,
-          feedback: currentFeedback,
-        });
+        const assemblersContext = ctx.allowedAssemblers
+          .map((a) => `- ${a.id}: ${a.description}`)
+          .join("\n");
+        const prompt = `Topic: ${ctx.topic}\nGoal: ${ctx.goal}\nAudience: ${ctx.audience}\n\n[ALLOWED_ASSEMBLERS]\n${assemblersContext}\n[/ALLOWED_ASSEMBLERS]`;
 
-        if (!ctx.interact) {
-          return generated;
-        }
-
-        const interaction = await ctx.interact(generated);
-
-        if (interaction.action === "proceed") {
-          return generated;
-        }
-
-        currentFeedback = interaction.feedback || "Continue refinement.";
-      } catch (error: any) {
-        await LoggerService.error("Assembler failed: ", {
-          code: error.error?.code,
-          message: error.message,
-          stack: error.stack,
-          assemblerId: this.id,
-        });
-
-        if (ctx.onRetry) {
-          const shouldRetry = await ctx.onRetry?.(error);
-
-          if (shouldRetry) {
-            await LoggerService.info(
-              "Assemble retrying based on user/handler decision.",
-            );
-            continue;
-          }
-        }
-
-        throw new Error(`Assembler failed: ${error.message}`);
-      }
-    }
-  }
-
-  async generate(
-    ctx: AssemblerGenerateContext,
-  ): Promise<AssemblerGenerateResponse> {
-    const workforceManifest = ctx.allowedWriters
-      .map((w) => `- ${w.id}: ${w.description}`)
-      .join("\n");
-
-    const basePrompt = `
-        [TOPIC]${ctx.topic}[/TOPIC]
-        [GOAL]${ctx.goal}[/GOAL]
-        [AUDIENCE]${ctx.audience}[/AUDIENCE]
-        [ALLOWED_WRITERS]
-        ${workforceManifest}
-        [/ALLOWED_WRITERS]
-      `;
-
-    const prompt = ctx.feedback
-      ? `${basePrompt}\n\nUSER FEEDBACK: ${ctx.feedback}`
-      : basePrompt;
-
-    const text = await AiService.execute(prompt.trim(), {
-      model: this.model,
-      systemInstruction: this.systemInstruction,
-      history: this.history,
-      apiKey: this.apiKey,
-    });
-
-    this.history.push(
-      { role: "user", parts: [{ text: prompt }] },
-      { role: "model", parts: [{ text }] },
-    );
-
-    return this.parse(text);
-  }
-
-  private parse(text: string): AssembleResponse {
-    const hubIdMatch = text.match(/\[HUB_ID\]([\s\S]*?)\[\/HUB_ID\]/i);
-    const hubId = hubIdMatch ? hubIdMatch[1].trim() : "generated-hub";
-
-    const componentRegex = /\[COMPONENT\]([\s\S]*?)\[\/COMPONENT\]/gi;
-    const components = [];
-    let match;
-
-    while ((match = componentRegex.exec(text)) !== null) {
-      const block = match[1].trim();
-
-      const id = extractTag(block, "ID");
-      const header = extractTag(block, "HEADER");
-      const intent = extractTag(block, "INTENT");
-      const writerId = extractTag(block, "WRITER_ID");
-      const bridge = extractTag(block, "BRIDGE");
-
-      const missing = [];
-      if (!id) missing.push("ID");
-      if (!header) missing.push("HEADER");
-      if (!intent) missing.push("INTENT");
-      if (!writerId) missing.push("WRITER_ID");
-      if (!bridge) missing.push("BRIDGE");
-
-      if (missing.length > 0) {
-        throw new Error(
-          `Assembler failed to produce a valid [COMPONENT]. Missing tags: [${missing.join(", ")}] in block: ${block.substring(0, 50)}...`,
+        const text = await AiService.execute(
+          currentFeedback
+            ? `${prompt}\n\nUSER FEEDBACK: ${currentFeedback}`
+            : prompt,
+          {
+            model: this.model,
+            systemInstruction: this.systemInstruction, // Using the constructor-injected instruction
+            history: this.history,
+            apiKey: this.apiKey,
+          },
         );
+
+        this.history.push(
+          {
+            role: "user",
+            parts: [
+              {
+                text: currentFeedback ? `FEEDBACK: ${currentFeedback}` : prompt,
+              },
+            ],
+          },
+          { role: "model", parts: [{ text }] },
+        );
+
+        const parsed = this.safelyParseJson<{ sections: OutlineSection[] }>(
+          text,
+          "Assemble Outline",
+        );
+
+        if (
+          !parsed.sections ||
+          !Array.isArray(parsed.sections) ||
+          parsed.sections.length === 0
+        ) {
+          throw new Error(
+            "Assembler returned JSON, but the 'sections' array is missing or empty.",
+          );
+        }
+
+        const generated: AssembleOutlineResponse = {
+          agentId: this.id,
+          sections: parsed.sections,
+        };
+
+        if (!ctx.interact) return generated;
+        const interaction = await ctx.interact(generated);
+        if (interaction.action === "proceed") return generated;
+
+        currentFeedback = interaction.feedback;
+      } catch (error: any) {
+        await LoggerService.error("Assembler Macro failed", {
+          error: error.message,
+        });
+        if (ctx.onRetry && (await ctx.onRetry(error))) continue;
+        throw error;
       }
-
-      components.push({
-        id: id!,
-        header: header!,
-        intent: intent!,
-        writerId: writerId!,
-        bridge: bridge!,
-      });
     }
+  }
 
-    if (components.length === 0) {
+  // ============================================================================
+  // PASS 2: MICRO BLOCKS
+  // ============================================================================
+
+  async assembleBlocks(ctx: {
+    section: OutlineSection;
+    allowedWriters: AgentInfo[];
+    interact?: (
+      params: AssembleBlocksResponse,
+    ) => Promise<AssemblerInteractionResponse>;
+    onRetry?: (error: Error) => Promise<boolean>;
+    onThinking?: (agentId: string) => void;
+  }): Promise<AssembleBlocksResponse> {
+    if (this.role !== "block") {
       throw new Error(
-        "Assembler failed to produce any valid [COMPONENT] blocks. Check if AI output follows [COMPONENT]...[/COMPONENT] format.",
+        `Assembler "${this.id}" is restricted to 'outline' planning and cannot delegate blocks.`,
       );
     }
 
-    return { agentId: this.id, blueprint: { hubId, components } };
+    let currentFeedback: string | undefined = undefined;
+
+    while (true) {
+      try {
+        if (ctx.onThinking) ctx.onThinking(this.id);
+
+        const writersContext = ctx.allowedWriters
+          .map((w) => `- ${w.id}: ${w.description}`)
+          .join("\n");
+
+        const prompt = `
+          Section Header: ${ctx.section.header}
+          Section Intent: ${ctx.section.intent}
+          Section Bridge: ${ctx.section.bridge || "None"}
+          
+          [ALLOWED_WRITERS]
+          ${writersContext}
+          [/ALLOWED_WRITERS]
+        `.trim();
+
+        const text = await AiService.execute(
+          currentFeedback
+            ? `${prompt}\n\nUSER FEEDBACK: ${currentFeedback}`
+            : prompt,
+          {
+            model: this.model,
+            systemInstruction: this.systemInstruction, // Using the constructor-injected instruction
+            history: this.history,
+            apiKey: this.apiKey,
+          },
+        );
+
+        this.history.push(
+          {
+            role: "user",
+            parts: [
+              {
+                text: currentFeedback ? `FEEDBACK: ${currentFeedback}` : prompt,
+              },
+            ],
+          },
+          { role: "model", parts: [{ text }] },
+        );
+
+        const parsed = this.safelyParseJson<{ blocks: BlockTask[] }>(
+          text,
+          "Assemble Blocks",
+        );
+
+        if (
+          !parsed.blocks ||
+          !Array.isArray(parsed.blocks) ||
+          parsed.blocks.length === 0
+        ) {
+          throw new Error(
+            "Assembler returned JSON, but the 'blocks' array is missing or empty.",
+          );
+        }
+
+        const generated: AssembleBlocksResponse = {
+          agentId: this.id,
+          blocks: parsed.blocks,
+        };
+
+        if (!ctx.interact) return generated;
+        const interaction = await ctx.interact(generated);
+        if (interaction.action === "proceed") return generated;
+
+        currentFeedback = interaction.feedback;
+      } catch (error: any) {
+        await LoggerService.error("Assembler Micro failed", {
+          error: error.message,
+        });
+        if (ctx.onRetry && (await ctx.onRetry(error))) continue;
+        throw error;
+      }
+    }
   }
 }

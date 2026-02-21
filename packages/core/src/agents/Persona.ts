@@ -1,24 +1,18 @@
-// src/agents/Persona.ts
+// packages/core/src/agents/Persona.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { AgentTruth } from "../types/index.js";
 import { MAX_TRUTHS_FOR_CONTEXT } from "../utils/consts.js";
 
 export type PersonaInteractionResponse =
-  | {
-      action: "proceed";
-    }
-  | {
-      action: "feedback";
-      feedback: string;
-    };
+  | { action: "proceed" }
+  | { action: "feedback"; feedback: string };
 
 export type PersonaInteractionHandler = (
   params: PersonaResponse,
 ) => Promise<PersonaInteractionResponse>;
 
 export interface PersonaContext {
-  header: string;
   content: string;
   interact?: PersonaInteractionHandler;
   onThinking?: (agentId: string) => void;
@@ -26,14 +20,12 @@ export interface PersonaContext {
 }
 
 export interface PersonaGenerateContext {
-  header: string;
   content: string;
   feedback?: string;
 }
 
 export interface PersonaResponse {
   agentId: string;
-  header: string;
   content: string;
 }
 
@@ -71,26 +63,18 @@ export class Persona {
       ${learnedContext ? `LEARNED CONTEXT (MANDATORY GUIDELINES):\n${learnedContext}` : ""}
 
       TASK:
-      
-      You are a Voice and Tone specialist. You will receive a [NEUTRAL_HEADER] and [NEUTRAL_CONTENT].
-      Your job is to rephrase them entirely into your specific voice and tone while preserving all technical facts and meaning.
+      You are a Voice and Tone specialist. You will receive a content block to rephrase.
+      Your job is to rephrase it entirely into your specific voice and tone while preserving all technical facts and meaning.
 
       RULES:
-
-        1. Use your unique accent and tone for the header.
-        2. Rewrite the content to sound exactly like you.
-        3. Maintain all Markdown formatting and technical accuracy.
-        4. Do not change the technical intent, only the "vibe" and phrasing.
+        1. Rewrite the content to sound exactly like you.
+        2. Maintain all Markdown formatting and technical accuracy.
+        3. Do not change the technical intent, only the "vibe" and phrasing.
+        4. DO NOT add Markdown headings (like # or ##) unless they were present in the source text.
+        5. DO NOT include any conversational filler or pleasantries. Output ONLY the rephrased content.
 
       INPUT FORMAT:
-      [NEUTRAL_HEADER]Neutral header[/NEUTRAL_HEADER]
-      [NEUTRAL_CONTENT]Neutral content[/NEUTRAL_CONTENT]
-
-      OUTPUT FORMAT:
-      [HEADER]Rephrased Title[/HEADER]
-      [CONTENT]
-      Rephrased body content...
-      [/CONTENT]
+      Content: The neutral markdown text you need to rephrase
     `.trim();
   }
 
@@ -102,20 +86,14 @@ export class Persona {
         if (ctx.onThinking) ctx.onThinking(this.id);
 
         const generated = await this.generate({
-          header: ctx.header,
           content: ctx.content,
           feedback: currentFeedback,
         });
 
-        if (!ctx.interact) {
-          return generated;
-        }
+        if (!ctx.interact) return generated;
 
         const interaction = await ctx.interact(generated);
-
-        if (interaction.action === "proceed") {
-          return generated;
-        }
+        if (interaction.action === "proceed") return generated;
 
         currentFeedback = interaction.feedback;
       } catch (error: any) {
@@ -126,15 +104,11 @@ export class Persona {
           personaId: this.id,
         });
 
-        if (ctx.onRetry) {
-          const shouldRetry = await ctx.onRetry?.(error);
-
-          if (shouldRetry) {
-            await LoggerService.info(
-              "Rephrase retrying based on user/handler decision.",
-            );
-            continue;
-          }
+        if (ctx.onRetry && (await ctx.onRetry?.(error))) {
+          await LoggerService.info(
+            "Rephrase retrying based on user/handler decision.",
+          );
+          continue;
         }
 
         throw new Error(`Persona failed: ${error.message}`);
@@ -146,10 +120,7 @@ export class Persona {
     ctx: PersonaGenerateContext,
   ): Promise<PersonaResponse> {
     const basePrompt = `
-      [NEUTRAL_HEADER]${ctx.header}[/NEUTRAL_HEADER]
-      [NEUTRAL_CONTENT]
-      ${ctx.content}
-      [/NEUTRAL_CONTENT]
+      Content: ${ctx.content}
     `;
 
     const prompt = ctx.feedback
@@ -172,19 +143,15 @@ export class Persona {
   }
 
   private parse(text: string): PersonaResponse {
-    const hMatch = text.match(/\[HEADER\]([\s\S]*?)\[\/HEADER\]/i);
-    const cMatch = text.match(/\[CONTENT\]([\s\S]*?)\[\/CONTENT\]/i);
+    const content = text.trim();
 
-    if (!hMatch || !cMatch) {
-      throw new Error(
-        `Persona agent "${this.id}" failed to rephrase content properly.`,
-      );
+    if (!content) {
+      throw new Error(`Persona agent "${this.id}" returned an empty response.`);
     }
 
     return {
       agentId: this.id,
-      header: hMatch[1].trim(),
-      content: cMatch[1].trim(),
+      content,
     };
   }
 }

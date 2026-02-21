@@ -38,9 +38,10 @@ export class CompilerService {
             id: `${c.id}-b1`,
             intent: c.intent,
             writerId: c.writerId,
-            status: "pending",
+            status: "pending" as const,
           },
         ],
+        assemblerId: "",
       })),
     };
   }

@@ -1,17 +1,12 @@
-// src/agents/Writer.ts
+// packages/core/src/agents/Writer.ts
 import { AiService } from "../services/AiService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { AgentTruth } from "../types/index.js";
 import { MAX_TRUTHS_FOR_CONTEXT } from "../utils/consts.js";
 
 export type WriterInteractionResponse =
-  | {
-      action: "proceed";
-    }
-  | {
-      action: "feedback";
-      feedback: string;
-    };
+  | { action: "proceed" }
+  | { action: "feedback"; feedback: string };
 
 export type WriterInteractionHandler = (
   params: WriterResponse,
@@ -43,7 +38,6 @@ export interface WriterGenerateContext {
 
 export interface WriterResponse {
   agentId: string;
-  header: string;
   content: string;
 }
 
@@ -80,31 +74,19 @@ export class Writer {
       3. LANGUAGE POLICY: You must write EXCLUSIVELY in English. Even if the topic or goal mentions another language, you provide the technical foundation in English.
 
       PROTOCOL:
-      1. Provide a [HEADER] block with a compelling title for this section.
-        - Output clean text. Avoid markdown prefixes.
-      2. Provide a [CONTENT] block with markdown.
-      3. Provide a [BRIDGE] block with a brief summary for the next agent.
-      4. FORMATTING: You are writing a SECTION of a document. 
-         - NEVER use H1 (#) or H2 (##) tags inside the [CONTENT] block.
-         - Use H3 (###) or H4 (####) for sub-sections if needed.
-         - NEVER combine a blockquote (>) with a header (#, ##, ###, ####, etc...).
-      5. Do not repeat information reserved for other sections.
+      - You are generating a single, atomic block of content for a larger document.
+      - Output ONLY the raw markdown text. No greetings, no explanations, no conversational filler.
+      - DO NOT add a document title or section heading (like # or ##) at the top of your response. The system already handles the section headers.
+      - You may use bolding, lists, code blocks, quotes if the content requires it.
+      - NEVER combine a blockquote (>) with a header.
 
       INPUT FORMAT:
-      [INTENT]Intent of the content[/INTENT]
-      [TOPIC]Topic of the content[/TOPIC]
-      [GOAL]Goal of the content[/GOAL]
-      [AUDIENCE]Audience of the content[/AUDIENCE]
-      [BRIDGE]Brief summary of whats been covered already[/BRIDGE]
-      [PROGRESS]Whether its start, in progress or conclusion[/PROGRESS]
-
-      OUTPUT FORMAT:
-      [HEADER]
-      (Title text here)
-      [/HEADER]
-      [CONTENT]
-      (Your markdown content here, starting directly with text)
-      [/CONTENT]
+      Intent: Intent of the content
+      Topic: Topic of the content
+      Goal: Goal of the content
+      Audience: Audience of the content
+      Bridge: Brief summary of whats been covered already
+      Progress: Whether its start, in progress or conclusion
     `.trim();
   }
 
@@ -126,15 +108,10 @@ export class Writer {
           isLast: ctx.isLast,
         });
 
-        if (!ctx.interact) {
-          return generated;
-        }
+        if (!ctx.interact) return generated;
 
         const interaction = await ctx.interact(generated);
-
-        if (interaction.action === "proceed") {
-          return generated;
-        }
+        if (interaction.action === "proceed") return generated;
 
         currentFeedback = interaction.feedback || "Continue refinement.";
       } catch (error: any) {
@@ -145,15 +122,11 @@ export class Writer {
           writerId: this.id,
         });
 
-        if (ctx.onRetry) {
-          const shouldRetry = await ctx.onRetry?.(error);
-
-          if (shouldRetry) {
-            await LoggerService.info(
-              "Write retrying based on user/handler decision.",
-            );
-            continue;
-          }
+        if (ctx.onRetry && (await ctx.onRetry?.(error))) {
+          await LoggerService.info(
+            "Write retrying based on user/handler decision.",
+          );
+          continue;
         }
 
         throw new Error(`Writer failed: ${error.message}`);
@@ -163,12 +136,12 @@ export class Writer {
 
   private async generate(ctx: WriterGenerateContext): Promise<WriterResponse> {
     const basePrompt = `
-      [INTENT]${ctx.intent}[/INTENT]
-      [TOPIC]${ctx.topic}[/TOPIC]
-      [GOAL]${ctx.goal}[/GOAL]
-      [AUDIENCE]${ctx.audience}[/AUDIENCE]
-      [BRIDGE]${ctx.bridge}[/BRIDGE]
-      [PROGRESS]${ctx.isFirst ? "Start" : ctx.isLast ? "Conclusion" : "In-Progress"}[/PROGRESS]
+      Intent: ${ctx.intent}
+      Topic: ${ctx.topic}
+      Goal: ${ctx.goal}
+      Audience: ${ctx.audience}
+      Bridge: ${ctx.bridge}
+      Progress: ${ctx.isFirst ? "Start" : ctx.isLast ? "Conclusion" : "In-Progress"}
     `;
 
     const prompt = ctx.feedback
@@ -191,17 +164,15 @@ export class Writer {
   }
 
   private parse(text: string): WriterResponse {
-    const headerMatch = text.match(/\[HEADER\]([\s\S]*?)(\[\/HEADER\]|$)/i);
-    const contentMatch = text.match(/\[CONTENT\]([\s\S]*?)(\[\/CONTENT\]|$)/i);
+    const content = text.trim();
 
-    if (!headerMatch || !contentMatch) {
-      throw new Error(`Writer ${this.id} failed to return delimited content.`);
+    if (!content) {
+      throw new Error(`Writer agent "${this.id}" returned an empty response.`);
     }
 
     return {
       agentId: this.id,
-      header: headerMatch[1].trim(),
-      content: contentMatch[1].trim(),
+      content,
     };
   }
 }

@@ -13,6 +13,7 @@ export const SectionBlueprintSchema = z.object({
   level: z.number().min(1).max(6), // e.g., 2 for ##, 3 for ###
   bridge: z.string().optional(),
   blocks: z.array(BlockBlueprintSchema),
+  assemblerId: z.string(),
 });
 
 export const HubStateSchema = z.object({
@@ -63,6 +64,7 @@ export const FrontmatterSchema = z.object({
 
   // Agentic Hierarchy Metadata
   assemblerId: z.string(),
+  allowedAssemblerIds: z.array(z.string()),
   personaId: z.string(),
   allowedWriterIds: z.string(),
 

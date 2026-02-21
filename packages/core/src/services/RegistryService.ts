@@ -34,7 +34,9 @@ export interface WriterArtifact extends BaseArtifact {
 
 export interface AssemblerArtifact extends BaseArtifact {
   type: "assembler";
-  metadata?: {};
+  metadata: {
+    role: "outline" | "block";
+  };
 }
 
 export type Artifact = PersonaArtifact | WriterArtifact | AssemblerArtifact;
@@ -140,6 +142,18 @@ export class RegistryService {
                 accent: identity.metadata?.accent || "Standard",
               },
             });
+          } else if (type === "assembler") {
+            allArtifacts.push({
+              type,
+              content: behavior,
+              description: knowledge.description,
+              truths: knowledge.truths,
+              id: identity.id,
+              displayName: identity.displayName,
+              metadata: {
+                role: identity.metadata?.role || "outline",
+              },
+            });
           } else {
             allArtifacts.push({
               type,
@@ -225,6 +239,7 @@ export class RegistryService {
               artifact.description,
               artifact.content,
               artifact.truths,
+              artifact.metadata.role,
             ),
           };
       }
@@ -271,6 +286,7 @@ export class RegistryService {
         .map((a) => ({
           id: a.artifact.id,
           description: a.artifact.description,
+          role: a.artifact.metadata.role,
         })),
     };
     return JSON.stringify(manifest, null, 2);
