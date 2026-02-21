@@ -29,6 +29,9 @@ agentCommand
       if (!secret.apiKey)
         throw new Error("API Key required. Run 'hub config set-key'.");
 
+      if (!config.model)
+        throw new Error("Model required. Run 'hub config set-model'.");
+
       const { type } = await inquirer.prompt([
         {
           type: "list",
@@ -48,11 +51,14 @@ agentCommand
           default: "Professional and concise",
         },
         {
-          type: "input",
+          type: "list",
           name: "language",
           message: "Language:",
+          choices: [
+            { name: "English", value: "english" },
+            { name: "Spanish", value: "spanish" },
+          ],
           when: type === "persona",
-          default: "English",
         },
         {
           type: "input",
@@ -60,6 +66,16 @@ agentCommand
           message: "Accent:",
           when: type === "persona",
           default: "Neutral",
+        },
+        {
+          type: "list",
+          name: "role",
+          message: "Role:",
+          choices: [
+            { name: "Macro Outliner (Structure)", value: "outline" },
+            { name: "Micro Delegator (Blocks)", value: "block" },
+          ],
+          when: type === "assembler",
         },
         {
           type: "editor",
@@ -77,7 +93,7 @@ agentCommand
       const agentId = crypto.randomUUID();
       const description = await IntelligenceService.generateInferredDescription(
         secret.apiKey,
-        config.model || "gemini-2.0-flash",
+        config.model,
         identity.displayName,
         identity.behavior,
       );
@@ -94,7 +110,9 @@ agentCommand
                   language: identity.language,
                   accent: identity.accent,
                 }
-              : {},
+              : type === "assembler"
+                ? { role: identity.role }
+                : {},
         },
         behavior: identity.behavior,
         knowledge: { description, truths: [] },

@@ -53,6 +53,14 @@ export const registryCommand = new Command("registry")
             `   - ${chalk.bold(art.displayName)}: ${art.description || chalk.dim("No description")}`,
           );
 
+          console.log(chalk.dim(`     ID: ${chalk.italic(art.id)}`));
+
+          if (art.type === "assembler") {
+            console.log(
+              chalk.dim(`     Role: ${chalk.italic(art.metadata.role)}`),
+            );
+          }
+
           // 3. Use Discriminated Union for Type-Specific Metadata
           // TypeScript narrows 'art' here based on the check above
           if (art.type === "persona") {
