@@ -1,25 +1,16 @@
 // src/actions/CreateHubAction.ts
-import {
-  Architect,
-  ArchitectInteractionHandler,
-  ArchitectResponse,
-  Brief,
-} from "../agents/Architect.js";
+import { Architect, ArchitectResponse, Brief } from "../agents/Architect.js";
 import {
   AssembleBlocksResponse,
   AssembleOutlineResponse,
   Assembler,
 } from "../agents/Assembler.js";
-import {
-  Persona,
-  PersonaInteractionHandler,
-  PersonaResponse,
-} from "../agents/Persona.js";
+import { Persona, PersonaResponse } from "../agents/Persona.js";
 import { Writer } from "../agents/Writer.js";
-import { AgentService } from "../services/AgentService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { AgentPair, getAgentsByType } from "../services/RegistryService.js";
 import { SectionBlueprint } from "../types/index.js";
+import { BaseAction, ResolveInteractionHandler } from "./BaseAction.js";
 
 export interface CreateHubActionResult {
   architecture: ArchitectResponse;
@@ -27,9 +18,9 @@ export interface CreateHubActionResult {
   personification: PersonaResponse;
 }
 
-export class CreateHubAction {
+export class CreateHubAction extends BaseAction {
   private _onArchitecting?: (data: string) => void;
-  private _onArchitect?: ArchitectInteractionHandler;
+  private _onArchitect?: ResolveInteractionHandler<ArchitectResponse>;
 
   private _onAssemblingOutline?: (agentId: string) => void;
   private _onAssembleOutline?: (
@@ -40,13 +31,10 @@ export class CreateHubAction {
     agentId: string,
     sectionHeader: string,
   ) => void;
-  private _onAssembleBlocks?: (
-    params: AssembleBlocksResponse,
-    sectionHeader: string,
-  ) => Promise<any>;
+  private _onAssembleBlocks?: ResolveInteractionHandler<AssembleBlocksResponse>;
 
   private _onRephrasing?: (personaId: string) => void;
-  private _onRephrase?: PersonaInteractionHandler;
+  private _onRephrase?: ResolveInteractionHandler<PersonaResponse>;
   private _onRetry?: (err: Error) => Promise<boolean>;
 
   private architect: Architect;
@@ -55,13 +43,15 @@ export class CreateHubAction {
   private personas: Persona[];
 
   constructor(
-    public workspaceRoot: string,
+    workspaceRoot: string,
     apiKey: string,
     model: string,
     manifest: string,
     baseline: Partial<Brief>,
     agents: AgentPair[],
   ) {
+    super(workspaceRoot);
+
     this.architect = new Architect(apiKey, model, manifest, baseline);
 
     this.assemblers = getAgentsByType(agents, "assembler").map((a) => a.agent);
@@ -88,7 +78,7 @@ export class CreateHubAction {
     return this;
   }
 
-  onArchitect(handler: ArchitectInteractionHandler) {
+  onArchitect(handler: ResolveInteractionHandler<ArchitectResponse>) {
     this._onArchitect = handler;
     return this;
   }
@@ -110,9 +100,7 @@ export class CreateHubAction {
     return this;
   }
 
-  onAssembleBlocks(
-    handler: (params: AssembleBlocksResponse, header: string) => Promise<any>,
-  ) {
+  onAssembleBlocks(handler: ResolveInteractionHandler<AssembleBlocksResponse>) {
     this._onAssembleBlocks = handler;
     return this;
   }
@@ -122,7 +110,7 @@ export class CreateHubAction {
     return this;
   }
 
-  onRephrase(handler: PersonaInteractionHandler) {
+  onRephrase(handler: ResolveInteractionHandler<PersonaResponse>) {
     this._onRephrase = handler;
     return this;
   }
@@ -139,7 +127,19 @@ export class CreateHubAction {
     // 1. Architect Phase (Refine the Brief)
     // ==========================================
     const architecture = await this.architect.architect({
-      interact: this._onArchitect,
+      interact: async (params) => {
+        if (!this._onArchitect) {
+          return { action: "proceed" };
+        }
+
+        const interaction = await this._onArchitect(params);
+
+        if (interaction.action === "skip") {
+          return { action: "proceed" };
+        }
+
+        return interaction;
+      },
       onThinking: () => this._onArchitecting?.("default"),
       onRetry: this._onRetry,
     });
@@ -172,28 +172,16 @@ export class CreateHubAction {
       onThinking: (agentId) => this._onAssemblingOutline?.(agentId),
       onRetry: this._onRetry,
       interact: async (params) => {
-        const interaction = (await this._onAssembleOutline?.(params)) || {
-          action: "proceed",
-        };
-
-        if (interaction.action === "feedback") outlineTurn++;
-
-        await AgentService.appendFeedback(
-          this.workspaceRoot,
+        const result = await this.resolveInteraction(
           "assembler",
           params.agentId,
-          {
-            source: "action",
-            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
-            threadId: outlineThreadId,
-            turn: outlineTurn,
-            ...(interaction.action === "feedback"
-              ? { text: interaction.feedback }
-              : {}),
-          },
+          params,
+          this._onAssembleOutline,
+          { threadId: outlineThreadId, turn: outlineTurn },
         );
 
-        return interaction;
+        if (result.action === "feedback") outlineTurn++;
+        return result;
       },
     });
 
@@ -221,29 +209,16 @@ export class CreateHubAction {
           this._onAssemblingBlocks?.(agentId, section.header),
         onRetry: this._onRetry,
         interact: async (params) => {
-          const interaction = (await this._onAssembleBlocks?.(
-            params,
-            section.header,
-          )) || { action: "proceed" };
-
-          if (interaction.action === "feedback") blockTurn++;
-
-          await AgentService.appendFeedback(
-            this.workspaceRoot,
+          const result = await this.resolveInteraction(
             "assembler",
             params.agentId,
-            {
-              source: "action",
-              outcome:
-                interaction.action === "proceed" ? "accepted" : "feedback",
-              threadId: blockThreadId,
-              turn: blockTurn,
-              ...(interaction.action === "feedback"
-                ? { text: interaction.feedback }
-                : {}),
-            },
+            params,
+            this._onAssembleBlocks,
+            { threadId: blockThreadId, turn: blockTurn },
           );
-          return interaction;
+
+          if (result.action === "feedback") blockTurn++;
+          return result;
         },
       });
 
@@ -281,32 +256,17 @@ export class CreateHubAction {
     const personification = await persona.rephrase({
       content: `Write an engaging one sentence long description for this content hub. Topic: ${architecture.brief.topic}. Goal: ${architecture.brief.goal}.`,
       interact: async (params) => {
-        const interaction = (await this._onRephrase?.(params)) || {
-          action: "proceed",
-        };
-
-        if (interaction.action === "feedback") {
-          personaTurn++;
-        }
-
-        await AgentService.appendFeedback(
-          this.workspaceRoot,
+        const result = await this.resolveInteraction(
           "persona",
           params.agentId,
-          {
-            source: "action",
-            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
-            threadId: personaThreadId,
-            turn: personaTurn,
-            ...(interaction.action === "feedback"
-              ? { text: interaction.feedback }
-              : {}),
-          },
+          params,
+          this._onRephrase,
+          { threadId: personaThreadId, turn: personaTurn },
         );
 
-        return interaction;
+        if (result.action === "feedback") personaTurn++;
+        return result;
       },
-
       onThinking: (agentId) => this._onRephrasing?.(agentId),
       onRetry: this._onRetry,
     });

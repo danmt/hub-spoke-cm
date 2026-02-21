@@ -1,7 +1,6 @@
 // packages/core/src/actions/FillAction.ts
-import { Persona, PersonaInteractionHandler } from "../agents/Persona.js";
-import { Writer, WriterInteractionHandler } from "../agents/Writer.js";
-import { AgentService } from "../services/AgentService.js";
+import { Persona, PersonaResponse } from "../agents/Persona.js";
+import { Writer, WriterResponse } from "../agents/Writer.js";
 import { LoggerService } from "../services/LoggerService.js";
 import {
   AgentPair,
@@ -9,6 +8,7 @@ import {
   getAgentsByType,
 } from "../services/RegistryService.js";
 import { BlockBlueprint, SectionBlueprint } from "../types/index.js";
+import { BaseAction, ResolveInteractionHandler } from "./BaseAction.js";
 
 export interface FillExecuteParams {
   section: SectionBlueprint; // Passed for macro context (like bridge)
@@ -20,9 +20,9 @@ export interface FillExecuteParams {
   isLast: boolean;
 }
 
-export class FillAction {
-  private _onWrite?: WriterInteractionHandler;
-  private _onRephrase?: PersonaInteractionHandler;
+export class FillAction extends BaseAction {
+  private _onWrite?: ResolveInteractionHandler<WriterResponse>;
+  private _onRephrase?: ResolveInteractionHandler<PersonaResponse>;
   private _onRetry?: (err: Error) => Promise<boolean>;
   private _onStart?: (data: string) => void;
   private _onWriting?: (data: { id: string; writerId: string }) => void;
@@ -31,13 +31,10 @@ export class FillAction {
   private persona: Persona;
   private writers: Writer[];
 
-  constructor(
-    public workspaceRoot: string,
-    personaId: string,
-    agents: AgentPair[],
-  ) {
-    const persona = getAgent(agents, "persona", personaId);
+  constructor(workspaceRoot: string, personaId: string, agents: AgentPair[]) {
+    super(workspaceRoot);
 
+    const persona = getAgent(agents, "persona", personaId);
     if (!persona) {
       throw new Error(
         `FillAction: Persona "${personaId}" not found in the registry.`,
@@ -62,7 +59,7 @@ export class FillAction {
     return this;
   }
 
-  onWrite(handler: WriterInteractionHandler) {
+  onWrite(handler: ResolveInteractionHandler<WriterResponse>) {
     this._onWrite = handler;
     return this;
   }
@@ -72,7 +69,7 @@ export class FillAction {
     return this;
   }
 
-  onRephrase(handler: PersonaInteractionHandler) {
+  onRephrase(handler: ResolveInteractionHandler<PersonaResponse>) {
     this._onRephrase = handler;
     return this;
   }
@@ -118,30 +115,16 @@ export class FillAction {
       isFirst,
       isLast,
       interact: async (params) => {
-        const interaction = (await this._onWrite?.(params)) || {
-          action: "proceed",
-        };
-
-        if (interaction.action === "feedback") {
-          writerTurn++;
-        }
-
-        await AgentService.appendFeedback(
-          this.workspaceRoot,
+        const result = await this.resolveInteraction(
           "writer",
           params.agentId,
-          {
-            source: "action",
-            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
-            threadId: writerThreadId,
-            turn: writerTurn,
-            ...(interaction.action === "feedback"
-              ? { text: interaction.feedback }
-              : {}),
-          },
+          params,
+          this._onWrite,
+          { threadId: writerThreadId, turn: writerTurn },
         );
 
-        return interaction;
+        if (result.action === "feedback") writerTurn++;
+        return result;
       },
       onRetry: this._onRetry,
       onThinking: (agentId) =>
@@ -157,30 +140,16 @@ export class FillAction {
     const rephrased = await this.persona.rephrase({
       content: neutral.content, // Pass only the content (we neutered the header capability)
       interact: async (params) => {
-        const interaction = (await this._onRephrase?.(params)) || {
-          action: "proceed",
-        };
-
-        if (interaction.action === "feedback") {
-          personaTurn++;
-        }
-
-        await AgentService.appendFeedback(
-          this.workspaceRoot,
+        const result = await this.resolveInteraction(
           "persona",
           params.agentId,
-          {
-            source: "action",
-            outcome: interaction.action === "proceed" ? "accepted" : "feedback",
-            threadId: personaThreadId,
-            turn: personaTurn,
-            ...(interaction.action === "feedback"
-              ? { text: interaction.feedback }
-              : {}),
-          },
+          params,
+          this._onRephrase,
+          { threadId: personaThreadId, turn: personaTurn },
         );
 
-        return interaction;
+        if (result.action === "feedback") personaTurn++;
+        return result;
       },
       onRetry: this._onRetry,
       onThinking: (agentId) =>
