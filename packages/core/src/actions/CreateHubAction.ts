@@ -6,9 +6,9 @@ import {
   Brief,
 } from "../agents/Architect.js";
 import {
+  AssembleBlocksResponse,
+  AssembleOutlineResponse,
   Assembler,
-  AssembleResponse,
-  AssemblerInteractionHandler,
 } from "../agents/Assembler.js";
 import {
   Persona,
@@ -19,18 +19,32 @@ import { Writer } from "../agents/Writer.js";
 import { AgentService } from "../services/AgentService.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { AgentPair, getAgentsByType } from "../services/RegistryService.js";
+import { SectionBlueprint } from "../types/index.js";
 
 export interface CreateHubActionResult {
   architecture: ArchitectResponse;
-  assembly: AssembleResponse;
+  sections: SectionBlueprint[];
   personification: PersonaResponse;
 }
 
 export class CreateHubAction {
   private _onArchitecting?: (data: string) => void;
   private _onArchitect?: ArchitectInteractionHandler;
-  private _onAssembling?: (data: string) => void;
-  private _onAssembler?: AssemblerInteractionHandler;
+
+  private _onAssemblingOutline?: (agentId: string) => void;
+  private _onAssembleOutline?: (
+    params: AssembleOutlineResponse,
+  ) => Promise<any>;
+
+  private _onAssemblingBlocks?: (
+    agentId: string,
+    sectionHeader: string,
+  ) => void;
+  private _onAssembleBlocks?: (
+    params: AssembleBlocksResponse,
+    sectionHeader: string,
+  ) => Promise<any>;
+
   private _onRephrasing?: (personaId: string) => void;
   private _onRephrase?: PersonaInteractionHandler;
   private _onRetry?: (err: Error) => Promise<boolean>;
@@ -79,17 +93,31 @@ export class CreateHubAction {
     return this;
   }
 
-  onAssembling(cb: (data: string) => void) {
-    this._onAssembling = cb;
+  onAssemblingOutline(cb: (id: string) => void) {
+    this._onAssemblingOutline = cb;
     return this;
   }
 
-  onAssembler(handler: AssemblerInteractionHandler) {
-    this._onAssembler = handler;
+  onAssembleOutline(
+    handler: (params: AssembleOutlineResponse) => Promise<any>,
+  ) {
+    this._onAssembleOutline = handler;
     return this;
   }
 
-  onRephrasing(cb: (data: string) => void) {
+  onAssemblingBlocks(cb: (id: string, header: string) => void) {
+    this._onAssemblingBlocks = cb;
+    return this;
+  }
+
+  onAssembleBlocks(
+    handler: (params: AssembleBlocksResponse, header: string) => Promise<any>,
+  ) {
+    this._onAssembleBlocks = handler;
+    return this;
+  }
+
+  onRephrasing(cb: (id: string) => void) {
     this._onRephrasing = cb;
     return this;
   }
@@ -107,41 +135,48 @@ export class CreateHubAction {
   async execute(): Promise<CreateHubActionResult> {
     await LoggerService.info("CreateHubAction: Starting execution");
 
+    // ==========================================
     // 1. Architect Phase (Refine the Brief)
+    // ==========================================
     const architecture = await this.architect.architect({
       interact: this._onArchitect,
       onThinking: () => this._onArchitecting?.("default"),
       onRetry: this._onRetry,
     });
 
-    const assemblerId = architecture.brief.assemblerId;
-    const assembler = this.assemblers.find((a) => a.id === assemblerId);
+    const outlinerId = architecture.brief.assemblerId;
+    const outliner = this.assemblers.find((a) => a.id === outlinerId);
 
-    if (!assembler) {
+    if (!outliner) {
       throw new Error(
-        `CreateHubAction: Assembler "${assemblerId}" not found in the provided list.`,
+        `CreateHubAction: Outliner Assembler "${outlinerId}" not found in the provided list.`,
       );
     }
 
-    // 2. Assembler Phase (Generate the Blueprint)
-    const assemblerThreadId = `create-assemble-${Date.now()}`;
-    let assemblerTurn = 0;
+    // ==========================================
+    // 2. Macro Phase: Assemble Outline
+    // ==========================================
+    const outlineThreadId = `create-outline-${Date.now()}`;
+    let outlineTurn = 0;
 
-    const assembly = await assembler.assemble({
+    // Pass the pool of allowed assemblers to the Outliner so it can assign them
+    const allowedAssemblersContext = this.assemblers
+      .filter((a) => architecture.brief.allowedAssemblerIds.includes(a.id))
+      .map((a) => ({ id: a.id, description: a.description }));
+
+    const outline = await outliner.assembleOutline({
       topic: architecture.brief.topic,
       goal: architecture.brief.goal,
       audience: architecture.brief.audience,
-      allowedWriters: this.writers.filter((writer) =>
-        architecture.brief.allowedWriterIds.includes(writer.id),
-      ),
+      allowedAssemblers: allowedAssemblersContext,
+      onThinking: (agentId) => this._onAssemblingOutline?.(agentId),
+      onRetry: this._onRetry,
       interact: async (params) => {
-        const interaction = (await this._onAssembler?.(params)) || {
+        const interaction = (await this._onAssembleOutline?.(params)) || {
           action: "proceed",
         };
 
-        if (interaction.action === "feedback") {
-          assemblerTurn++;
-        }
+        if (interaction.action === "feedback") outlineTurn++;
 
         await AgentService.appendFeedback(
           this.workspaceRoot,
@@ -150,8 +185,8 @@ export class CreateHubAction {
           {
             source: "action",
             outcome: interaction.action === "proceed" ? "accepted" : "feedback",
-            threadId: assemblerThreadId,
-            turn: assemblerTurn,
+            threadId: outlineThreadId,
+            turn: outlineTurn,
             ...(interaction.action === "feedback"
               ? { text: interaction.feedback }
               : {}),
@@ -160,11 +195,78 @@ export class CreateHubAction {
 
         return interaction;
       },
-      onThinking: (agentId) => this._onAssembling?.(agentId),
-      onRetry: this._onRetry,
     });
 
-    // 3. Rephrasing phase
+    // ==========================================
+    // 3. Micro Phase: Assemble Blocks per Section
+    // ==========================================
+    const finalSections: SectionBlueprint[] = [];
+    const allowedWriters = this.writers
+      .filter((w) => architecture.brief.allowedWriterIds.includes(w.id))
+      .map((w) => ({ id: w.id, description: w.description }));
+
+    for (const section of outline.sections) {
+      // Find the specific Block Assembler assigned to this section
+      // Fallback to outliner if the AI failed to assign one
+      const sectionAssembler =
+        this.assemblers.find((a) => a.id === section.assemblerId) || outliner;
+
+      let blockTurn = 0;
+      const blockThreadId = `create-blocks-${section.id}-${Date.now()}`;
+
+      const micro = await sectionAssembler.assembleBlocks({
+        section,
+        allowedWriters,
+        onThinking: (agentId) =>
+          this._onAssemblingBlocks?.(agentId, section.header),
+        onRetry: this._onRetry,
+        interact: async (params) => {
+          const interaction = (await this._onAssembleBlocks?.(
+            params,
+            section.header,
+          )) || { action: "proceed" };
+
+          if (interaction.action === "feedback") blockTurn++;
+
+          await AgentService.appendFeedback(
+            this.workspaceRoot,
+            "assembler",
+            params.agentId,
+            {
+              source: "action",
+              outcome:
+                interaction.action === "proceed" ? "accepted" : "feedback",
+              threadId: blockThreadId,
+              turn: blockTurn,
+              ...(interaction.action === "feedback"
+                ? { text: interaction.feedback }
+                : {}),
+            },
+          );
+          return interaction;
+        },
+      });
+
+      // Stitch the micro blocks into the macro section
+      finalSections.push({
+        id: section.id,
+        header: section.header,
+        level: section.level,
+        intent: section.intent,
+        bridge: section.bridge,
+        assemblerId: sectionAssembler.id,
+        blocks: micro.blocks.map((b) => ({
+          id: b.id,
+          intent: b.intent,
+          writerId: b.writerId,
+          status: "pending",
+        })),
+      });
+    }
+
+    // ==========================================
+    // 4. Persona Phase: Rephrase Hub Description
+    // ==========================================
     const personaThreadId = `create-style-${Date.now()}`;
     let personaTurn = 0;
     const personaId = architecture.brief.personaId;
@@ -177,7 +279,6 @@ export class CreateHubAction {
     }
 
     const personification = await persona.rephrase({
-      header: architecture.brief.topic,
       content: `Write an engaging one sentence long description for this content hub. Topic: ${architecture.brief.topic}. Goal: ${architecture.brief.goal}.`,
       interact: async (params) => {
         const interaction = (await this._onRephrase?.(params)) || {
@@ -214,7 +315,7 @@ export class CreateHubAction {
 
     return {
       architecture,
-      assembly,
+      sections: finalSections,
       personification,
     };
   }

@@ -1,12 +1,11 @@
+// packages/core/src/services/WorkspaceService.ts
+import * as crypto from "crypto";
 import { WorkspaceManifest } from "../types/index.js";
 import { HubService } from "./HubService.js";
 import { IoService } from "./IoService.js";
 import { RegistryService } from "./RegistryService.js";
 
 export class WorkspaceService {
-  /**
-   * Scaffolds the top-level workspace structure.
-   */
   static async init(rootDir: string, type: "starter" | "blank"): Promise<void> {
     const dirs = [
       ".hub",
@@ -24,7 +23,6 @@ export class WorkspaceService {
 
     await IoService.writeFile(IoService.join(rootDir, "output/.keep"), "");
 
-    // Seeding logic for starter agents moves here
     if (type === "starter") {
       await this.seedStarterAgents(rootDir);
     }
@@ -33,9 +31,6 @@ export class WorkspaceService {
     await IoService.writeFile(IoService.join(rootDir, ".gitignore"), gitignore);
   }
 
-  /**
-   * Searches upward from a starting path to find the workspace root (.hub marker).
-   */
   static async findRoot(startDir: string): Promise<string> {
     let current = IoService.resolve(startDir);
     while (current) {
@@ -48,9 +43,6 @@ export class WorkspaceService {
     throw new Error("Not a Hub workspace. Run 'hub init' first.");
   }
 
-  /**
-   * Generates the Shadow Index (Manifest) by crawling the filesystem.
-   */
   static async index(workspaceRoot: string): Promise<WorkspaceManifest> {
     const artifacts = await RegistryService.getAllArtifacts(workspaceRoot);
     const agentEntries = artifacts.map((a) => ({
@@ -61,26 +53,20 @@ export class WorkspaceService {
     }));
 
     const hubIds = await HubService.listHubs(workspaceRoot);
-
     const hubEntries = await Promise.all(
       hubIds.map(async (hubId) => {
         const hubRootDir = IoService.join(workspaceRoot, "posts", hubId);
+        const state = await HubService.readHub(hubRootDir);
 
-        // Read the new JSON state
-        const stateRaw = await IoService.readFile(
-          IoService.join(hubRootDir, "hub.json"),
-        );
-        const state = JSON.parse(stateRaw);
-
-        // Check if any block across any section is pending
-        const hasTodo = state.sections.some((section: any) =>
-          section.blocks.some((block: any) => block.status === "pending"),
+        // Check if any block in the AST is still pending
+        const hasTodo = state.sections.some((section) =>
+          section.blocks.some((block) => block.status === "pending"),
         );
 
         return {
           id: hubId,
           title: state.title,
-          hasTodo: hasTodo,
+          hasTodo,
           lastModified: new Date().toISOString(),
         };
       }),
@@ -99,47 +85,125 @@ export class WorkspaceService {
   }
 
   private static async seedStarterAgents(rootDir: string) {
-    const standardPersona = `---
-id: "standard"
-name: "Standard"
-description: "Neutral, professional, and highly clear."
-language: "English"
-tone: "Professional, Objective, Concise"
-accent: "Neutral / Standard."
----
-You are a professional Technical Writer focused on clarity and formal documentation.`;
+    const uuid = () => crypto.randomUUID();
 
-    const tutorialAssembler = `---
-id: "tutorial"
-type: "assembler"
-description: "Step-by-step learning path."
-writerIds:
-  - prose
----
-
-Focus on a logical progression from prerequisites to a working final product. If the topic involves multiple stacks, create dedicated implementation sections for each.`;
-
-    const proseWriter = `---
-id: "prose"
-type: "writer"
-description: "General narrative writing strategy."
----
-Focus on narrative flow, clarity, and transitions. Avoid code blocks unless absolutely necessary to illustrate a point. Ensure the tone remains consistent with the chosen Persona.`;
-
+    // Persona: Standard
+    const pId = uuid();
+    const pDir = IoService.join(rootDir, "agents/personas/standard");
+    await IoService.makeDir(pDir);
     await IoService.writeFile(
-      IoService.join(rootDir, "agents/personas/standard.md"),
-      standardPersona,
+      IoService.join(pDir, "agent.json"),
+      JSON.stringify(
+        {
+          id: pId,
+          type: "persona",
+          displayName: "Standard",
+          metadata: {
+            language: "English",
+            tone: "Professional",
+            accent: "Neutral",
+          },
+        },
+        null,
+        2,
+      ),
     );
     await IoService.writeFile(
-      IoService.join(rootDir, "agents/assemblers/tutorial.md"),
-      tutorialAssembler,
+      IoService.join(pDir, "behavior.md"),
+      "You are a professional Technical Writer focused on clarity and formal documentation.",
     );
     await IoService.writeFile(
-      IoService.join(rootDir, "agents/writers/prose.md"),
-      proseWriter,
+      IoService.join(pDir, "knowledge.json"),
+      JSON.stringify(
+        { description: "Neutral, professional, and highly clear.", truths: [] },
+        null,
+        2,
+      ),
     );
 
-    const gitignore = ".hub/tmp/*\n.hub/logs/*\noutput/*\n!output/.keep";
-    await IoService.writeFile(IoService.join(rootDir, ".gitignore"), gitignore);
+    // Outliner Assembler
+    const oId = uuid();
+    const oDir = IoService.join(rootDir, "agents/assemblers/outliner");
+    await IoService.makeDir(oDir);
+    await IoService.writeFile(
+      IoService.join(oDir, "agent.json"),
+      JSON.stringify(
+        {
+          id: oId,
+          type: "assembler",
+          displayName: "Default Outliner",
+          metadata: { role: "outline" },
+        },
+        null,
+        2,
+      ),
+    );
+    await IoService.writeFile(
+      IoService.join(oDir, "behavior.md"),
+      "Focus on a logical progression from prerequisites to a working final product.",
+    );
+    await IoService.writeFile(
+      IoService.join(oDir, "knowledge.json"),
+      JSON.stringify(
+        { description: "Standard document structurer.", truths: [] },
+        null,
+        2,
+      ),
+    );
+
+    // Block Assembler
+    const bId = uuid();
+    const bDir = IoService.join(rootDir, "agents/assemblers/delegator");
+    await IoService.makeDir(bDir);
+    await IoService.writeFile(
+      IoService.join(bDir, "agent.json"),
+      JSON.stringify(
+        {
+          id: bId,
+          type: "assembler",
+          displayName: "Standard Delegator",
+          metadata: { role: "block" },
+        },
+        null,
+        2,
+      ),
+    );
+    await IoService.writeFile(
+      IoService.join(bDir, "behavior.md"),
+      "Break down sections into logical, standalone tasks.",
+    );
+    await IoService.writeFile(
+      IoService.join(bDir, "knowledge.json"),
+      JSON.stringify(
+        { description: "Micro-task delegator.", truths: [] },
+        null,
+        2,
+      ),
+    );
+
+    // Writer: Prose
+    const wId = uuid();
+    const wDir = IoService.join(rootDir, "agents/writers/prose");
+    await IoService.makeDir(wDir);
+    await IoService.writeFile(
+      IoService.join(wDir, "agent.json"),
+      JSON.stringify(
+        { id: wId, type: "writer", displayName: "Prose Writer" },
+        null,
+        2,
+      ),
+    );
+    await IoService.writeFile(
+      IoService.join(wDir, "behavior.md"),
+      "Focus on narrative flow, clarity, and transitions. Avoid code blocks unless absolutely necessary.",
+    );
+    await IoService.writeFile(
+      IoService.join(wDir, "knowledge.json"),
+      JSON.stringify(
+        { description: "General narrative writing strategy.", truths: [] },
+        null,
+        2,
+      ),
+    );
   }
 }

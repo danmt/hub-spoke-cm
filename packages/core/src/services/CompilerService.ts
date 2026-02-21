@@ -1,54 +1,41 @@
+// packages/core/src/services/CompilerService.ts
 import { Brief } from "../agents/Architect.js";
-import { HubBlueprint, HubState } from "../types/index.js";
+import { HubState, SectionBlueprint } from "../types/index.js";
 import { IoService } from "./IoService.js";
 import { LoggerService } from "./LoggerService.js";
 
 export class CompilerService {
   /**
-   * Generates the initial JSON state machine for a new Hub.
-   * This replaces the old markdown generateScaffold method.
+   * Generates the initial JSON state machine for a new Hub based on the Architect's brief
+   * and the Outliner's sections.
    */
   static generateInitialState(
+    hubId: string,
     brief: Brief,
-    blueprint: HubBlueprint,
+    sections: SectionBlueprint[],
     title: string,
     description: string,
   ): HubState {
     return {
       title,
       description,
-      hubId: blueprint.hubId,
+      hubId,
       topic: brief.topic,
       goal: brief.goal,
       audience: brief.audience,
       language: brief.language,
       date: new Date().toISOString().split("T")[0],
       assemblerId: brief.assemblerId,
+      allowedAssemblerIds: brief.allowedAssemblerIds,
       personaId: brief.personaId,
       allowedWriterIds: brief.allowedWriterIds,
-      // For Phase 1, we map each legacy component to a section with a single block.
-      // In Phase 2, this will become nested.
-      sections: blueprint.components.map((c) => ({
-        id: c.id,
-        header: c.header,
-        level: 2, // Default to H2 for top-level sections
-        bridge: c.bridge,
-        blocks: [
-          {
-            id: `${c.id}-b1`,
-            intent: c.intent,
-            writerId: c.writerId,
-            status: "pending" as const,
-          },
-        ],
-        assemblerId: "",
-      })),
+      sections: sections,
     };
   }
 
   /**
-   * Reads the hub.json state, iterates over the flat outline,
-   * reads the atomic blocks, and compiles the final read-only markdown.
+   * Reads the hub.json state, iterates over the outline,
+   * reads the atomic blocks from disk, and stitches them into `compiled.md`.
    */
   static async compile(hubRootDir: string): Promise<string> {
     try {
@@ -60,6 +47,7 @@ export class CompilerService {
       let compiledMarkdown = `# ${state.title}\n\n`;
 
       for (const section of state.sections) {
+        // Render the section header dynamically based on its level
         compiledMarkdown += `${"#".repeat(section.level)} ${section.header}\n\n`;
 
         for (const block of section.blocks) {
@@ -84,7 +72,7 @@ export class CompilerService {
         }
       }
 
-      // Write the read-only output file
+      // Write the read-only output file for user preview
       const outputPath = IoService.join(hubRootDir, "compiled.md");
       await IoService.writeFile(outputPath, compiledMarkdown.trim());
 

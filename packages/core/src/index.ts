@@ -18,7 +18,6 @@ export * from "./services/HubService.js";
 export * from "./services/IntelligenceService.js";
 export * from "./services/IoService.js";
 export * from "./services/LoggerService.js";
-export * from "./services/ParserService.js";
 export * from "./services/RegistryService.js";
 export * from "./services/SecretService.js";
 export * from "./services/WorkspaceService.js";

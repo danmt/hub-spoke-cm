@@ -1,5 +1,5 @@
+import { HubStateSchema } from "../types/schemas.js";
 import { IoService } from "./IoService.js";
-import { ParserService } from "./ParserService.js";
 
 export interface HubContext {
   rootDir: string;
@@ -19,12 +19,14 @@ export class HubService {
   }
 
   /**
-   * Reads, parses, and returns the contents of a hub.md file.
+   * Reads, parses, and returns the contents of a hub
    */
   static async readHub(hubRootDir: string) {
-    const filePath = IoService.join(hubRootDir, "hub.md");
-    const content = await IoService.readFile(filePath);
-    return ParserService.parseMarkdown(content);
+    const filePath = IoService.join(hubRootDir, "hub.json");
+    const file = await IoService.readFile(filePath);
+    const content = JSON.parse(file);
+
+    return HubStateSchema.parse(content);
   }
 
   static async createHubDirectory(
@@ -38,12 +40,6 @@ export class HubService {
     await IoService.makeDir(blocksPath); // Scaffold blocks directory
 
     return dirPath;
-  }
-
-  static async readHubState(hubRootDir: string) {
-    const filePath = IoService.join(hubRootDir, "hub.json");
-    const content = await IoService.readFile(filePath);
-    return JSON.parse(content); // Validate with HubStateSchema later
   }
 
   /**

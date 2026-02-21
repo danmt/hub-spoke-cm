@@ -14,6 +14,7 @@ export const SectionBlueprintSchema = z.object({
   bridge: z.string().optional(),
   blocks: z.array(BlockBlueprintSchema),
   assemblerId: z.string(),
+  intent: z.string(),
 });
 
 export const HubStateSchema = z.object({
@@ -28,6 +29,7 @@ export const HubStateSchema = z.object({
   assemblerId: z.string(),
   personaId: z.string(),
   allowedWriterIds: z.array(z.string()),
+  allowedAssemblerIds: z.array(z.string()),
   sections: z.array(SectionBlueprintSchema), // Flat outline
 });
 

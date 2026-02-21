@@ -1,4 +1,4 @@
-// src/actions/FillAction.ts
+// packages/core/src/actions/FillAction.ts
 import { Persona, PersonaInteractionHandler } from "../agents/Persona.js";
 import { Writer, WriterInteractionHandler } from "../agents/Writer.js";
 import { AgentService } from "../services/AgentService.js";
@@ -10,10 +10,9 @@ import {
 } from "../services/RegistryService.js";
 import { BlockBlueprint, SectionBlueprint } from "../types/index.js";
 
-// 1. Updated parameters: Takes both the Section and the specific Block
 export interface FillExecuteParams {
-  section: SectionBlueprint;
-  block: BlockBlueprint;
+  section: SectionBlueprint; // Passed for macro context (like bridge)
+  block: BlockBlueprint; // The specific micro-task
   topic: string;
   goal: string;
   audience: string;
@@ -96,10 +95,7 @@ export class FillAction {
       blockId: block.id,
     });
 
-    // 2. Intent now comes directly from the JSON AST, no more REGEX parsing needed!
-    const intent = block.intent;
-
-    // 3. Writer ID now comes from the block
+    // 1. Locate the assigned writer for this specific block
     const writer = this.writers.find((w) => w.id === block.writerId);
     if (!writer) {
       throw new Error(`FillAction: Writer "${block.writerId}" not found.`);
@@ -107,11 +103,14 @@ export class FillAction {
 
     this._onStart?.(block.id);
 
-    // 1. Neutral Writing Phase
+    // ==========================================
+    // 2. Neutral Writing Phase
+    // ==========================================
     const writerThreadId = `fill-${block.id}-write-${Date.now()}`;
     let writerTurn = 0;
+
     const neutral = await writer.write({
-      intent,
+      intent: block.intent, // Using the rich block intent (Focus/Boundary/Handoff)
       topic,
       goal,
       audience,
@@ -149,12 +148,14 @@ export class FillAction {
         this._onWriting?.({ id: block.id, writerId: agentId }),
     });
 
-    // 2. Persona Rephrasing Phase
+    // ==========================================
+    // 3. Persona Rephrasing Phase
+    // ==========================================
     const personaThreadId = `fill-${block.id}-style-${Date.now()}`;
     let personaTurn = 0;
+
     const rephrased = await this.persona.rephrase({
-      header: neutral.header,
-      content: neutral.content,
+      content: neutral.content, // Pass only the content (we neutered the header capability)
       interact: async (params) => {
         const interaction = (await this._onRephrase?.(params)) || {
           action: "proceed",
