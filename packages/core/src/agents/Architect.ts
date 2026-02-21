@@ -37,6 +37,8 @@ export interface Brief {
   audience: string;
   language: string;
   assemblerId: string;
+  titleWriterId: string;
+  descriptionWriterId: string;
   allowedAssemblerIds: string[];
   personaId: string;
   allowedWriterIds: string[];
@@ -75,6 +77,7 @@ export class Architect {
       6. Provide a [BRIEF] block with the current structured Brief.
       7. The [MESSAGE] should be in the user's language.
       8. The [TOPIC], [GOAL] and [AUDIENCE] should be ALWAYS in English.
+      9. METADATA SELECTION: Choose one Writer ID as the writer responsible of the title, and one responsible for the description.
 
       OUTPUT FORMAT:
       [MESSAGE]Your message to the user.[/MESSAGE]
@@ -84,6 +87,8 @@ export class Architect {
       [AUDIENCE]Target Audience[/AUDIENCE]
       [LANGUAGE]Target Language[/LANGUAGE]
       [ASSEMBLER_ID]id-of-outline-assembler[/ASSEMBLER_ID]
+      [TITLE_WRITER_ID]id-of-writer-for-title[/TITLE_WRITER_ID]
+      [DESCRIPTION_WRITER_ID]id-of-writer-for-title[/DESCRIPTION_WRITER_ID]
       [ALLOWED_ASSEMBLER_IDS]id1,id2[/ALLOWED_ASSEMBLER_IDS]
       [PERSONA_ID]id[/PERSONA_ID]
       [ALLOWED_WRITER_IDS]id1,id2[/ALLOWED_WRITER_IDS]
@@ -184,6 +189,16 @@ export class Architect {
         language:
           brief.match(/\[LANGUAGE\](.*?)\[\/LANGUAGE\]/i)?.[1].trim() ||
           "English",
+        titleWriterId:
+          brief
+            .match(/\[TITLE_WRITER_ID\](.*?)\[\/TITLE_WRITER_ID\]/i)?.[1]
+            .trim() || "",
+        descriptionWriterId:
+          brief
+            .match(
+              /\[DESCRIPTION_WRITER_ID\](.*?)\[\/DESCRIPTION_WRITER_ID\]/i,
+            )?.[1]
+            .trim() || "",
         assemblerId:
           brief.match(/\[ASSEMBLER_ID\](.*?)\[\/ASSEMBLER_ID\]/i)?.[1].trim() ||
           "",

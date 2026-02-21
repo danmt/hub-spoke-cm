@@ -1,4 +1,4 @@
-// src/actions/CreateHubAction.ts
+// packages/core/src/actions/CreateHubAction.ts
 import { Architect, ArchitectResponse, Brief } from "../agents/Architect.js";
 import {
   AssembleBlocksResponse,
@@ -6,7 +6,7 @@ import {
   Assembler,
 } from "../agents/Assembler.js";
 import { Persona, PersonaResponse } from "../agents/Persona.js";
-import { Writer } from "../agents/Writer.js";
+import { Writer, WriterResponse } from "../agents/Writer.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { AgentPair, getAgentsByType } from "../services/RegistryService.js";
 import { SectionBlueprint } from "../types/index.js";
@@ -15,24 +15,26 @@ import { BaseAction, ResolveInteractionHandler } from "./BaseAction.js";
 export interface CreateHubActionResult {
   architecture: ArchitectResponse;
   sections: SectionBlueprint[];
-  personification: PersonaResponse;
+  personification: {
+    title: string;
+    description: string;
+  };
 }
 
 export class CreateHubAction extends BaseAction {
   private _onArchitecting?: (data: string) => void;
   private _onArchitect?: ResolveInteractionHandler<ArchitectResponse>;
-
   private _onAssemblingOutline?: (agentId: string) => void;
   private _onAssembleOutline?: (
     params: AssembleOutlineResponse,
   ) => Promise<any>;
-
   private _onAssemblingBlocks?: (
     agentId: string,
     sectionHeader: string,
   ) => void;
   private _onAssembleBlocks?: ResolveInteractionHandler<AssembleBlocksResponse>;
-
+  private _onWriting?: (data: { id: string; writerId: string }) => void;
+  private _onWrite?: ResolveInteractionHandler<WriterResponse>;
   private _onRephrasing?: (personaId: string) => void;
   private _onRephrase?: ResolveInteractionHandler<PersonaResponse>;
   private _onRetry?: (err: Error) => Promise<boolean>;
@@ -105,6 +107,16 @@ export class CreateHubAction extends BaseAction {
     return this;
   }
 
+  onWriting(cb: (data: { id: string; writerId: string }) => void) {
+    this._onWriting = cb;
+    return this;
+  }
+
+  onWrite(handler: ResolveInteractionHandler<WriterResponse>) {
+    this._onWrite = handler;
+    return this;
+  }
+
   onRephrasing(cb: (id: string) => void) {
     this._onRephrasing = cb;
     return this;
@@ -144,19 +156,32 @@ export class CreateHubAction extends BaseAction {
       onRetry: this._onRetry,
     });
 
-    const outlinerId = architecture.brief.assemblerId;
-    const outliner = this.assemblers.find((a) => a.id === outlinerId);
+    const persona = this.personas.find(
+      (p) => p.id === architecture.brief.personaId,
+    )!;
 
-    if (!outliner) {
+    if (!persona) {
       throw new Error(
-        `CreateHubAction: Outliner Assembler "${outlinerId}" not found in the provided list.`,
+        `CreateHubAction: Persona "${architecture.brief.personaId}" not found in the provided list.`,
       );
     }
 
+    const timestamp = Date.now();
+
     // ==========================================
-    // 2. Macro Phase: Assemble Outline
+    // 2. Macro Pass (Outline)
     // ==========================================
-    const outlineThreadId = `create-outline-${Date.now()}`;
+    const outliner = this.assemblers.find(
+      (a) => a.id === architecture.brief.assemblerId,
+    )!;
+
+    if (!outliner) {
+      throw new Error(
+        `CreateHubAction: Outliner Assembler "${architecture.brief.assemblerId}" not found in the provided list.`,
+      );
+    }
+
+    const outlineThreadId = `assemble-outline-${timestamp}`;
     let outlineTurn = 0;
 
     // Pass the pool of allowed assemblers to the Outliner so it can assign them
@@ -169,114 +194,187 @@ export class CreateHubAction extends BaseAction {
       goal: architecture.brief.goal,
       audience: architecture.brief.audience,
       allowedAssemblers: allowedAssemblersContext,
-      onThinking: (agentId) => this._onAssemblingOutline?.(agentId),
+      onThinking: (id) => this._onAssemblingOutline?.(id),
       onRetry: this._onRetry,
-      interact: async (params) => {
-        const result = await this.resolveInteraction(
+      interact: async (p) => {
+        const interaction = await this.resolveInteraction(
           "assembler",
-          params.agentId,
-          params,
+          p.agentId,
+          p,
           this._onAssembleOutline,
           { threadId: outlineThreadId, turn: outlineTurn },
         );
-
-        if (result.action === "feedback") outlineTurn++;
-        return result;
+        if (interaction.action === "feedback") outlineTurn++;
+        return interaction;
       },
     });
 
     // ==========================================
-    // 3. Micro Phase: Assemble Blocks per Section
+    // 3. Micro Pass (Blocks)
     // ==========================================
     const finalSections: SectionBlueprint[] = [];
-    const allowedWriters = this.writers
-      .filter((w) => architecture.brief.allowedWriterIds.includes(w.id))
-      .map((w) => ({ id: w.id, description: w.description }));
-
     for (const section of outline.sections) {
-      // Find the specific Block Assembler assigned to this section
-      // Fallback to outliner if the AI failed to assign one
-      const sectionAssembler =
-        this.assemblers.find((a) => a.id === section.assemblerId) || outliner;
-
+      const blockThreadId = `assemble-blocks-${section.id}-${timestamp}`;
       let blockTurn = 0;
-      const blockThreadId = `create-blocks-${section.id}-${Date.now()}`;
+      const blockAssembler = this.assemblers.find(
+        (a) => a.id === section.assemblerId,
+      );
 
-      const micro = await sectionAssembler.assembleBlocks({
+      if (!blockAssembler) {
+        throw new Error(
+          `CreateHubAction: Block Assembler "${section.assemblerId}" not found in the provided list.`,
+        );
+      }
+
+      const micro = await blockAssembler.assembleBlocks({
         section,
-        allowedWriters,
-        onThinking: (agentId) =>
-          this._onAssemblingBlocks?.(agentId, section.header),
+        allowedWriters: this.writers.map((w) => ({
+          id: w.id,
+          description: w.description,
+        })),
+        onThinking: (id) => this._onAssemblingBlocks?.(id, section.header),
         onRetry: this._onRetry,
-        interact: async (params) => {
-          const result = await this.resolveInteraction(
+        interact: async (p) => {
+          const interaction = await this.resolveInteraction(
             "assembler",
-            params.agentId,
-            params,
+            p.agentId,
+            p,
             this._onAssembleBlocks,
             { threadId: blockThreadId, turn: blockTurn },
           );
-
-          if (result.action === "feedback") blockTurn++;
-          return result;
+          if (interaction.action === "feedback") blockTurn++;
+          return interaction;
         },
       });
-
-      // Stitch the micro blocks into the macro section
       finalSections.push({
-        id: section.id,
-        header: section.header,
-        level: section.level,
-        intent: section.intent,
-        bridge: section.bridge,
-        assemblerId: sectionAssembler.id,
-        blocks: micro.blocks.map((b) => ({
-          id: b.id,
-          intent: b.intent,
-          writerId: b.writerId,
-          status: "pending",
-        })),
+        ...section,
+        blocks: micro.blocks.map((b) => ({ ...b, status: "pending" })),
       });
     }
 
     // ==========================================
-    // 4. Persona Phase: Rephrase Hub Description
+    // 4. Metadata Passes (The 4-Pass Sequence)
     // ==========================================
-    const personaThreadId = `create-style-${Date.now()}`;
-    let personaTurn = 0;
-    const personaId = architecture.brief.personaId;
-    const persona = this.personas.find((p) => p.id === personaId);
+    const titleWriter = this.writers.find(
+      (w) => w.id === architecture.brief.titleWriterId,
+    );
 
-    if (!persona) {
+    if (!titleWriter) {
       throw new Error(
-        `CreateHubAction: Persona "${personaId}" not found in the provided list.`,
+        `CreateHubAction: Title Writer "${architecture.brief.titleWriterId}" not found in the provided list.`,
       );
     }
 
-    const personification = await persona.rephrase({
-      content: `Write an engaging one sentence long description for this content hub. Topic: ${architecture.brief.topic}. Goal: ${architecture.brief.goal}.`,
-      interact: async (params) => {
-        const result = await this.resolveInteraction(
-          "persona",
-          params.agentId,
-          params,
-          this._onRephrase,
-          { threadId: personaThreadId, turn: personaTurn },
-        );
+    const writeTitleThreadId = `write-title-${timestamp}`;
+    let writeTitleTurn = 0;
 
-        if (result.action === "feedback") personaTurn++;
-        return result;
-      },
-      onThinking: (agentId) => this._onRephrasing?.(agentId),
+    const neutralTitle = await titleWriter.write({
+      intent: `Generate a short technical title for a hub about ${architecture.brief.topic}.`,
+      topic: architecture.brief.topic,
+      goal: architecture.brief.goal,
+      audience: architecture.brief.audience,
+      bridge: "",
+      isFirst: true,
+      isLast: false,
+      onThinking: (id) => this._onWriting?.({ id: "hub-title", writerId: id }),
       onRetry: this._onRetry,
+      interact: async (p) => {
+        const res = await this.resolveInteraction(
+          "writer",
+          p.agentId,
+          p,
+          this._onWrite,
+          { threadId: writeTitleThreadId, turn: writeTitleTurn },
+        );
+        if (res.action === "feedback") writeTitleTurn++;
+        return res;
+      },
     });
 
-    await LoggerService.info("CreateHubAction: Execution finished");
+    const styleTitleThreadId = `style-title-${timestamp}`;
+    let styleTitleTurn = 0;
+
+    const styledTitle = await persona.rephrase({
+      content: neutralTitle.content,
+      onThinking: (id) => this._onRephrasing?.(id),
+      onRetry: this._onRetry,
+      interact: async (p) => {
+        const res = await this.resolveInteraction(
+          "persona",
+          p.agentId,
+          p,
+          this._onRephrase,
+          { threadId: styleTitleThreadId, turn: styleTitleTurn },
+        );
+        if (res.action === "feedback") styleTitleTurn++;
+        return res;
+      },
+    });
+
+    // --- DESCRIPTION FLOW ---
+    const descriptionWriter = this.writers.find(
+      (w) => w.id === architecture.brief.descriptionWriterId,
+    );
+
+    if (!descriptionWriter) {
+      throw new Error(
+        `CreateHubAction: Title Writer "${architecture.brief.descriptionWriterId}" not found in the provided list.`,
+      );
+    }
+
+    const writeDescriptionThreadId = `write-description-${timestamp}`;
+    let writeDescriptionTurn = 0;
+
+    const neutralDesc = await descriptionWriter.write({
+      intent: `Write a one-sentence technical summary explaining the goal: ${architecture.brief.goal}.`,
+      topic: architecture.brief.topic,
+      goal: architecture.brief.goal,
+      audience: architecture.brief.audience,
+      bridge: "",
+      isFirst: false,
+      isLast: true,
+      onThinking: (id) => this._onWriting?.({ id: "hub-desc", writerId: id }),
+      onRetry: this._onRetry,
+      interact: async (p) => {
+        const interaction = await this.resolveInteraction(
+          "writer",
+          p.agentId,
+          p,
+          this._onWrite,
+          { threadId: writeDescriptionThreadId, turn: writeDescriptionTurn },
+        );
+        if (interaction.action === "feedback") writeDescriptionTurn++;
+        return interaction;
+      },
+    });
+
+    const styleDescriptionThreadId = `style-description-${timestamp}`;
+    let styleDescriptionTurn = 0;
+
+    const styledDesc = await persona.rephrase({
+      content: neutralDesc.content,
+      onThinking: (id) => this._onRephrasing?.(id),
+      onRetry: this._onRetry,
+      interact: async (p) => {
+        const interaction = await this.resolveInteraction(
+          "persona",
+          p.agentId,
+          p,
+          this._onRephrase,
+          { threadId: styleDescriptionThreadId, turn: styleDescriptionTurn },
+        );
+        if (interaction.action === "feedback") styleDescriptionTurn++;
+        return interaction;
+      },
+    });
 
     return {
       architecture,
       sections: finalSections,
-      personification,
+      personification: {
+        title: styledTitle.content,
+        description: styledDesc.content,
+      },
     };
   }
 }
