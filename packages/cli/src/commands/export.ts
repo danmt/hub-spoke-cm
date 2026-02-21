@@ -1,70 +1,55 @@
-// src/commands/export.ts
-import {
-  HubService,
-  IoService,
-  ParserService,
-  WorkspaceService,
-} from "@hub-spoke/core";
+// packages/cli/src/commands/export.ts
+import { HubService, IoService, WorkspaceService } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
-import { existsSync } from "fs";
-import fs from "fs/promises";
 import inquirer from "inquirer";
-import path from "path";
 
 export const exportCommand = new Command("export")
   .description(
-    "Export a Hub as a clean Markdown file to the top-level /output folder",
+    "Export the finalized Hub (compiled.md) to the top-level /output folder",
   )
-  .option("-f, --file <path>", "Specific markdown file to export")
-  .action(async (options) => {
+  .action(async () => {
     try {
       const currentDir = process.cwd();
       const workspaceRoot = await WorkspaceService.findRoot(currentDir);
 
-      let sourceFile: string;
-      let hubRootDir: string;
+      // 1. Resolve which Hub to export
+      const { rootDir, hubId } = await HubService.resolveHubContext(
+        workspaceRoot,
+        currentDir,
+        async (hubs) => {
+          const { targetHub } = await inquirer.prompt([
+            {
+              type: "list",
+              name: "targetHub",
+              message: "Select Hub to export:",
+              choices: hubs,
+            },
+          ]);
+          return targetHub;
+        },
+      );
 
-      if (options.file) {
-        sourceFile = path.resolve(currentDir, options.file);
-        hubRootDir = path.dirname(sourceFile);
-      } else {
-        const context = await HubService.resolveHubContext(
-          workspaceRoot,
-          currentDir,
-          async (hubs) => {
-            const { targetHub } = await inquirer.prompt([
-              {
-                type: "list",
-                name: "targetHub",
-                message: "Select Hub to export:",
-                choices: hubs,
-              },
-            ]);
-            return targetHub;
-          },
+      // 2. Identify the source (compiled.md) and target path
+      // The CompilerService ensures this file is always up-to-date
+      const sourcePath = IoService.join(rootDir, "compiled.md");
+      const outputPath = IoService.join(workspaceRoot, "output", `${hubId}.md`);
+
+      // 3. Validation: Ensure the hub has actually been compiled
+      if (!(await IoService.exists(sourcePath))) {
+        throw new Error(
+          `No compiled output found for "${hubId}". Run 'hub fill' first.`,
         );
-        hubRootDir = context.rootDir;
-        sourceFile = path.join(hubRootDir, "hub.md");
       }
 
-      // 2. Parse metadata and strip internal delimiters
-      const rawContent = await fs.readFile(sourceFile, "utf-8");
-      const { frontmatter, content: cleanMarkdown } =
-        ParserService.stripInternalMetadata(rawContent);
-
-      // 3. Resolve top-level /output path
-      const globalOutputDir = path.join(workspaceRoot, "output");
-      const outputPath = path.join(globalOutputDir, `${frontmatter.hubId}.md`);
-
       // 4. Handle Overwrite Confirmation
-      if (existsSync(outputPath)) {
+      if (await IoService.exists(outputPath)) {
         const { confirmOverwrite } = await inquirer.prompt([
           {
             type: "confirm",
             name: "confirmOverwrite",
             message: chalk.yellow(
-              `File "${outputPath}" already exists in /output. Overwrite?`,
+              `"${hubId}.md" already exists in /output. Overwrite?`,
             ),
             default: false,
           },
@@ -76,11 +61,13 @@ export const exportCommand = new Command("export")
         }
       }
 
-      await IoService.writeFile(outputPath, cleanMarkdown);
+      // 5. Atomic Export: Move the compiled truth to the output folder
+      const finalContent = await IoService.readFile(sourcePath);
+      await IoService.writeFile(outputPath, finalContent);
 
       console.log(
         chalk.green(
-          `\n✅ Clean Markdown exported to: ${chalk.bold(path.relative(workspaceRoot, outputPath))}`,
+          `\n✅ Final document exported to: ${chalk.bold(`output/${hubId}.md`)}`,
         ),
       );
     } catch (error: any) {

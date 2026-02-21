@@ -3,87 +3,49 @@ import {
   ConfigService,
   HubService,
   LoggerService,
-  ParserService,
   RegistryService,
   SecretService,
   WorkspaceService,
 } from "@hub-spoke/core";
 import chalk from "chalk";
 import { Command } from "commander";
-import fs from "fs/promises";
 import inquirer from "inquirer";
-import path from "path";
 import { executeCliFillAction } from "../presets/executeCliFillAction.js";
 
 export const fillCommand = new Command("fill")
-  .description("Generate content for sections marked with TODO blockquotes")
-  .option(
-    "-f, --file <path>",
-    "Specific markdown file to fill (defaults to hub.md)",
+  .description(
+    "Generate content for sections and blocks marked as pending in the hub.json state",
   )
-  .action(async (options) => {
+  .action(async () => {
     try {
       const currentDir = process.cwd();
-      let targetFile: string;
-      let workspaceRoot: string;
+      const workspaceRoot = await WorkspaceService.findRoot(currentDir);
 
-      try {
-        workspaceRoot = await WorkspaceService.findRoot(currentDir);
-      } catch (err) {
-        console.error(
-          chalk.red(
-            "\n❌ Error: Not in a Hub workspace. Run 'hub init' first.",
-          ),
-        );
-        process.exit(1);
-      }
-
-      if (options.file) {
-        targetFile = path.resolve(currentDir, options.file);
-      } else {
-        const { rootDir } = await HubService.resolveHubContext(
-          workspaceRoot,
-          currentDir,
-          async (hubs) => {
-            const { targetHub } = await inquirer.prompt([
-              {
-                type: "list",
-                name: "targetHub",
-                message: "Select Hub:",
-                choices: hubs,
-              },
-            ]);
-            return targetHub;
-          },
-        );
-        const hubMeta = await HubService.readHub(rootDir);
-        targetFile = path.join(
-          workspaceRoot,
-          "posts",
-          hubMeta.frontmatter.hubId,
-          "hub.md",
-        );
-      }
-
-      console.log(
-        chalk.bold(`\n🔍 Target: ${chalk.cyan(path.basename(targetFile))}`),
+      // 1. Resolve which hub the user wants to fill
+      const { rootDir, hubId } = await HubService.resolveHubContext(
+        workspaceRoot,
+        currentDir,
+        async (hubs) => {
+          const { targetHub } = await inquirer.prompt([
+            {
+              type: "list",
+              name: "targetHub",
+              message: "Select Hub to fill:",
+              choices: hubs,
+            },
+          ]);
+          return targetHub;
+        },
       );
 
-      const hubFile = await fs.readFile(targetFile, "utf-8");
-      const hub = ParserService.parseMarkdown(hubFile);
+      console.log(chalk.bold(`\n🔍 Target Hub: ${chalk.cyan(hubId)}`));
 
-      const rawArtifacts = await RegistryService.getAllArtifacts(workspaceRoot);
-
+      // 2. Load environment configuration and secrets
       const config = await ConfigService.getConfig();
       const secret = await SecretService.getSecret();
 
       if (!secret.apiKey) {
-        console.error(
-          chalk.red(
-            "Error: API Key not found. Run 'hub config set-key' first.",
-          ),
-        );
-        process.exit(1);
+        throw new Error("API Key not found. Run 'hub config set-key' first.");
       }
 
       if (!config.model) {
@@ -95,19 +57,19 @@ export const fillCommand = new Command("fill")
         process.exit(1);
       }
 
+      // 3. Initialize credentialed agents from the workspace registry
+      const rawArtifacts = await RegistryService.getAllArtifacts(workspaceRoot);
       const agents = RegistryService.initializeAgents(
         secret.apiKey,
         config.model,
         rawArtifacts,
       );
 
-      await executeCliFillAction(
-        workspaceRoot,
-        agents,
-        hub.frontmatter,
-        hub.sections,
-        targetFile,
-      );
+      // 4. Trigger the refactored fill logic using the hub's root directory
+      // This will now process optimized headers and pending blocks
+      await executeCliFillAction(workspaceRoot, agents, rootDir);
+
+      console.log(chalk.bold.green(`\n✨ Fill process for ${hubId} complete.`));
     } catch (error: any) {
       await LoggerService.error("Fill Command Failed", {
         error: error.message,

@@ -248,6 +248,9 @@ export class CreateHubAction extends BaseAction {
       });
       finalSections.push({
         ...section,
+        title: "",
+        status: "pending",
+        writerId: section.writerId,
         blocks: micro.blocks.map((b) => ({ ...b, status: "pending" })),
       });
     }

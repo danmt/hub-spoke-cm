@@ -7,12 +7,19 @@ import {
   getAgent,
   getAgentsByType,
 } from "../services/RegistryService.js";
-import { BlockBlueprint, SectionBlueprint } from "../types/index.js";
+import { SectionBlueprint } from "../types/index.js";
 import { BaseAction, ResolveInteractionHandler } from "./BaseAction.js";
 
+/**
+ * Unified execution parameters.
+ * By requiring targetId and intent explicitly, we can use this for
+ * both Section Headers and standard content Blocks.
+ */
 export interface FillExecuteParams {
-  section: SectionBlueprint; // Passed for macro context (like bridge)
-  block: BlockBlueprint; // The specific micro-task
+  targetId: string; // block.id or `header-${section.id}`
+  intent: string; // block.intent or the header optimization prompt
+  writerId: string; // The specific writer chosen by the Assembler
+  section: SectionBlueprint; // Macro context (bridge, goals)
   topic: string;
   goal: string;
   audience: string;
@@ -21,12 +28,13 @@ export interface FillExecuteParams {
 }
 
 export class FillAction extends BaseAction {
+  private _onStart?: (data: string) => void;
+  private _onComplete?: (data: string) => void;
+  private _onWriting?: (data: { id: string; writerId: string }) => void;
   private _onWrite?: ResolveInteractionHandler<WriterResponse>;
+  private _onRephrasing?: (data: { id: string; personaId: string }) => void;
   private _onRephrase?: ResolveInteractionHandler<PersonaResponse>;
   private _onRetry?: (err: Error) => Promise<boolean>;
-  private _onStart?: (data: string) => void;
-  private _onWriting?: (data: { id: string; writerId: string }) => void;
-  private _onRephrasing?: (data: { id: string; personaId: string }) => void;
 
   private persona: Persona;
   private writers: Writer[];
@@ -51,6 +59,11 @@ export class FillAction extends BaseAction {
 
   onStart(cb: (data: string) => void) {
     this._onStart = cb;
+    return this;
+  }
+
+  onComplete(cb: (data: string) => void) {
+    this._onComplete = cb;
     return this;
   }
 
@@ -80,34 +93,39 @@ export class FillAction extends BaseAction {
   }
 
   async execute({
+    targetId,
+    intent,
+    writerId,
     section,
-    block,
     topic,
     goal,
     audience,
     isFirst,
     isLast,
   }: FillExecuteParams): Promise<string> {
-    await LoggerService.info("FillAction: Starting execution for block", {
-      blockId: block.id,
+    await LoggerService.info(`FillAction: Executing turn for ${targetId}`, {
+      targetId,
+      writerId,
     });
 
-    // 1. Locate the assigned writer for this specific block
-    const writer = this.writers.find((w) => w.id === block.writerId);
+    // 1. Locate the assigned writer for this specific task
+    const writer = this.writers.find((w) => w.id === writerId);
     if (!writer) {
-      throw new Error(`FillAction: Writer "${block.writerId}" not found.`);
+      throw new Error(`FillAction: Writer "${writerId}" not found.`);
     }
 
-    this._onStart?.(block.id);
+    this._onStart?.(targetId);
+
+    const timestamp = Date.now();
 
     // ==========================================
-    // 2. Neutral Writing Phase
+    // 2. Neutral Writing Phase (Optimization)
     // ==========================================
-    const writerThreadId = `fill-${block.id}-write-${Date.now()}`;
+    const writerThreadId = `fill-write-${targetId}-${timestamp}`;
     let writerTurn = 0;
 
     const neutral = await writer.write({
-      intent: block.intent, // Using the rich block intent (Focus/Boundary/Handoff)
+      intent: intent, // The specific drafting instruction
       topic,
       goal,
       audience,
@@ -128,17 +146,17 @@ export class FillAction extends BaseAction {
       },
       onRetry: this._onRetry,
       onThinking: (agentId) =>
-        this._onWriting?.({ id: block.id, writerId: agentId }),
+        this._onWriting?.({ id: targetId, writerId: agentId }),
     });
 
     // ==========================================
-    // 3. Persona Rephrasing Phase
+    // 3. Persona Rephrasing Phase (Styling)
     // ==========================================
-    const personaThreadId = `fill-${block.id}-style-${Date.now()}`;
+    const personaThreadId = `fill-style-${targetId}-${timestamp}`;
     let personaTurn = 0;
 
     const rephrased = await this.persona.rephrase({
-      content: neutral.content, // Pass only the content (we neutered the header capability)
+      content: neutral.content, // Pure content pass to prevent header drift
       interact: async (params) => {
         const result = await this.resolveInteraction(
           "persona",
@@ -153,15 +171,14 @@ export class FillAction extends BaseAction {
       },
       onRetry: this._onRetry,
       onThinking: (agentId) =>
-        this._onRephrasing?.({ id: block.id, personaId: agentId }),
+        this._onRephrasing?.({ id: targetId, personaId: agentId }),
     });
 
-    await LoggerService.info("FillAction: Execution finished", {
-      blockId: block.id,
-    });
+    await LoggerService.info(`FillAction: Finalized ${targetId}`);
 
-    // 4. Return pure content. Markdown headers (#, ##) will now be compiled
-    // downstream by the CompilerService instead of injected here.
+    this._onComplete?.(targetId);
+
+    // 4. Return pure content. Markdown compilation occurs downstream.
     return rephrased.content;
   }
 }

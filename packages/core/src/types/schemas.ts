@@ -10,11 +10,14 @@ export const BlockBlueprintSchema = z.object({
 export const SectionBlueprintSchema = z.object({
   id: z.string(),
   header: z.string(),
+  title: z.string(),
   level: z.number().min(1).max(6), // e.g., 2 for ##, 3 for ###
   bridge: z.string().optional(),
   blocks: z.array(BlockBlueprintSchema),
   assemblerId: z.string(),
+  writerId: z.string(),
   intent: z.string(),
+  status: z.enum(["pending", "completed"]).default("pending"),
 });
 
 export const HubStateSchema = z.object({

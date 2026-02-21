@@ -1,7 +1,7 @@
 // src/commands/new.ts
 import {
   ConfigService,
-  ParserService,
+  IoService,
   RegistryService,
   SecretService,
   WorkspaceService,
@@ -57,7 +57,8 @@ export const newCommand = new Command("new")
 
       console.log(chalk.gray(`\n📂 Active Workspace: ${workspaceRoot}`));
 
-      const { filePath, fileContent } = await executeCliCreateHubAction(
+      // 1. Create the Hub (Returns the path to hub.json)
+      const { statePath } = await executeCliCreateHubAction(
         secret.apiKey,
         config.model,
         manifest,
@@ -78,17 +79,12 @@ export const newCommand = new Command("new")
         return;
       }
 
-      const { frontmatter, sections } =
-        ParserService.parseMarkdown(fileContent);
+      // 2. Derive the root directory of the hub from the state file path
+      const hubRootDir = IoService.dirname(statePath);
 
-      await executeCliFillAction(
-        workspaceRoot,
-        agents,
-        frontmatter,
-        sections,
-        filePath,
-      );
-    } catch (error) {
-      console.error(chalk.red("\n❌ Command `new` Error:"), error);
+      // 3. Trigger the Fill action using the new root-based logic
+      await executeCliFillAction(workspaceRoot, agents, hubRootDir);
+    } catch (error: any) {
+      console.error(chalk.red("\n❌ Command `new` Error:"), error.message);
     }
   });

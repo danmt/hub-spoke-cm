@@ -15,6 +15,7 @@ export interface OutlineSection {
   intent: string;
   bridge: string;
   assemblerId: string;
+  writerId: string;
 }
 
 export interface BlockTask {
@@ -79,7 +80,7 @@ export class Assembler {
         1. Create a logical sequence of sections.
         2. Set header 'level' to 2 (for ##) or 3 (for ###).
         3. The 'bridge' explains how to transition into this section from previous ones.
-        4. Do NOT assign writers. You are only building the outline.
+        4. Assign a writer used for the title of the section
         5. ASSIGN ASSEMBLER: You must assign exactly ONE Assembler ID from the [ALLOWED_ASSEMBLERS] list to handle the micro-delegation for each section.
         
         OUTPUT PROTOCOL:
@@ -94,7 +95,8 @@ export class Assembler {
               "level": 2,
               "intent": "FOCUS: [Macro goal] \\nPURPOSE: [Narrative role] \\nBOUNDARY: [What to save for later]",
               "bridge": "Transition context",
-              "assemblerId": "chosen-assembler-id"
+              "assemblerId": "chosen-assembler-id",
+              "writerId"; "chose-writer-id
             }
           ]
         }

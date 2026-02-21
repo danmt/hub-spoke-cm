@@ -1,74 +1,134 @@
 // packages/cli/src/presets/executeCliFillAction.ts
 import {
   AgentPair,
-  ContentFrontmatter,
+  CompilerService,
   FillAction,
+  HubService,
   IoService,
-  ParserService,
+  getAgent,
 } from "@hub-spoke/core";
 import chalk from "chalk";
-import { confirmOrFeedback } from "../utils/confirmOrFeedback.js";
 import { indentText } from "../utils/identText.js";
 import { retryHandler } from "../utils/retryHandler.js";
-
-const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
 
 export async function executeCliFillAction(
   workspaceRoot: string,
   agents: AgentPair[],
-  frontmatter: ContentFrontmatter,
-  sections: Record<string, string>,
-  filePath: string,
+  hubRootDir: string,
 ): Promise<void> {
-  const sectionIds = Object.keys(sections);
-  const updatedSections = { ...sections };
+  // 1. Load the Hub State (The AST)
+  const state = await HubService.readHub(hubRootDir);
 
-  const pendingSectionIds = sectionIds.filter((id) =>
-    TODO_REGEX.test(updatedSections[id]),
-  );
-
-  if (pendingSectionIds.length === 0) {
-    console.log(chalk.yellow("\n✨ All sections are already filled."));
-    return;
-  }
-
-  const fillAction = new FillAction(
-    workspaceRoot,
-    frontmatter.personaId,
-    agents,
-  )
-    .onStart((id) =>
-      console.log(chalk.green(`\n🔄 Generating: ${chalk.bold(id)}`)),
-    )
-    .onWrite(async ({ header, content }) => {
-      console.log(indentText(chalk.bold.cyan(`## ${header}\n`), 4));
-      console.log(indentText(chalk.white(`${content}\n`), 4));
-      return await confirmOrFeedback();
+  const fillAction = new FillAction(workspaceRoot, state.personaId, agents)
+    .onWriting((data) => {
+      const agent = getAgent(agents, "writer", data.writerId);
+      console.log(
+        chalk.cyan(
+          `\n🖋️  [${chalk.bold(agent?.artifact.displayName ?? data.writerId)}] Drafting: ${chalk.white(data.id)}...`,
+        ),
+      );
     })
-    .onRephrase(async ({ header, content }) => {
-      console.log(indentText(chalk.bold.cyan(`${header}\n`), 4));
-      console.log(indentText(chalk.white(`${content}\n`), 4));
-      return await confirmOrFeedback();
+    .onWrite(async ({ content }) => {
+      console.log(chalk.dim(indentText(content.substring(0, 150) + "...", 4)));
+      return { action: "skip" };
+    })
+    .onRephrasing((data) => {
+      console.log(
+        chalk.magenta(
+          `   ✨ Applying persona styling to ${chalk.bold(data.id)}...`,
+        ),
+      );
+    })
+    .onRephrase(async ({ content }) => {
+      console.log(
+        indentText(chalk.italic(`"${content.substring(0, 100)}..."`), 6),
+      );
+      return { action: "skip" };
     })
     .onRetry(retryHandler);
 
-  for (const sectionId of pendingSectionIds) {
-    const result = await fillAction.execute({
-      sectionId,
-      sectionBody: updatedSections[sectionId],
-      blueprint: frontmatter.blueprint[sectionId],
-      topic: frontmatter.topic,
-      goal: frontmatter.goal,
-      audience: frontmatter.audience,
-      isFirst: sectionId === sectionIds[0],
-      isLast: sectionId === sectionIds[sectionIds.length - 1],
-    });
-
-    updatedSections[sectionId] = result;
-    const currentProgress = ParserService.reconstructMarkdown(
-      frontmatter,
-      updatedSections,
+  // 2. Multi-Pass Execution: Iterate Sections
+  for (const section of state.sections) {
+    console.log(
+      chalk.yellow(`\n📂 Processing Section: ${chalk.bold(section.header)}`),
     );
-    await IoService.writeFile(filePath, currentProgress);
+
+    // --- PASS 1: OPTIMIZE HEADER ---
+    if (!section.title || section.status === "pending") {
+      console.log(chalk.magenta(`   ✨ Optimizing section title...`));
+
+      const styledHeader = await fillAction.execute({
+        targetId: `header-${section.id}`,
+        writerId: section.writerId,
+        intent: `Create a short, technical, and compelling section header based on the draft: "${section.header}".`,
+        section,
+        topic: state.topic,
+        goal: state.goal,
+        audience: state.audience,
+        isFirst: section.id === state.sections[0].id,
+        isLast: section.id === state.sections[state.sections.length - 1].id,
+      });
+
+      // Update state and save immediately to keep hub.json synced
+      section.title = styledHeader;
+      await IoService.writeFile(
+        IoService.join(hubRootDir, "hub.json"),
+        JSON.stringify(state, null, 2),
+      );
+
+      // Re-compile so compiled.md shows the new header immediately
+      await CompilerService.compile(hubRootDir);
+      console.log(chalk.green(`   ✅ Header finalized: "${styledHeader}"`));
+    }
+
+    // --- PASS 2: FILL BLOCKS ---
+    for (const block of section.blocks) {
+      if (block.status === "completed") {
+        console.log(chalk.gray(`   skipping completed block: ${block.id}`));
+        continue;
+      }
+
+      const result = await fillAction.execute({
+        targetId: block.id,
+        intent: block.intent,
+        writerId: block.writerId,
+        section,
+        topic: state.topic,
+        goal: state.goal,
+        audience: state.audience,
+        isFirst: false,
+        isLast: false,
+      });
+
+      // Save Atomic Block file
+      const blockPath = IoService.join(
+        hubRootDir,
+        "blocks",
+        `${section.id}-${block.id}.md`,
+      );
+      await IoService.writeFile(blockPath, result);
+
+      // Update AST State and sync to disk
+      block.status = "completed";
+      await IoService.writeFile(
+        IoService.join(hubRootDir, "hub.json"),
+        JSON.stringify(state, null, 2),
+      );
+
+      // Refresh compiled.md so the user can watch progress
+      await CompilerService.compile(hubRootDir);
+      console.log(chalk.green(`   ✅ Block ${block.id} finalized.`));
+    }
+
+    // Mark the entire section as completed
+    section.status = "completed";
+    await IoService.writeFile(
+      IoService.join(hubRootDir, "hub.json"),
+      JSON.stringify(state, null, 2),
+    );
   }
+
+  console.log(
+    chalk.bold.green("\n✨ All pending headers and blocks finalized."),
+  );
 }

@@ -32,6 +32,7 @@ export interface ArchitectResponse {
 }
 
 export interface Brief {
+  hubId: string;
   topic: string;
   goal: string;
   audience: string;
@@ -82,6 +83,7 @@ export class Architect {
       OUTPUT FORMAT:
       [MESSAGE]Your message to the user.[/MESSAGE]
       [BRIEF]
+      [HUB_ID]unique-slug-to-represent-the-hub[HUB_ID]
       [TOPIC]Refined Topic[/TOPIC]
       [GOAL]Refined Goal[/GOAL]
       [AUDIENCE]Target Audience[/AUDIENCE]
@@ -182,6 +184,7 @@ export class Architect {
     return {
       message,
       brief: {
+        hubId: brief.match(/\[HUB_ID\](.*?)\[\/HUB_ID\]/i)?.[1].trim() || "",
         topic: brief.match(/\[TOPIC\](.*?)\[\/TOPIC\]/i)?.[1].trim() || "",
         goal: brief.match(/\[GOAL\](.*?)\[\/GOAL\]/i)?.[1].trim() || "",
         audience:

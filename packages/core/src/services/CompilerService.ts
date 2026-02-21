@@ -10,7 +10,6 @@ export class CompilerService {
    * and the Outliner's sections.
    */
   static generateInitialState(
-    hubId: string,
     brief: Brief,
     sections: SectionBlueprint[],
     title: string,
@@ -19,7 +18,7 @@ export class CompilerService {
     return {
       title,
       description,
-      hubId,
+      hubId: brief.hubId,
       topic: brief.topic,
       goal: brief.goal,
       audience: brief.audience,
