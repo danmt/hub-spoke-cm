@@ -1,23 +1,45 @@
 import { z } from "zod";
 
-/**
- * 1. Blueprint for Sections
- * Used by Assemblers to define the requirements for each part of the article.
- */
+export const BlockBlueprintSchema = z.object({
+  id: z.string(),
+  intent: z.string(),
+  writerId: z.string(),
+  status: z.enum(["pending", "completed"]).default("pending"),
+});
+
 export const SectionBlueprintSchema = z.object({
   id: z.string(),
   header: z.string(),
-  intent: z.string(),
-  writerId: z.string(),
-  bridge: z.string(),
+  level: z.number().min(1).max(6), // e.g., 2 for ##, 3 for ###
+  bridge: z.string().optional(),
+  blocks: z.array(BlockBlueprintSchema),
+});
+
+export const HubStateSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  hubId: z.string(),
+  topic: z.string(),
+  goal: z.string(),
+  audience: z.string(),
+  language: z.string(),
+  date: z.string(),
+  assemblerId: z.string(),
+  personaId: z.string(),
+  allowedWriterIds: z.array(z.string()),
+  sections: z.array(SectionBlueprintSchema), // Flat outline
 });
 
 /**
  * 2. Hub Components
  * Internal representation of a section within the Hub structure.
  */
-export const HubComponentSchema = SectionBlueprintSchema.extend({
+export const HubComponentSchema = z.object({
   id: z.string(),
+  header: z.string(),
+  intent: z.string(),
+  writerId: z.string(),
+  bridge: z.string(),
 });
 
 /**

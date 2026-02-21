@@ -32,8 +32,18 @@ export class HubService {
     hubId: string,
   ): Promise<string> {
     const dirPath = IoService.join(workspaceRoot, "posts", hubId);
+    const blocksPath = IoService.join(dirPath, "blocks");
+
     await IoService.makeDir(dirPath);
+    await IoService.makeDir(blocksPath); // Scaffold blocks directory
+
     return dirPath;
+  }
+
+  static async readHubState(hubRootDir: string) {
+    const filePath = IoService.join(hubRootDir, "hub.json");
+    const content = await IoService.readFile(filePath);
+    return JSON.parse(content); // Validate with HubStateSchema later
   }
 
   /**

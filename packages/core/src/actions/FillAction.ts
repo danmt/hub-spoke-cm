@@ -8,12 +8,12 @@ import {
   getAgent,
   getAgentsByType,
 } from "../services/RegistryService.js";
-import { SectionBlueprint } from "../types/index.js";
+import { BlockBlueprint, SectionBlueprint } from "../types/index.js";
 
+// 1. Updated parameters: Takes both the Section and the specific Block
 export interface FillExecuteParams {
-  sectionId: string;
-  sectionBody: string;
-  blueprint: SectionBlueprint;
+  section: SectionBlueprint;
+  block: BlockBlueprint;
   topic: string;
   goal: string;
   audience: string;
@@ -46,7 +46,6 @@ export class FillAction {
     }
 
     this.persona = persona.agent;
-
     this.writers = getAgentsByType(agents, "writer").map((a) => a.agent);
 
     if (this.writers.length === 0) {
@@ -85,37 +84,38 @@ export class FillAction {
   }
 
   async execute({
-    sectionId,
-    sectionBody,
-    blueprint,
+    section,
+    block,
     topic,
     goal,
     audience,
     isFirst,
     isLast,
   }: FillExecuteParams): Promise<string> {
-    await LoggerService.info("FillAction: Starting execution");
+    await LoggerService.info("FillAction: Starting execution for block", {
+      blockId: block.id,
+    });
 
-    const TODO_REGEX = />\s*\*\*?TODO:?\*?\s*(.*)/i;
-    const intent =
-      sectionBody.match(TODO_REGEX)?.[1]?.trim() || "Expand details.";
+    // 2. Intent now comes directly from the JSON AST, no more REGEX parsing needed!
+    const intent = block.intent;
 
-    const writer = this.writers.find((w) => w.id === blueprint.writerId);
+    // 3. Writer ID now comes from the block
+    const writer = this.writers.find((w) => w.id === block.writerId);
     if (!writer) {
-      throw new Error(`FillAction: Writer "${blueprint.writerId}" not found.`);
+      throw new Error(`FillAction: Writer "${block.writerId}" not found.`);
     }
 
-    this._onStart?.(sectionId);
+    this._onStart?.(block.id);
 
     // 1. Neutral Writing Phase
-    const writerThreadId = `fill-${sectionId}-write-${Date.now()}`;
+    const writerThreadId = `fill-${block.id}-write-${Date.now()}`;
     let writerTurn = 0;
     const neutral = await writer.write({
       intent,
       topic,
       goal,
       audience,
-      bridge: blueprint.bridge,
+      bridge: section.bridge || "",
       isFirst,
       isLast,
       interact: async (params) => {
@@ -146,11 +146,11 @@ export class FillAction {
       },
       onRetry: this._onRetry,
       onThinking: (agentId) =>
-        this._onWriting?.({ id: sectionId, writerId: agentId }),
+        this._onWriting?.({ id: block.id, writerId: agentId }),
     });
 
     // 2. Persona Rephrasing Phase
-    const personaThreadId = `fill-${sectionId}-style-${Date.now()}`;
+    const personaThreadId = `fill-${block.id}-style-${Date.now()}`;
     let personaTurn = 0;
     const rephrased = await this.persona.rephrase({
       header: neutral.header,
@@ -183,11 +183,15 @@ export class FillAction {
       },
       onRetry: this._onRetry,
       onThinking: (agentId) =>
-        this._onRephrasing?.({ id: sectionId, personaId: agentId }),
+        this._onRephrasing?.({ id: block.id, personaId: agentId }),
     });
 
-    await LoggerService.info("FillAction: Execution finished");
+    await LoggerService.info("FillAction: Execution finished", {
+      blockId: block.id,
+    });
 
-    return `## ${rephrased.header}\n\n${rephrased.content}`;
+    // 4. Return pure content. Markdown headers (#, ##) will now be compiled
+    // downstream by the CompilerService instead of injected here.
+    return rephrased.content;
   }
 }

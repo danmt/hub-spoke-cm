@@ -61,14 +61,26 @@ export class WorkspaceService {
     }));
 
     const hubIds = await HubService.listHubs(workspaceRoot);
+
     const hubEntries = await Promise.all(
       hubIds.map(async (hubId) => {
         const hubRootDir = IoService.join(workspaceRoot, "posts", hubId);
-        const parsed = await HubService.readHub(hubRootDir);
+
+        // Read the new JSON state
+        const stateRaw = await IoService.readFile(
+          IoService.join(hubRootDir, "hub.json"),
+        );
+        const state = JSON.parse(stateRaw);
+
+        // Check if any block across any section is pending
+        const hasTodo = state.sections.some((section: any) =>
+          section.blocks.some((block: any) => block.status === "pending"),
+        );
+
         return {
           id: hubId,
-          title: parsed.frontmatter.title,
-          hasTodo: />\s*\*\*?TODO:?\*?\s*/i.test(parsed.content),
+          title: state.title,
+          hasTodo: hasTodo,
           lastModified: new Date().toISOString(),
         };
       }),

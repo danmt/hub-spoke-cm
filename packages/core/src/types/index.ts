@@ -6,6 +6,7 @@ import {
   AgentIndexEntrySchema,
   AgentKnowledgeSchema,
   AgentTruthSchema,
+  BlockBlueprintSchema,
   EvolutionAnalysisSchema,
   EvolutionProposalSchema,
   FrontmatterSchema,
@@ -14,6 +15,7 @@ import {
   HubConfigSchema,
   HubIndexEntrySchema,
   HubSecretSchema,
+  HubStateSchema,
   SectionBlueprintSchema,
   WorkspaceManifestSchema,
 } from "./schemas.js";
@@ -34,6 +36,8 @@ export type EvolutionProposal = z.infer<typeof EvolutionProposalSchema>;
 export type HubIndexEntry = z.infer<typeof HubIndexEntrySchema>;
 export type AgentIndexEntry = z.infer<typeof AgentIndexEntrySchema>;
 export type WorkspaceManifest = z.infer<typeof WorkspaceManifestSchema>;
+export type BlockBlueprint = z.infer<typeof BlockBlueprintSchema>;
+export type HubState = z.infer<typeof HubStateSchema>;
 
 // Re-export Schemas for validation use
 export {
@@ -42,6 +46,7 @@ export {
   AgentIndexEntrySchema,
   AgentKnowledgeSchema,
   AgentTruthSchema,
+  BlockBlueprintSchema,
   EvolutionAnalysisSchema,
   EvolutionProposalSchema,
   FrontmatterSchema,
@@ -50,6 +55,7 @@ export {
   HubConfigSchema,
   HubIndexEntrySchema,
   HubSecretSchema,
+  HubStateSchema,
   SectionBlueprintSchema,
   WorkspaceManifestSchema,
 } from "./schemas.js";
